@@ -1,0 +1,53 @@
+## =====================================
+## 1. Secrets, Environment Variables & Cloud (Neon PostgreSQL)
+## =====================================
+.env
+.env.*
+!.env.example
+secrets.json
+appsettings.*.local.json
+appsettings.Production.json
+*.pem
+*.key
+*.pfx
+*.cert
+*.crt
+
+## =====================================
+## 2. .NET Build & Visual Studio Artifacts
+## =====================================
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+*.nupkg
+packages/
+.nuget/
+
+## =====================================
+## 3. Database, Local Volumes & Logs
+## =====================================
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+docker_data/
+*.log
+
+## =====================================
+## 4. OS Temporary Files
+## =====================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## =====================================
+## 5. Frontend & Node Modules (if any)
+## =====================================
+node_modules/
+dist/
+build/
