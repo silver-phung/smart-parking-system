@@ -1,0 +1,17 @@
+@SmartParking.Api_HostAddress = http://localhost:5295
+
+### 1. Health Check
+GET {{SmartParking.Api_HostAddress}}/health
+Accept: application/json
+
+### 2. System Info
+GET {{SmartParking.Api_HostAddress}}/api/system/info
+Accept: application/json
+
+### 3. System Health Controller
+GET {{SmartParking.Api_HostAddress}}/api/system/health
+Accept: application/json
+
+### 4. Swagger OpenAPI Spec
+GET {{SmartParking.Api_HostAddress}}/swagger/v1/swagger.json
+Accept: application/json
