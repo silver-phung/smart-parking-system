@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartParking.Application.Common.Interfaces;
@@ -10,25 +11,46 @@ namespace SmartParking.Infrastructure.Services;
 public class EmailService : IEmailService
 {
     private readonly EmailOptions _options;
+    private readonly IHostEnvironment _environment;
     private readonly ILogger<EmailService> _logger;
 
-    public EmailService(IOptions<EmailOptions> options, ILogger<EmailService> logger)
+    public EmailService(
+        IOptions<EmailOptions> options,
+        IHostEnvironment environment,
+        ILogger<EmailService> logger)
     {
         _options = options.Value;
+        _environment = environment;
         _logger = logger;
     }
 
     public async Task<bool> SendVerificationOtpAsync(string toEmail, string otpCode, CancellationToken cancellationToken = default)
     {
+        // 1. In Production, Mock provider is STRICTLY FORBIDDEN (Fail-Closed)
+        if (_environment.IsProduction() && string.Equals(_options.Provider, "Mock", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogError("CRITICAL SECURITY VIOLATION: Email:Provider cannot be set to 'Mock' in Production environment. Email sending rejected.");
+            return false;
+        }
+
+        // 2. In Non-production (Development/Testing), allow Mock provider simulation
         if (string.Equals(_options.Provider, "Mock", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation("[DEV EMAIL SIMULATION] Verification OTP for {Recipient}: {OtpCode} (Expires in 15 minutes).", toEmail, otpCode);
             return true;
         }
 
+        // 3. Validate required SMTP settings
         if (string.IsNullOrWhiteSpace(_options.Host) || string.IsNullOrWhiteSpace(_options.SenderEmail))
         {
-            _logger.LogWarning("Email sending aborted: SMTP Host or SenderEmail is not configured.");
+            _logger.LogError("Email sending failed: SMTP Host or SenderEmail is not configured.");
+            return false;
+        }
+
+        // 4. In Production, anonymous relay without credentials is not permitted
+        if (_environment.IsProduction() && (string.IsNullOrWhiteSpace(_options.UserName) || string.IsNullOrWhiteSpace(_options.Password)))
+        {
+            _logger.LogError("CRITICAL SECURITY VIOLATION: In Production, SMTP UserName and Password must be configured. Anonymous relay is rejected.");
             return false;
         }
 
