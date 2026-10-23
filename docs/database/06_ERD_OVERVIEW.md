@@ -21,9 +21,8 @@ Hệ thống cơ sở dữ liệu Smart Parking được tổ chức thành **7 
   [A. Identity & Access]            [B. Parking Structure]           [C. Vehicles & Sessions]
    - users (CORE)                    - parking_lots (CORE)            - vehicles (CORE)
    - roles (CORE)                    - parking_floors (CORE)          - parking_sessions (CORE)
-   - user_roles (CORE)               - parking_slots (CORE)           - parking_reservations (FUTURE)
-   - refresh_tokens (CONDITIONAL)                                     - subscriptions (FUTURE)
-   - user_tokens (CONDITIONAL)
+   - user_tokens (CORE)              - parking_slots (CORE)           - parking_reservations (FUTURE)
+   - refresh_tokens (CORE)                                            - subscriptions (FUTURE)
               |                                 |                                |
               +---------------------------------+--------------------------------+
                                                 |
@@ -48,12 +47,9 @@ Dưới đây là sơ đồ Mermaid thể hiện mối quan hệ liên kết gi�
 ```mermaid
 erDiagram
     %% ==========================================
-    %% NHÓM A: ACCOUNTS & AUTHORIZATION
-    %% ==========================================
-    users ||--o{ user_roles : "gán vai trò"
-    roles ||--o{ user_roles : "thuộc quyền"
+    roles ||--o{ users : "vai trò người dùng (1-N)"
     users ||--o{ refresh_tokens : "sở hữu phiên"
-    users ||--o{ user_tokens : "nhận mã xác minh"
+    users ||--o{ user_tokens : "nhận mã OTP xác minh"
     users ||--o{ vehicles : "đăng ký xe"
     users ||--o{ audit_logs : "thực hiện thao tác"
 
@@ -102,6 +98,7 @@ erDiagram
         VARCHAR username UK
         VARCHAR email UK
         VARCHAR password_hash
+        INT role_id FK
         VARCHAR full_name
         VARCHAR phone_number
         BOOLEAN is_active
@@ -115,11 +112,6 @@ erDiagram
         VARCHAR name
     }
 
-    user_roles {
-        BIGINT user_id PK,FK
-        INT role_id PK,FK
-    }
-
     refresh_tokens {
         BIGINT id PK
         BIGINT user_id FK
@@ -131,7 +123,7 @@ erDiagram
         BIGINT id PK
         BIGINT user_id FK
         VARCHAR token_type
-        VARCHAR token_hash UK
+        VARCHAR token_hash
     }
 
     parking_lots {
@@ -258,11 +250,11 @@ erDiagram
 
 ## 4. DANH MỤC PHÂN BỔ TRẠNG THÁI TRIỂN KHAI (19 BẢNG TOÀN HỆ THỐNG)
 
-Toàn hệ thống thống nhất chuẩn hóa **19 bảng** (13 CORE, 4 CONDITIONAL, 2 FUTURE):
+Toàn hệ thống thống nhất chuẩn hóa **19 bảng** (14 CORE, 3 CONDITIONAL, 2 FUTURE):
 
-| Nhóm nghiệp vụ | Bảng CORE (13 bảng - Sprint 3) | Bảng CONDITIONAL (4 bảng - Cần xác nhận) | Bảng FUTURE (2 bảng - Sprint 4) |
+| Nhóm nghiệp vụ | Bảng CORE (14 bảng - Sprint 3) | Bảng CONDITIONAL (3 bảng - Cần xác nhận) | Bảng FUTURE (2 bảng - Sprint 4) |
 | :--- | :--- | :--- | :--- |
-| **A. Accounts** | `users`, `roles`, `user_roles` | `refresh_tokens` *(Xem ghi chú Accounts)* | - |
+| **A. Accounts** | `users`, `roles`, `user_tokens`, `refresh_tokens` | - | - |
 | **B. Structure** | `parking_lots`, `parking_floors`, `parking_slots` | - | - |
 | **C. Sessions** | `vehicles`, `parking_sessions` | - | `parking_reservations`, `subscriptions` |
 | **D. Dispatch** | `parking_dispatches` | - | - |
@@ -270,7 +262,7 @@ Toàn hệ thống thống nhất chuẩn hóa **19 bảng** (13 CORE, 4 CONDITI
 | **F. Hardware** | `gate_events` | `slot_sensor_logs` | - |
 | **G. Audit/Ops** | `audit_logs` | `alerts`, `system_configs` | - |
 
-*(Ghi chú Accounts: Trong phương án thiết kế Accounts chi tiết phục vụ kiểm toán Task 02C, bảng `user_tokens` được đề xuất để lưu mã xác minh email/reset pass nhằm tránh lưu token thô và được chuyển giao để Cursor audit xem xét giữ riêng hay tối ưu hóa).*
+*(Ghi chú: Mô hình phân hệ Accounts đã được Owner phê duyệt chính thức sử dụng mô hình 1-N `users.role_id`, loại bỏ bảng `user_roles`; bổ sung đầy đủ `user_tokens` và `refresh_tokens` vào CORE).*
 
 ---
 

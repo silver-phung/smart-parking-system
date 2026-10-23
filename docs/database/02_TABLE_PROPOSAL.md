@@ -14,8 +14,8 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
 
 | Phân loại ưu tiên | Ý nghĩa | Số lượng bảng | Danh sách bảng |
 | :--- | :--- | :---: | :--- |
-| **CORE** | **Bắt buộc cho Sprint 3** để vận hành luồng nghiệp vụ cốt lõi | **13 bảng** | `users`, `roles`, `user_roles`, `parking_lots`, `parking_floors`, `parking_slots`, `vehicles`, `parking_sessions`, `parking_dispatches`, `pricing_policies`, `payments`, `gate_events`, `audit_logs` |
-| **CONDITIONAL** | **Cần nhóm xác nhận** nhu cầu kỹ thuật trước khi triển khai | **4 bảng** | `refresh_tokens`, `slot_sensor_logs`, `alerts`, `system_configs` |
+| **CORE** | **Bắt buộc cho Sprint 3** để vận hành luồng nghiệp vụ cốt lõi | **14 bảng** | `users`, `roles`, `user_tokens`, `refresh_tokens`, `parking_lots`, `parking_floors`, `parking_slots`, `vehicles`, `parking_sessions`, `parking_dispatches`, `pricing_policies`, `payments`, `gate_events`, `audit_logs` |
+| **CONDITIONAL** | **Cần nhóm xác nhận** nhu cầu kỹ thuật trước khi triển khai | **3 bảng** | `slot_sensor_logs`, `alerts`, `system_configs` |
 | **FUTURE** | **Chưa triển khai trong Sprint 3** (Dành cho giai đoạn mở rộng) | **2 bảng** | `parking_reservations`, `subscriptions` |
 | **TỔNG CỘNG** | | **19 bảng** | |
 
@@ -34,13 +34,13 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
 - **Mục đích (tiếng Việt):** Quản lý tài khoản đăng nhập của người dùng trong hệ thống (Quản trị viên, Nhân viên vận hành, Khách hàng).
 - **Module / Thành viên sử dụng:** Module Identity & Auth / Phụng phụ trách.
 - **5 Câu hỏi phân tích:**
-  - *Bảng này dùng để làm gì?* Lưu trữ danh tính người dùng (tên đăng nhập `username`, địa chỉ `email`, mật khẩu băm, họ tên, số điện thoại, trạng thái kích hoạt, trạng thái xác minh email). Đăng nhập bằng `username` + mật khẩu; `email` bắt buộc phải là email thật và được xác minh qua mã gửi về hộp thư.
+  - *Bảng này dùng để làm gì?* Lưu trữ danh tính người dùng (tên đăng nhập `username`, địa chỉ `email`, mật khẩu băm, họ tên, số điện thoại, vai trò `role_id`, trạng thái kích hoạt, trạng thái xác minh email, trạng thái phê duyệt). Đăng nhập bằng `username` + mật khẩu; `email` bắt buộc phải là email thật và được xác minh qua mã OTP gửi về hộp thư.
   - *Ai tạo dữ liệu?* Khách hàng tự đăng ký qua Web/App, hoặc Quản trị viên khởi tạo tài khoản cho Nhân viên.
   - *Ai đọc hoặc cập nhật?* Auth Service kiểm tra khi đăng nhập (tra cứu theo `username`); người dùng cập nhật thông tin cá nhân; Quản trị viên khóa/mở tài khoản.
-  - *Nó liên kết với bảng nào?* Liên kết với `roles` (qua `user_roles`), `vehicles`, `audit_logs`.
+  - *Nó liên kết với bảng nào?* Liên kết với `roles` (qua `role_id` 1-N), `vehicles`, `audit_logs`, `refresh_tokens`, `user_tokens`.
   - *Nếu bỏ bảng này thì có ảnh hưởng gì?* Hệ thống không thể xác thực người dùng, không phân biệt được ai là bảo vệ, quản trị viên hay khách hàng.
 - **Mức độ ưu tiên:** **CORE** (Bắt buộc cho Sprint 3).
-- **Căn cứ nguồn gốc:** **CONFIRMED** (Yêu cầu Mục 3A Đăng ký, đăng nhập, xác minh).
+- **Căn cứ nguồn gốc:** **CONFIRMED & APPROVED BY OWNER**.
 
 #### 2. Bảng `roles`
 - **Mục đích (tiếng Việt):** Quản lý danh mục các vai trò trong hệ thống để thực hiện phân quyền truy cập (RBAC).
@@ -49,22 +49,34 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
   - *Bảng này dùng để làm gì?* Định nghĩa các vai trò hợp lệ trong hệ thống (`ADMIN`, `OPERATOR`, `CUSTOMER`).
   - *Ai tạo dữ liệu?* Hệ thống tạo sẵn qua dữ liệu khởi tạo (Data Seeding).
   - *Ai đọc hoặc cập nhật?* Middleware phân quyền đọc để kiểm tra quyền hạn của từng API.
-  - *Nó liên kết với bảng nào?* Liên kết với `users` thông qua bảng trung gian `user_roles`.
+  - *Nó liên kết với bảng nào?* Liên kết với `users` thông qua khóa ngoại 1-N (`users.role_id`).
   - *Nếu bỏ bảng này thì có ảnh hưởng gì?* Phải hardcode vai trò vào mã nguồn C#, mất tính linh hoạt khi cần bổ sung vai trò mới.
 - **Mức độ ưu tiên:** **CORE** (Bắt buộc cho Sprint 3).
-- **Căn cứ nguồn gốc:** **CONFIRMED** (Yêu cầu Mục 3A Quyền của Admin, nhân viên và khách).
+- **Căn cứ nguồn gốc:** **CONFIRMED & APPROVED BY OWNER**.
 
-#### 3. Bảng `user_roles`
-- **Mục đích (tiếng Việt):** Bảng nối thể hiện mối quan hệ nhiều-nhiều (N-N) giữa người dùng và vai trò.
+#### 3. Bảng `user_tokens`
+- **Mục đích (tiếng Việt):** Quản lý mã xác thực OTP một lần (6 chữ số) được gửi qua dịch vụ email thật để kích hoạt tài khoản khi đăng ký mới.
 - **Module / Thành viên sử dụng:** Module Identity & Auth / Phụng phụ trách.
 - **5 Câu hỏi phân tích:**
-  - *Bảng này dùng để làm gì?* Gán một hoặc nhiều vai trò cụ thể cho một tài khoản người dùng (`user_id`, `role_id`).
-  - *Ai tạo dữ liệu?* Quản trị viên phân quyền hoặc hệ thống gán mặc định vai trò `CUSTOMER` khi người dùng đăng ký mới.
-  - *Ai đọc hoặc cập nhật?* Auth Service đọc để nạp danh sách Claims/Roles vào JWT Access Token khi người dùng đăng nhập.
-  - *Nó liên kết với bảng nào?* Khóa ngoại trỏ đến `users.id` và `roles.id`.
-  - *Nếu bỏ bảng này thì có ảnh hưởng gì?* Buộc phải gộp một cột `role_id` duy nhất vào bảng `users`, làm mất khả năng một tài khoản vừa là nhân viên vừa là khách gửi xe.
+  - *Bảng này dùng để làm gì?* Lưu mã OTP băm an toàn HMAC-SHA256 kèm userId và purpose, số lần nhập sai `attempts_count`, thời hạn mã `expires_at` và cờ đã sử dụng `is_used`.
+  - *Ai tạo dữ liệu?* Hệ thống tự động sinh khi người dùng đăng ký hoặc yêu cầu gửi lại mã xác minh.
+  - *Ai đọc hoặc cập nhật?* Auth Service tra cứu, đếm số lần sai và cập nhật cờ `is_used = TRUE` nguyên tử khi xác minh.
+  - *Nó liên kết với bảng nào?* Khóa ngoại trỏ đến `users.id` (ON DELETE CASCADE).
+  - *Nếu bỏ bảng này thì có ảnh hưởng gì?* Không thể thực hiện quy trình xác thực email thật, không chống được brute-force và replay attack.
 - **Mức độ ưu tiên:** **CORE** (Bắt buộc cho Sprint 3).
-- **Căn cứ nguồn gốc:** **PROPOSED** (Chuẩn hóa thiết kế RBAC linh hoạt).
+- **Căn cứ nguồn gốc:** **CONFIRMED & APPROVED BY OWNER**.
+
+#### 4. Bảng `refresh_tokens`
+- **Mục đích (tiếng Việt):** Quản lý vòng đời của Refresh Token để hỗ trợ duy trì phiên đăng nhập và thu hồi token khi đăng xuất.
+- **Module / Thành viên sử dụng:** Module Identity & Auth / Phụng phụ trách.
+- **5 Câu hỏi phân tích:**
+  - *Bảng này dùng để làm gì?* Lưu chuỗi băm SHA-256 duy nhất của Refresh Token, thời hạn 7 ngày, cờ thu hồi `is_revoked`.
+  - *Ai tạo dữ liệu?* Hệ thống sinh khi người dùng đăng nhập thành công.
+  - *Ai đọc hoặc cập nhật?* Auth Service kiểm tra khi cấp mới JWT Access Token hoặc đánh dấu thu hồi khi người dùng đăng xuất.
+  - *Nó liên kết với bảng nào?* Khóa ngoại trỏ đến `users.id` (ON DELETE CASCADE).
+  - *Nếu bỏ bảng này thì có ảnh hưởng gì?* Không thể thu hồi phiên đăng nhập khi đăng xuất, buộc người dùng đăng nhập lại thường xuyên hoặc để JWT tồn tại vô hạn.
+- **Mức độ ưu tiên:** **CORE** (Bắt buộc cho Sprint 3).
+- **Căn cứ nguồn gốc:** **CONFIRMED & APPROVED BY OWNER**.
 
 ---
 
@@ -220,15 +232,7 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
 
 ---
 
-## 3. CHI TIẾT DANH MỤC BẢNG CẦN XÁC NHẬN (CONDITIONAL - 4 BẢNG)
-
-#### 14. Bảng `refresh_tokens`
-- **Mục đích (tiếng Việt):** Quản lý vòng đời của JWT Refresh Token để hỗ trợ duy trì phiên đăng nhập và thu hồi token khi đăng xuất.
-- **Module / Thành viên sử dụng:** Module Identity & Auth / Phụng phụ trách.
-- **Lý do cần lưu trong Database:** Cho phép thu hồi quyền truy cập (Revocation) ngay lập tức khi phát hiện tài khoản bị xâm nhập hoặc khi người dùng bấm Đăng xuất.
-- **Điểm cần xác nhận:** Nhóm có yêu cầu triển khai cơ chế JWT Access Token + Refresh Token ngay trong Sprint 3 hay chỉ cần JWT Access Token đơn giản kèm thời gian sống (TTL)?
-- **Mức độ ưu tiên:** **CONDITIONAL** (Cần xác nhận trước khi triển khai).
-- **Căn cứ nguồn gốc:** **PROPOSED** (NEEDS CONFIRMATION).
+## 3. CHI TIẾT DANH MỤC BẢNG CẦN XÁC NHẬN (CONDITIONAL - 3 BẢNG)
 
 #### 15. Bảng `slot_sensor_logs`
 - **Mục đích (tiếng Việt):** Lưu nhật ký dòng dữ liệu (Telemetry) từ cảm biến siêu âm / từ trường tại từng ô đỗ xe.
@@ -276,20 +280,20 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
 
 | STT | Tên bảng đề xuất | Nhóm nghiệp vụ | Phân loại ưu tiên | Căn cứ nguồn gốc | Phụ trách chính |
 | :---: | :--- | :--- | :---: | :---: | :--- |
-| 1 | `users` | A. Accounts & RBAC | **CORE** | CONFIRMED | Phụng |
-| 2 | `roles` | A. Accounts & RBAC | **CORE** | CONFIRMED | Phụng |
-| 3 | `user_roles` | A. Accounts & RBAC | **CORE** | PROPOSED | Phụng |
-| 4 | `parking_lots` | B. Parking Structure | **CORE** | CONFIRMED | Phụng |
-| 5 | `parking_floors` | B. Parking Structure | **CORE** | CONFIRMED | Phụng, Song |
-| 6 | `parking_slots` | B. Parking Structure | **CORE** | CONFIRMED | Phụng, Thức, Song |
-| 7 | `vehicles` | C. Vehicles & Sessions | **CORE** | CONFIRMED | Phụng |
-| 8 | `parking_sessions` | C. Vehicles & Sessions | **CORE** *(Bảng trung tâm)* | CONFIRMED | Phụng (Toàn nhóm) |
-| 9 | `parking_dispatches` | D. Parking Dispatch | **CORE** | CONFIRMED | Phụng, Song |
-| 10 | `pricing_policies` | E. Pricing & Payments | **CORE** | CONFIRMED | Nam Anh, Phụng |
-| 11 | `payments` | E. Pricing & Payments | **CORE** | CONFIRMED | Nam Anh |
-| 12 | `gate_events` | F. Hardware & OCR | **CORE** | CONFIRMED | Đức, Thức, Phụng |
-| 13 | `audit_logs` | G. Audit & Admin | **CORE** | CONFIRMED | Phụng |
-| 14 | `refresh_tokens` | A. Accounts & RBAC | **CONDITIONAL** | NEEDS CONFIRMATION | Phụng |
+| 1 | `users` | A. Accounts & RBAC | **CORE** | CONFIRMED & APPROVED | Phụng |
+| 2 | `roles` | A. Accounts & RBAC | **CORE** | CONFIRMED & APPROVED | Phụng |
+| 3 | `user_tokens` | A. Accounts & RBAC | **CORE** | CONFIRMED & APPROVED | Phụng |
+| 4 | `refresh_tokens` | A. Accounts & RBAC | **CORE** | CONFIRMED & APPROVED | Phụng |
+| 5 | `parking_lots` | B. Parking Structure | **CORE** | CONFIRMED | Phụng |
+| 6 | `parking_floors` | B. Parking Structure | **CORE** | CONFIRMED | Phụng, Song |
+| 7 | `parking_slots` | B. Parking Structure | **CORE** | CONFIRMED | Phụng, Thức, Song |
+| 8 | `vehicles` | C. Vehicles & Sessions | **CORE** | CONFIRMED | Phụng |
+| 9 | `parking_sessions` | C. Vehicles & Sessions | **CORE** *(Bảng trung tâm)* | CONFIRMED | Phụng (Toàn nhóm) |
+| 10 | `parking_dispatches` | D. Parking Dispatch | **CORE** | CONFIRMED | Phụng, Song |
+| 11 | `pricing_policies` | E. Pricing & Payments | **CORE** | CONFIRMED | Nam Anh, Phụng |
+| 12 | `payments` | E. Pricing & Payments | **CORE** | CONFIRMED | Nam Anh |
+| 13 | `gate_events` | F. Hardware & OCR | **CORE** | CONFIRMED | Đức, Thức, Phụng |
+| 14 | `audit_logs` | G. Audit & Admin | **CORE** | CONFIRMED | Phụng |
 | 15 | `slot_sensor_logs` | F. Hardware & IoT | **CONDITIONAL** | NEEDS CONFIRMATION | Thức, Phụng |
 | 16 | `alerts` | G. Audit & Operations | **CONDITIONAL** | NEEDS CONFIRMATION | Phụng, Song |
 | 17 | `system_configs` | G. Audit & Operations | **CONDITIONAL** | NEEDS CONFIRMATION | Phụng |

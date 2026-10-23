@@ -36,23 +36,14 @@
 
 ## 2. CÁC GIẢ ĐỊNH ĐÃ ĐƯỢC CHUYỂN THÀNH CÂU HỎI MỞ
 
-### Câu hỏi 1: Lựa chọn Chiến lược Khóa chính (Primary Key Strategy)
-- **Bối cảnh:** Cần quyết định loại khóa chính thống nhất cho các thực thể trước khi thiết kế ERD ở Task 02B.
-- **Hai phương án cân nhắc:**
-  - **Phương án A (BIGINT GENERATED ALWAYS AS IDENTITY):**
-    - *Ưu điểm:* Hiệu năng cao nhất trên PostgreSQL, dung lượng index B-Tree nhỏ gọn, giải thích trước Hội đồng Mentor FPT rất trong sáng và dễ hiểu; khi test thử nghiệm thủ công qua Swagger/Postman gõ ID số nguyên (`1, 2, 3`) rất tiện lợi.
-    - *Bảo mật đối ngoại:* Đối với các bảng cần che giấu số lượng bản ghi (như `parking_sessions` hay `payments`), có thể bổ sung thêm một mã tra cứu công khai `public_code` dạng chuỗi ngẫu nhiên.
-  - **Phương án B (UUID v7 hoặc UUID v4):**
-    - *Ưu điểm:* Mã định danh ngẫu nhiên toàn cục, sinh ID phân tán ở tầng ứng dụng không phụ thuộc CSDL.
-    - *Nhược điểm:* Dung lượng khóa lớn hơn (16 bytes vs 8 bytes), khó nhớ khi test thủ công và giải trình logic.
-- 👉 **Cần Owner Phụng quyết định:** Thống nhất chọn **Phương án A (BIGINT IDENTITY)** hay **Phương án B (UUID)** cho các bảng dữ liệu?
+### Câu hỏi 1: Lựa chọn Chiến lược Khóa chính (Primary Key Strategy) -> [ĐÃ CHỐT: APPROVED BY OWNER]
+- **Kết quả quyết định:** Owner Phụng đã chính thức phê duyệt **Phương án A (`BIGINT GENERATED ALWAYS AS IDENTITY`)** cho các bảng chính (`users`, `refresh_tokens`, `user_tokens`, `parking_sessions`...) và `INT IDENTITY` cho `roles`, `parking_lots`, `parking_floors`.
 
 ---
 
-### Câu hỏi 2: Quyết định số phận 4 bảng CONDITIONAL cho Sprint 3
-Nhóm cần xem xét có triển khai 4 bảng này trong Sprint 3 hay không:
-1. **`refresh_tokens`:**
-   - *Câu hỏi:* Cơ chế xác thực tài khoản của nhóm trong Sprint 3 có bắt buộc dùng JWT Access Token + Refresh Token (kèm thu hồi token qua CSDL) hay chỉ cần JWT Access Token đơn giản kèm thời gian sống (TTL)?
+### Câu hỏi 2: Quyết định số phận các bảng CONDITIONAL cho Sprint 3
+1. **`refresh_tokens`:** -> **[ĐÃ CHỐT: APPROVED BY OWNER]**
+   - Đã được phê duyệt chính thức là bảng **CORE** thuộc Phân hệ Accounts để hỗ trợ duy trì phiên và thu hồi token khi đăng xuất.
 2. **`slot_sensor_logs`:**
    - *Câu hỏi (với Thức - IoT):* Hệ thống có cần lưu nhật ký thô của mọi lần cảm biến đổi trạng thái vào một bảng riêng trong CSDL không, hay chỉ cần IoT Service gọi API cập nhật trạng thái trực tiếp vào `parking_slots` và `parking_dispatches`? (Lưu toàn bộ log có thể làm nặng CSDL).
 3. **`alerts`:**

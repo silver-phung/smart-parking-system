@@ -20,7 +20,8 @@ Ký hiệu:
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `users` | **CORE** | **C, R, U, D** | R | - | - | R, U (Profile) | C, R (Mock) |
 | `roles` | **CORE** | **C, R, U** | R | - | - | R (Perms) | R |
-| `user_roles` | **CORE** | **C, R, U, D** | R | - | - | R (Perms) | R |
+| `user_tokens` | **CORE** | **C, R, U, D** | - | - | - | C, R (OTP) | R |
+| `refresh_tokens` | **CORE** | **C, R, U, D** | - | - | - | C, R (Auth) | R |
 | `parking_lots` | **CORE** | **C, R, U, D** | R | R | - | R (Render 3D) | R |
 | `parking_floors` | **CORE** | **C, R, U, D** | R | R | - | R (Render 3D) | R |
 | `parking_slots` | **CORE** | **C, R, U, D** | R | **U (Sensors)** | - | **R (3D Color)** | R |
@@ -31,7 +32,6 @@ Ký hiệu:
 | `payments` | **CORE** | R | **C, R, U** | - | - | R (Receipt) | C, R |
 | `gate_events` | **CORE** | R | - | **C, R, U** | **C, R (OCR Log)**| R (Gate Monitor)| C, R |
 | `audit_logs` | **CORE** | **C, R** | C (Pay Audit) | C (Gate Audit)| - | R (Admin View) | R |
-| `refresh_tokens` | *CONDITIONAL*| **C, R, U, D** | - | - | - | C, R (Auth) | R |
 | `slot_sensor_logs`| *CONDITIONAL*| R | - | **C, R** | - | R (Telemetry) | C, R |
 | `alerts` | *CONDITIONAL*| **C, R, U** | C (Billing) | **C, R (Sensor)** | - | **R, U (Resolve)** | C, R |
 | `system_configs` | *CONDITIONAL*| **C, R, U** | R | R | R | R | R |

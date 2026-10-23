@@ -62,8 +62,8 @@ Toàn bộ nghiệp vụ Smart Parking được phân thành 7 nhóm độc lậ
 |                           SMART PARKING DATA ARCHITECTURE                         |
 +-----------------------------------------------------------------------------------+
   [A. Identity & Access]        [B. Parking Structure & 3D]       [C. Vehicles & Sessions]
-   - users, roles, user_roles    - lots, floors, slots             - vehicles
-                                                                    - parking_sessions (CORE)
+   - users, roles                - lots, floors, slots             - vehicles
+   - user_tokens, refresh_tokens                                   - parking_sessions (CORE)
             |                                 |                             |
             +---------------------------------+-----------------------------+
                                               |
