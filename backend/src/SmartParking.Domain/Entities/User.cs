@@ -29,4 +29,6 @@ public class User
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<UserToken> UserTokens { get; set; } = new List<UserToken>();
+    public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
+    public ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
 }
