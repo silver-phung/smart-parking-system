@@ -65,6 +65,7 @@ public class EmailOptions
     public string SenderEmail { get; set; } = "noreply@smartparking.vn";
     public string SenderName { get; set; } = "Smart Parking System";
     public bool EnableSsl { get; set; } = true;
+    public int TimeoutSeconds { get; set; } = 10;
 
     // Aliases for Smtp prefix compatibility
     public string SmtpHost
