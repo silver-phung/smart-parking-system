@@ -111,6 +111,15 @@ public class ParkingSessionService : IParkingSessionService
                     return (false, $"Ô đỗ '{slot.SlotCode}' hiện không khả dụng (Trạng thái: {slot.PhysicalStatus}).", null);
                 }
 
+                // Không gán ô đang được phân công cho một lệnh điều phối ASSIGNED khác
+                var isAlreadyAssigned = await _context.ParkingDispatches
+                    .AnyAsync(d => d.AssignedSlotId == slot.Id && d.Status == DispatchStatuses.Assigned, ct);
+                if (isAlreadyAssigned)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Ô đỗ '{slot.SlotCode}' hiện đang được phân công cho một phương tiện khác.", null);
+                }
+
                 // Lưu ý theo Core Business Invariant: Check-in tại cổng KHÔNG tự động chuyển trạng thái vật lý của Slot sang OCCUPIED.
                 // Slot vẫn giữ trạng thái vật lý EMPTY cho tới khi cảm biến IoT hoặc module Dispatch ghi nhận xe đã đỗ thực tế vào ô.
             }
@@ -207,11 +216,31 @@ public class ParkingSessionService : IParkingSessionService
             }
             session.UpdatedAt = DateTime.UtcNow;
 
-            // Giải phóng ô đỗ nếu trước đó ô đỗ đã được ghi nhận có xe đỗ
-            if (session.CurrentSlot != null && session.CurrentSlot.PhysicalStatus == SlotPhysicalStatuses.Occupied)
+            // Không để dispatch PENDING/ASSIGNED tồn đọng sau khi session COMPLETED
+            var activeDispatches = await _context.ParkingDispatches
+                .Where(d => d.SessionId == session.Id && (d.Status == DispatchStatuses.Pending || d.Status == DispatchStatuses.Assigned))
+                .ToListAsync(ct);
+
+            foreach (var d in activeDispatches)
             {
-                session.CurrentSlot.PhysicalStatus = SlotPhysicalStatuses.Empty;
-                session.CurrentSlot.UpdatedAt = DateTime.UtcNow;
+                d.Status = DispatchStatuses.Cancelled;
+                d.Notes = string.IsNullOrWhiteSpace(d.Notes)
+                    ? "[CHECK-OUT] Tự động hủy lệnh điều phối do phiên gửi xe đã hoàn tất check-out."
+                    : $"{d.Notes} | [CHECK-OUT] Tự động hủy do phiên check-out.";
+                d.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // Giải phóng đúng ô đỗ mà xe thực sự đỗ nếu trước đó ô đỗ đã được ghi nhận OCCUPIED
+            var slotToRelease = session.CurrentSlot;
+            if (slotToRelease == null && session.CurrentSlotId.HasValue)
+            {
+                slotToRelease = await _context.ParkingSlots.FirstOrDefaultAsync(s => s.Id == session.CurrentSlotId.Value, ct);
+            }
+
+            if (slotToRelease != null && slotToRelease.PhysicalStatus == SlotPhysicalStatuses.Occupied)
+            {
+                slotToRelease.PhysicalStatus = SlotPhysicalStatuses.Empty;
+                slotToRelease.UpdatedAt = DateTime.UtcNow;
             }
 
             await LogAuditAsync(

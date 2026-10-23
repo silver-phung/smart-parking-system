@@ -88,6 +88,7 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Contains("/api/v1/parking-slots", content);
         Assert.Contains("/api/v1/vehicles", content);
         Assert.Contains("/api/v1/parking-sessions", content);
+        Assert.Contains("/api/v1/parking-dispatches", content);
     }
 
     [Theory]
@@ -417,6 +418,84 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     {
         var client = CreateClientForRole(role);
         var response = await client.GetAsync("/api/v1/vehicles");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostParkingDispatch_WithoutAuth_Returns401Unauthorized()
+    {
+        var body = new StringContent("{\"sessionId\":1}", Encoding.UTF8, "application/json");
+        var response = await _client.PostAsync("/api/v1/parking-dispatches", body);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingDispatch_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"sessionId\":1}", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/v1/parking-dispatches", body);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingDispatchAssign_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"slotId\":1}", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/v1/parking-dispatches/1/assign", body);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingDispatchConfirmOccupied_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{}", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/v1/parking-dispatches/1/confirm-occupied", body);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingDispatchReportWrongSlot_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"actualSlotId\":2}", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/v1/parking-dispatches/1/report-wrong-slot", body);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingDispatchCancel_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"reason\":\"test\"}", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/v1/parking-dispatches/1/cancel", body);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    public async Task GetParkingDispatches_ManagerOrStaff_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var response = await client.GetAsync("/api/v1/parking-dispatches");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
