@@ -18,6 +18,7 @@ public class SmartParkingDbContextFactory : IDesignTimeDbContextFactory<SmartPar
             .SetBasePath(basePath)
             .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile("appsettings.Development.json", optional: true)
+            .AddUserSecrets("smart-parking-system-development")
             .AddEnvironmentVariables()
             .Build();
 
