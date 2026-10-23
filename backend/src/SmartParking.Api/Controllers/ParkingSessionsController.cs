@@ -24,10 +24,10 @@ public class ParkingSessionsController : ControllerBase
 
     /// <summary>
     /// Check-in xe vào bãi: Tạo phiên đỗ mới, gán ô đỗ (nếu có), tăng occupancy và kích hoạt chống quay vòng (Anti-Passback).
-    /// Tạm thời chỉ dành cho ADMIN do chưa triển khai phân quyền theo bãi (staff_lot_assignments).
+    /// Dành cho ADMIN hoặc MANAGER/STAFF được phân công tại bãi đỗ xe này.
     /// </summary>
     [HttpPost("check-in")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
     [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -48,11 +48,15 @@ public class ParkingSessionsController : ControllerBase
         var (success, message, session) = await _sessionService.CheckInAsync(request, actorId, actorRole, clientIp, ct);
         if (!success)
         {
+            if (message.Contains("không có quyền"))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message });
+            }
             if (message.Contains("Không tìm thấy"))
             {
                 return NotFound(new { message });
             }
-            if (message.Contains("chưa kết thúc (ACTIVE/PAID)"))
+            if (message.Contains("chưa kết thúc (ACTIVE/PAID)") || message.Contains("hiện đang được phân công"))
             {
                 return Conflict(new { message });
             }
@@ -69,11 +73,10 @@ public class ParkingSessionsController : ControllerBase
     /// <summary>
     /// Check-out xe rời bãi: Xác nhận thủ công từ nhân viên/quản trị viên khi xe rời bãi (chưa tích hợp cảm biến IoT cổng ra).
     /// Chuyển trạng thái phiên sang COMPLETED và giải phóng ô đỗ về EMPTY nếu trước đó có xe đỗ.
-    /// Tuân thủ quy tắc: Không giải phóng ô đỗ chỉ vì xe đã thanh toán (PAID); xe phải có xác nhận rời bãi mới được hoàn tất phiên.
-    /// Tạm thời chỉ dành cho ADMIN do chưa triển khai staff_lot_assignments.
+    /// Dành cho ADMIN hoặc MANAGER/STAFF được phân công tại bãi đỗ xe này.
     /// </summary>
     [HttpPost("{id:long}/check-out")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
     [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -93,6 +96,10 @@ public class ParkingSessionsController : ControllerBase
         var (success, message, session) = await _sessionService.CheckOutAsync(id, request, actorId, actorRole, clientIp, ct);
         if (!success)
         {
+            if (message.Contains("không có quyền"))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message });
+            }
             if (message.Contains("Không tìm thấy"))
             {
                 return NotFound(new { message });
@@ -108,20 +115,20 @@ public class ParkingSessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách các phiên đỗ xe đang hoạt động (ACTIVE/PAID) trong toàn hệ thống hoặc theo bãi.
-    /// Tạm thời chỉ dành cho ADMIN do chưa triển khai staff_lot_assignments.
+    /// Lấy danh sách các phiên đỗ xe đang hoạt động (ACTIVE/PAID).
+    /// ADMIN có thể xem toàn bộ; MANAGER/STAFF tự động lọc theo các bãi được phân công.
     /// </summary>
     [HttpGet("active")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
     [ProducesResponseType(typeof(PagedResult<ParkingSessionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetActiveSessions([FromQuery] ParkingSessionFilterDto filter, CancellationToken ct)
     {
         var currentUserId = GetCurrentUserId();
-        var isAdmin = User.IsInRole(Roles.Admin);
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
 
-        var result = await _sessionService.GetActiveSessionsAsync(filter, currentUserId, isAdmin, ct);
+        var result = await _sessionService.GetActiveSessionsAsync(filter, currentUserId, actorRole, ct);
         return Ok(new
         {
             message = "Lấy danh sách phiên đỗ đang hoạt động thành công.",
@@ -153,10 +160,11 @@ public class ParkingSessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Xem chi tiết một phiên đỗ xe theo ID. USER chỉ xem được nếu phiên đỗ thuộc xe của mình.
+    /// Xem chi tiết một phiên đỗ xe theo ID.
+    /// ADMIN: xem toàn bộ; MANAGER/STAFF: xem nếu phiên thuộc bãi được phân công; USER: xem nếu phiên thuộc xe của mình.
     /// </summary>
     [HttpGet("{id:long}")]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.User}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff},{Roles.User}")]
     [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -164,9 +172,9 @@ public class ParkingSessionsController : ControllerBase
     public async Task<IActionResult> GetSessionById(long id, CancellationToken ct)
     {
         var currentUserId = GetCurrentUserId();
-        var isAdmin = User.IsInRole(Roles.Admin);
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
 
-        var session = await _sessionService.GetSessionByIdAsync(id, currentUserId, isAdmin, ct);
+        var session = await _sessionService.GetSessionByIdAsync(id, currentUserId, actorRole, ct);
         if (session == null)
         {
             return NotFound(new { message = $"Không tìm thấy phiên đỗ xe với ID: {id} hoặc bạn không có quyền truy cập." });
@@ -180,10 +188,11 @@ public class ParkingSessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Tra cứu phiên đỗ đang hoạt động theo biển số xe. USER chỉ tra cứu được biển số xe thuộc tài khoản của mình.
+    /// Tra cứu phiên đỗ đang hoạt động theo biển số xe.
+    /// ADMIN: xem toàn bộ; MANAGER/STAFF: xem nếu phiên thuộc bãi được phân công; USER: xem nếu phiên thuộc xe của mình.
     /// </summary>
     [HttpGet("by-plate/{plateNumber}/active")]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.User}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff},{Roles.User}")]
     [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -191,9 +200,9 @@ public class ParkingSessionsController : ControllerBase
     public async Task<IActionResult> GetActiveSessionByPlate(string plateNumber, CancellationToken ct)
     {
         var currentUserId = GetCurrentUserId();
-        var isAdmin = User.IsInRole(Roles.Admin);
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
 
-        var session = await _sessionService.GetActiveSessionByPlateAsync(plateNumber, currentUserId, isAdmin, ct);
+        var session = await _sessionService.GetActiveSessionByPlateAsync(plateNumber, currentUserId, actorRole, ct);
         if (session == null)
         {
             return NotFound(new { message = $"Không tìm thấy phiên đang đỗ cho biển số '{plateNumber}' hoặc bạn không có quyền truy cập." });

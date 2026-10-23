@@ -619,6 +619,91 @@ namespace SmartParking.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.StaffLotAssignment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("AssignedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<long>("AssignedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("assigned_by");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<int>("LotId")
+                        .HasColumnType("integer")
+                        .HasColumnName("lot_id");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("RevocationReason")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("revocation_reason");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<long?>("RevokedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("revoked_by");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_staff_lot_assignments");
+
+                    b.HasIndex("AssignedBy");
+
+                    b.HasIndex("LotId")
+                        .HasDatabaseName("ix_staff_lot_assignments_lot_active")
+                        .HasFilter("is_active = TRUE");
+
+                    b.HasIndex("RevokedBy");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_staff_lot_assignments_user_active")
+                        .HasFilter("is_active = TRUE");
+
+                    b.HasIndex("UserId", "LotId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_staff_lot_assignments_active")
+                        .HasFilter("is_active = TRUE");
+
+                    b.ToTable("staff_lot_assignments", (string)null);
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.User", b =>
                 {
                     b.Property<long>("Id")
@@ -976,6 +1061,44 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.StaffLotAssignment", b =>
+                {
+                    b.HasOne("SmartParking.Domain.Entities.User", "AssignedByUser")
+                        .WithMany("AssignedStaffAssignments")
+                        .HasForeignKey("AssignedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_lot_assignments_assigned_by");
+
+                    b.HasOne("SmartParking.Domain.Entities.ParkingLot", "Lot")
+                        .WithMany("StaffAssignments")
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_lot_assignments_lot");
+
+                    b.HasOne("SmartParking.Domain.Entities.User", "RevokedByUser")
+                        .WithMany("RevokedStaffAssignments")
+                        .HasForeignKey("RevokedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_staff_lot_assignments_revoked_by");
+
+                    b.HasOne("SmartParking.Domain.Entities.User", "User")
+                        .WithMany("StaffLotAssignments")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_staff_lot_assignments_user");
+
+                    b.Navigation("AssignedByUser");
+
+                    b.Navigation("Lot");
+
+                    b.Navigation("RevokedByUser");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.User", b =>
                 {
                     b.HasOne("SmartParking.Domain.Entities.User", "ApprovedByUser")
@@ -1029,6 +1152,8 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Navigation("Floors");
 
                     b.Navigation("Sessions");
+
+                    b.Navigation("StaffAssignments");
                 });
 
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingSession", b =>
@@ -1052,9 +1177,15 @@ namespace SmartParking.Infrastructure.Migrations
 
             modelBuilder.Entity("SmartParking.Domain.Entities.User", b =>
                 {
+                    b.Navigation("AssignedStaffAssignments");
+
                     b.Navigation("AuditLogs");
 
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("RevokedStaffAssignments");
+
+                    b.Navigation("StaffLotAssignments");
 
                     b.Navigation("UserTokens");
 

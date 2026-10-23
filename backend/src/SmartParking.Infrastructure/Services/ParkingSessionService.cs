@@ -14,6 +14,7 @@ namespace SmartParking.Infrastructure.Services;
 public class ParkingSessionService : IParkingSessionService
 {
     private readonly IApplicationDbContext _context;
+    private readonly IParkingAuthorizationService _authService;
     private readonly ILogger<ParkingSessionService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -22,9 +23,13 @@ public class ParkingSessionService : IParkingSessionService
         WriteIndented = false
     };
 
-    public ParkingSessionService(IApplicationDbContext context, ILogger<ParkingSessionService> logger)
+    public ParkingSessionService(
+        IApplicationDbContext context,
+        IParkingAuthorizationService authService,
+        ILogger<ParkingSessionService> logger)
     {
         _context = context;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -50,6 +55,11 @@ public class ParkingSessionService : IParkingSessionService
         if (!lot.IsActive)
         {
             return (false, $"Bãi đỗ xe '{lot.Name}' hiện đang đóng hoặc tạm ngừng hoạt động.", null);
+        }
+
+        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, request.LotId, ct))
+        {
+            return (false, "Bạn không có quyền thực hiện check-in tại bãi đỗ xe này.", null);
         }
 
         // Anti-Passback check: Biển số xe không được phép có phiên ACTIVE hoặc PAID đang mở
@@ -204,6 +214,11 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Phiên gửi xe này đã kết thúc trước đó với trạng thái: {session.Status}.", null);
         }
 
+        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, session.LotId, ct))
+        {
+            return (false, "Bạn không có quyền thực hiện check-out tại bãi đỗ xe này.", null);
+        }
+
         await using var transaction = await _context.BeginTransactionAsync(ct);
         try
         {
@@ -291,7 +306,7 @@ public class ParkingSessionService : IParkingSessionService
     public async Task<PagedResult<ParkingSessionDto>> GetActiveSessionsAsync(
         ParkingSessionFilterDto filter,
         long? currentUserId,
-        bool isAdmin,
+        string currentUserRole,
         CancellationToken ct = default)
     {
         var query = _context.ParkingSessions
@@ -302,18 +317,39 @@ public class ParkingSessionService : IParkingSessionService
             .Include(s => s.Vehicle)
             .Where(s => s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid);
 
-        if (!isAdmin)
+        if (currentUserRole == Roles.Admin)
+        {
+            if (filter.LotId.HasValue)
+            {
+                query = query.Where(s => s.LotId == filter.LotId.Value);
+            }
+        }
+        else if (currentUserRole == Roles.Manager || currentUserRole == Roles.Staff)
+        {
+            var assignedLotIds = await _authService.GetAssignedLotIdsAsync(currentUserId ?? 0, currentUserRole, ct);
+            query = query.Where(s => assignedLotIds.Contains(s.LotId));
+
+            if (filter.LotId.HasValue)
+            {
+                if (!assignedLotIds.Contains(filter.LotId.Value))
+                {
+                    return PagedResult<ParkingSessionDto>.Create([], 0, filter.Page, filter.PageSize);
+                }
+                query = query.Where(s => s.LotId == filter.LotId.Value);
+            }
+        }
+        else
         {
             if (currentUserId == null)
             {
                 return PagedResult<ParkingSessionDto>.Create([], 0, filter.Page, filter.PageSize);
             }
             query = query.Where(s => s.Vehicle != null && s.Vehicle.UserId == currentUserId.Value);
-        }
 
-        if (filter.LotId.HasValue)
-        {
-            query = query.Where(s => s.LotId == filter.LotId.Value);
+            if (filter.LotId.HasValue)
+            {
+                query = query.Where(s => s.LotId == filter.LotId.Value);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(filter.PlateNumber))
@@ -421,7 +457,7 @@ public class ParkingSessionService : IParkingSessionService
         return PagedResult<ParkingSessionDto>.Create(items, totalCount, page, pageSize);
     }
 
-    public async Task<ParkingSessionDto?> GetSessionByIdAsync(long id, long? currentUserId, bool isAdmin, CancellationToken ct = default)
+    public async Task<ParkingSessionDto?> GetSessionByIdAsync(long id, long? currentUserId, string currentUserRole, CancellationToken ct = default)
     {
         var query = _context.ParkingSessions
             .AsNoTracking()
@@ -437,18 +473,29 @@ public class ParkingSessionService : IParkingSessionService
             return null;
         }
 
-        if (!isAdmin)
+        if (currentUserRole != Roles.Admin)
         {
-            if (currentUserId == null || session.Vehicle == null || session.Vehicle.UserId != currentUserId.Value)
+            if (currentUserRole == Roles.Manager || currentUserRole == Roles.Staff)
             {
-                return null;
+                var hasAccess = await _authService.HasLotAccessAsync(currentUserId ?? 0, currentUserRole, session.LotId, ct);
+                if (!hasAccess)
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                if (currentUserId == null || session.Vehicle == null || session.Vehicle.UserId != currentUserId.Value)
+                {
+                    return null;
+                }
             }
         }
 
         return MapToDto(session, session.Lot?.Name ?? string.Empty, session.CurrentSlot?.SlotCode, session.CurrentSlot?.Floor?.FloorNumber);
     }
 
-    public async Task<ParkingSessionDto?> GetActiveSessionByPlateAsync(string plateNumber, long? currentUserId, bool isAdmin, CancellationToken ct = default)
+    public async Task<ParkingSessionDto?> GetActiveSessionByPlateAsync(string plateNumber, long? currentUserId, string currentUserRole, CancellationToken ct = default)
     {
         var normalizedPlate = PlateNumberHelper.Normalize(plateNumber);
         if (string.IsNullOrWhiteSpace(normalizedPlate))
@@ -470,11 +517,22 @@ public class ParkingSessionService : IParkingSessionService
             return null;
         }
 
-        if (!isAdmin)
+        if (currentUserRole != Roles.Admin)
         {
-            if (currentUserId == null || session.Vehicle == null || session.Vehicle.UserId != currentUserId.Value)
+            if (currentUserRole == Roles.Manager || currentUserRole == Roles.Staff)
             {
-                return null;
+                var hasAccess = await _authService.HasLotAccessAsync(currentUserId ?? 0, currentUserRole, session.LotId, ct);
+                if (!hasAccess)
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                if (currentUserId == null || session.Vehicle == null || session.Vehicle.UserId != currentUserId.Value)
+                {
+                    return null;
+                }
             }
         }
 

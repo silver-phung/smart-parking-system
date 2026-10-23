@@ -13,7 +13,8 @@ public class ParkingDispatchTests
     private async Task<(ParkingDispatchService DispatchService, TestSmartParkingDbContext Context, ParkingLot Lot, ParkingFloor Floor, List<ParkingSlot> Slots, ParkingSession Session)> SetupTestEnvironmentAsync()
     {
         var context = await TestDbHelper.CreateInMemoryDbContextAsync();
-        var dispatchService = new ParkingDispatchService(context, NullLogger<ParkingDispatchService>.Instance);
+        var authService = new ParkingAuthorizationService(context);
+        var dispatchService = new ParkingDispatchService(context, authService, NullLogger<ParkingDispatchService>.Instance);
 
         var lot = new ParkingLot
         {
@@ -511,7 +512,7 @@ public class ParkingDispatchTests
             AssignedSlotId = slots[0].Id
         }, 1, Roles.Admin, "127.0.0.1");
 
-        var retrieved = await service.GetDispatchByIdAsync(d1!.Id, currentUserId: null, isAdmin: true);
+        var retrieved = await service.GetDispatchByIdAsync(d1!.Id, currentUserId: null, currentUserRole: Roles.Admin);
 
         Assert.NotNull(retrieved);
         Assert.Equal(10.5m, retrieved.AssignedPositionX);
@@ -534,11 +535,11 @@ public class ParkingDispatchTests
 
         // session.Vehicle.UserId = 100
         // Owner queries -> Success
-        var ownerResult = await service.GetDispatchByIdAsync(d1!.Id, currentUserId: 100, isAdmin: false);
+        var ownerResult = await service.GetDispatchByIdAsync(d1!.Id, currentUserId: 100, currentUserRole: Roles.User);
         Assert.NotNull(ownerResult);
 
         // Different user queries -> Null
-        var otherUserResult = await service.GetDispatchByIdAsync(d1.Id, currentUserId: 999, isAdmin: false);
+        var otherUserResult = await service.GetDispatchByIdAsync(d1.Id, currentUserId: 999, currentUserRole: Roles.User);
         Assert.Null(otherUserResult);
     }
 
@@ -553,13 +554,13 @@ public class ParkingDispatchTests
             AssignedSlotId = slots[0].Id
         }, 1, Roles.Admin, "127.0.0.1");
 
-        var active = await service.GetActiveDispatchBySessionIdAsync(session.Id, currentUserId: null, isAdmin: true);
+        var active = await service.GetActiveDispatchBySessionIdAsync(session.Id, currentUserId: null, currentUserRole: Roles.Admin);
         Assert.NotNull(active);
         Assert.Equal(d1!.Id, active.Id);
 
         // When cancelled, it should no longer be active
         await service.CancelDispatchAsync(d1.Id, new CancelDispatchRequestDto { Reason = "test" }, 1, Roles.Admin, "127.0.0.1");
-        var activeAfterCancel = await service.GetActiveDispatchBySessionIdAsync(session.Id, currentUserId: null, isAdmin: true);
+        var activeAfterCancel = await service.GetActiveDispatchBySessionIdAsync(session.Id, currentUserId: null, currentUserRole: Roles.Admin);
         Assert.Null(activeAfterCancel);
     }
 
@@ -691,7 +692,8 @@ public class ParkingDispatchTests
     public async Task CheckIn_WhenSlotAlreadyAssignedToActiveDispatch_Fails()
     {
         var (dispatchService, context, lot, _, slots, session1) = await SetupTestEnvironmentAsync();
-        var sessionService = new ParkingSessionService(context, NullLogger<ParkingSessionService>.Instance);
+        var authService = new ParkingAuthorizationService(context);
+        var sessionService = new ParkingSessionService(context, authService, NullLogger<ParkingSessionService>.Instance);
 
         // Gán ô A1-01 cho session 1
         var (s1, _, _) = await dispatchService.CreateDispatchAsync(new CreateDispatchRequestDto
@@ -718,7 +720,8 @@ public class ParkingDispatchTests
     public async Task CheckOut_WhenSessionHasPendingOrAssignedDispatch_CancelsDispatchAndFreesSlot()
     {
         var (dispatchService, context, _, _, slots, session) = await SetupTestEnvironmentAsync();
-        var sessionService = new ParkingSessionService(context, NullLogger<ParkingSessionService>.Instance);
+        var authService = new ParkingAuthorizationService(context);
+        var sessionService = new ParkingSessionService(context, authService, NullLogger<ParkingSessionService>.Instance);
 
         var (s1, _, d1) = await dispatchService.CreateDispatchAsync(new CreateDispatchRequestDto
         {
@@ -745,7 +748,8 @@ public class ParkingDispatchTests
     public async Task FullLifecycle_CheckIn_Dispatch_ConfirmOccupied_CheckOut_SlotReturnsToEmpty()
     {
         var (dispatchService, context, _, _, slots, session) = await SetupTestEnvironmentAsync();
-        var sessionService = new ParkingSessionService(context, NullLogger<ParkingSessionService>.Instance);
+        var authService = new ParkingAuthorizationService(context);
+        var sessionService = new ParkingSessionService(context, authService, NullLogger<ParkingSessionService>.Instance);
 
         // 1. Dispatch gán A1-01
         var (s1, _, d1) = await dispatchService.CreateDispatchAsync(new CreateDispatchRequestDto
@@ -772,7 +776,8 @@ public class ParkingDispatchTests
     public async Task FullLifecycle_CheckIn_Dispatch_WrongSlot_CheckOut_ReleasesActualSlot()
     {
         var (dispatchService, context, _, _, slots, session) = await SetupTestEnvironmentAsync();
-        var sessionService = new ParkingSessionService(context, NullLogger<ParkingSessionService>.Instance);
+        var authService = new ParkingAuthorizationService(context);
+        var sessionService = new ParkingSessionService(context, authService, NullLogger<ParkingSessionService>.Instance);
 
         // 1. Dispatch gán A1-01
         var (s1, _, d1) = await dispatchService.CreateDispatchAsync(new CreateDispatchRequestDto

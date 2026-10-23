@@ -22,6 +22,7 @@ public class SmartParkingDbContext : DbContext, IApplicationDbContext
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<ParkingSession> ParkingSessions => Set<ParkingSession>();
     public DbSet<ParkingDispatch> ParkingDispatches => Set<ParkingDispatch>();
+    public DbSet<StaffLotAssignment> StaffLotAssignments => Set<StaffLotAssignment>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     public virtual Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)

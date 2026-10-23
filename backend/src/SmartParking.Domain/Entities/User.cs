@@ -31,4 +31,7 @@ public class User
     public ICollection<UserToken> UserTokens { get; set; } = new List<UserToken>();
     public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
     public ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
+    public ICollection<StaffLotAssignment> StaffLotAssignments { get; set; } = new List<StaffLotAssignment>();
+    public ICollection<StaffLotAssignment> AssignedStaffAssignments { get; set; } = new List<StaffLotAssignment>();
+    public ICollection<StaffLotAssignment> RevokedStaffAssignments { get; set; } = new List<StaffLotAssignment>();
 }

@@ -13,6 +13,7 @@ namespace SmartParking.Infrastructure.Services;
 public class ParkingDispatchService : IParkingDispatchService
 {
     private readonly IApplicationDbContext _context;
+    private readonly IParkingAuthorizationService _authService;
     private readonly ILogger<ParkingDispatchService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -21,9 +22,13 @@ public class ParkingDispatchService : IParkingDispatchService
         WriteIndented = false
     };
 
-    public ParkingDispatchService(IApplicationDbContext context, ILogger<ParkingDispatchService> logger)
+    public ParkingDispatchService(
+        IApplicationDbContext context,
+        IParkingAuthorizationService authService,
+        ILogger<ParkingDispatchService> logger)
     {
         _context = context;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -46,6 +51,11 @@ public class ParkingDispatchService : IParkingDispatchService
         if (session.Status != SessionStatuses.Active)
         {
             return (false, $"Chỉ có thể tạo lệnh điều phối cho phiên gửi xe đang hoạt động (ACTIVE). Trạng thái hiện tại: {session.Status}.", null);
+        }
+
+        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, session.LotId, ct))
+        {
+            return (false, "Bạn không có quyền tạo lệnh điều phối tại bãi đỗ xe này.", null);
         }
 
         // Chống trùng lặp lệnh điều phối đang hiệu lực cho cùng một phiên
@@ -193,7 +203,7 @@ public class ParkingDispatchService : IParkingDispatchService
     public async Task<PagedResult<ParkingDispatchDto>> GetDispatchesAsync(
         ParkingDispatchFilterDto filter,
         long? currentUserId,
-        bool isAdmin,
+        string currentUserRole,
         CancellationToken ct = default)
     {
         var query = _context.ParkingDispatches
@@ -208,18 +218,54 @@ public class ParkingDispatchService : IParkingDispatchService
                 .ThenInclude(s => s!.Floor)
             .AsQueryable();
 
-        if (!isAdmin)
+        if (currentUserRole == Roles.Admin)
+        {
+            if (filter.LotId.HasValue)
+            {
+                query = query.Where(d => d.Session.LotId == filter.LotId.Value);
+            }
+        }
+        else if (currentUserRole == Roles.Manager || currentUserRole == Roles.Staff)
+        {
+            if (currentUserId == null)
+            {
+                return PagedResult<ParkingDispatchDto>.Create([], 0, filter.Page, filter.PageSize);
+            }
+
+            var assignedLotIds = await _authService.GetAssignedLotIdsAsync(currentUserId.Value, currentUserRole, ct);
+            if (assignedLotIds.Count == 0)
+            {
+                return PagedResult<ParkingDispatchDto>.Create([], 0, filter.Page, filter.PageSize);
+            }
+
+            if (filter.LotId.HasValue)
+            {
+                if (!assignedLotIds.Contains(filter.LotId.Value))
+                {
+                    return PagedResult<ParkingDispatchDto>.Create([], 0, filter.Page, filter.PageSize);
+                }
+                query = query.Where(d => d.Session.LotId == filter.LotId.Value);
+            }
+            else
+            {
+                query = query.Where(d => assignedLotIds.Contains(d.Session.LotId));
+            }
+        }
+        else if (currentUserRole == Roles.User)
         {
             if (currentUserId == null)
             {
                 return PagedResult<ParkingDispatchDto>.Create([], 0, filter.Page, filter.PageSize);
             }
             query = query.Where(d => d.Session.Vehicle != null && d.Session.Vehicle.UserId == currentUserId.Value);
+            if (filter.LotId.HasValue)
+            {
+                query = query.Where(d => d.Session.LotId == filter.LotId.Value);
+            }
         }
-
-        if (filter.LotId.HasValue)
+        else
         {
-            query = query.Where(d => d.Session.LotId == filter.LotId.Value);
+            return PagedResult<ParkingDispatchDto>.Create([], 0, filter.Page, filter.PageSize);
         }
 
         if (filter.SessionId.HasValue)
@@ -277,7 +323,7 @@ public class ParkingDispatchService : IParkingDispatchService
     public async Task<ParkingDispatchDto?> GetDispatchByIdAsync(
         long id,
         long? currentUserId,
-        bool isAdmin,
+        string currentUserRole,
         CancellationToken ct = default)
     {
         var query = _context.ParkingDispatches
@@ -298,12 +344,27 @@ public class ParkingDispatchService : IParkingDispatchService
             return null;
         }
 
-        if (!isAdmin)
+        if (currentUserRole == Roles.Admin)
+        {
+            // Allowed
+        }
+        else if (currentUserRole == Roles.Manager || currentUserRole == Roles.Staff)
+        {
+            if (currentUserId == null || !await _authService.HasLotAccessAsync(currentUserId.Value, currentUserRole, dispatch.Session.LotId, ct))
+            {
+                return null;
+            }
+        }
+        else if (currentUserRole == Roles.User)
         {
             if (currentUserId == null || dispatch.Session.Vehicle == null || dispatch.Session.Vehicle.UserId != currentUserId.Value)
             {
                 return null;
             }
+        }
+        else
+        {
+            return null;
         }
 
         return MapToDto(dispatch, dispatch.Session, dispatch.AssignedSlot, dispatch.ActualSlot);
@@ -312,7 +373,7 @@ public class ParkingDispatchService : IParkingDispatchService
     public async Task<ParkingDispatchDto?> GetActiveDispatchBySessionIdAsync(
         long sessionId,
         long? currentUserId,
-        bool isAdmin,
+        string currentUserRole,
         CancellationToken ct = default)
     {
         var query = _context.ParkingDispatches
@@ -333,12 +394,27 @@ public class ParkingDispatchService : IParkingDispatchService
             return null;
         }
 
-        if (!isAdmin)
+        if (currentUserRole == Roles.Admin)
+        {
+            // Allowed
+        }
+        else if (currentUserRole == Roles.Manager || currentUserRole == Roles.Staff)
+        {
+            if (currentUserId == null || !await _authService.HasLotAccessAsync(currentUserId.Value, currentUserRole, dispatch.Session.LotId, ct))
+            {
+                return null;
+            }
+        }
+        else if (currentUserRole == Roles.User)
         {
             if (currentUserId == null || dispatch.Session.Vehicle == null || dispatch.Session.Vehicle.UserId != currentUserId.Value)
             {
                 return null;
             }
+        }
+        else
+        {
+            return null;
         }
 
         return MapToDto(dispatch, dispatch.Session, dispatch.AssignedSlot, dispatch.ActualSlot);
@@ -362,6 +438,11 @@ public class ParkingDispatchService : IParkingDispatchService
         if (dispatch == null)
         {
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.", null);
+        }
+
+        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        {
+            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.", null);
         }
 
         if (dispatch.Status != DispatchStatuses.Pending && dispatch.Status != DispatchStatuses.Assigned)
@@ -476,6 +557,11 @@ public class ParkingDispatchService : IParkingDispatchService
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.", null);
         }
 
+        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        {
+            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.", null);
+        }
+
         if (dispatch.Status != DispatchStatuses.Assigned)
         {
             return (false, $"Chỉ có thể xác nhận đỗ xe khi lệnh đang ở trạng thái ASSIGNED. Trạng thái hiện tại: {dispatch.Status}.", null);
@@ -563,6 +649,11 @@ public class ParkingDispatchService : IParkingDispatchService
         if (dispatch == null)
         {
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.", null);
+        }
+
+        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        {
+            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.", null);
         }
 
         if (dispatch.Status != DispatchStatuses.Assigned)
@@ -680,6 +771,11 @@ public class ParkingDispatchService : IParkingDispatchService
         if (dispatch == null)
         {
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.");
+        }
+
+        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        {
+            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.");
         }
 
         if (dispatch.Status != DispatchStatuses.Pending && dispatch.Status != DispatchStatuses.Assigned)

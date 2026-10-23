@@ -12,4 +12,5 @@ public class ParkingLot
 
     public ICollection<ParkingFloor> Floors { get; set; } = new List<ParkingFloor>();
     public ICollection<ParkingSession> Sessions { get; set; } = new List<ParkingSession>();
+    public ICollection<StaffLotAssignment> StaffAssignments { get; set; } = new List<StaffLotAssignment>();
 }

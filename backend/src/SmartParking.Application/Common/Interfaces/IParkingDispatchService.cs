@@ -15,19 +15,19 @@ public interface IParkingDispatchService
     Task<PagedResult<ParkingDispatchDto>> GetDispatchesAsync(
         ParkingDispatchFilterDto filter,
         long? currentUserId,
-        bool isAdmin,
+        string currentUserRole,
         CancellationToken ct = default);
 
     Task<ParkingDispatchDto?> GetDispatchByIdAsync(
         long id,
         long? currentUserId,
-        bool isAdmin,
+        string currentUserRole,
         CancellationToken ct = default);
 
     Task<ParkingDispatchDto?> GetActiveDispatchBySessionIdAsync(
         long sessionId,
         long? currentUserId,
-        bool isAdmin,
+        string currentUserRole,
         CancellationToken ct = default);
 
     Task<(bool Success, string Message, ParkingDispatchDto? Data)> ReassignSlotAsync(

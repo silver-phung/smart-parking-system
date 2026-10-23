@@ -18,7 +18,8 @@ public class VehicleAndSessionTests
     {
         var context = await TestDbHelper.CreateInMemoryDbContextAsync();
         var vehicleService = new VehicleService(context, NullLogger<VehicleService>.Instance);
-        var sessionService = new ParkingSessionService(context, NullLogger<ParkingSessionService>.Instance);
+        var authService = new ParkingAuthorizationService(context);
+        var sessionService = new ParkingSessionService(context, authService, NullLogger<ParkingSessionService>.Instance);
         return (vehicleService, sessionService, context);
     }
 
@@ -481,17 +482,17 @@ public class VehicleAndSessionTests
         var checkInMethod = typeof(ParkingSessionsController).GetMethod(nameof(ParkingSessionsController.CheckIn));
         var checkInAuth = checkInMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(checkInAuth);
-        Assert.Equal(Roles.Admin, checkInAuth.Roles);
+        Assert.Equal($"{Roles.Admin},{Roles.Manager},{Roles.Staff}", checkInAuth.Roles);
 
         var checkOutMethod = typeof(ParkingSessionsController).GetMethod(nameof(ParkingSessionsController.CheckOut));
         var checkOutAuth = checkOutMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(checkOutAuth);
-        Assert.Equal(Roles.Admin, checkOutAuth.Roles);
+        Assert.Equal($"{Roles.Admin},{Roles.Manager},{Roles.Staff}", checkOutAuth.Roles);
 
         var activeMethod = typeof(ParkingSessionsController).GetMethod(nameof(ParkingSessionsController.GetActiveSessions));
         var activeAuth = activeMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(activeAuth);
-        Assert.Equal(Roles.Admin, activeAuth.Roles);
+        Assert.Equal($"{Roles.Admin},{Roles.Manager},{Roles.Staff}", activeAuth.Roles);
 
         var mySessionsMethod = typeof(ParkingSessionsController).GetMethod(nameof(ParkingSessionsController.GetMySessions));
         var mySessionsAuth = mySessionsMethod?.GetCustomAttribute<AuthorizeAttribute>();

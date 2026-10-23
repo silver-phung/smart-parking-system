@@ -14,11 +14,16 @@ namespace SmartParking.Api.Controllers;
 public class ParkingLotsController : ControllerBase
 {
     private readonly IParkingManagementService _parkingService;
+    private readonly IParkingAuthorizationService _authService;
     private readonly ILogger<ParkingLotsController> _logger;
 
-    public ParkingLotsController(IParkingManagementService parkingService, ILogger<ParkingLotsController> logger)
+    public ParkingLotsController(
+        IParkingManagementService parkingService,
+        IParkingAuthorizationService authService,
+        ILogger<ParkingLotsController> logger)
     {
         _parkingService = parkingService;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -132,10 +137,11 @@ public class ParkingLotsController : ControllerBase
     }
 
     /// <summary>
-    /// Mở hoặc đóng tiếp nhận xe vào bãi (IsActive) theo quy tắc nghiệp vụ (Chỉ dành cho ADMIN).
+    /// Mở hoặc đóng tiếp nhận xe vào bãi (IsActive) theo quy tắc nghiệp vụ.
+    /// Dành cho ADMIN hoặc MANAGER được phân công tại bãi đỗ xe này.
     /// </summary>
     [HttpPatch("{id:int}/status")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(typeof(ParkingLotDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -149,6 +155,13 @@ public class ParkingLotsController : ControllerBase
         }
 
         var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+
+        if (!await _authService.CanManageLotStatusAsync(actorId ?? 0, actorRole, id, ct))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền quản lý trạng thái tiếp nhận của bãi đỗ xe này." });
+        }
+
         var (success, message, lot) = await _parkingService.UpdateLotStatusAsync(id, request, actorId, ct);
 
         if (!success)

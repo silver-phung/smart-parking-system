@@ -10,12 +10,12 @@ using Xunit;
 
 namespace SmartParking.Tests;
 
-public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
-    public ApiIntegrationTests(WebApplicationFactory<Program> factory)
+    public ApiIntegrationTests(CustomWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
@@ -89,6 +89,7 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Contains("/api/v1/vehicles", content);
         Assert.Contains("/api/v1/parking-sessions", content);
         Assert.Contains("/api/v1/parking-dispatches", content);
+        Assert.Contains("/api/v1/staff-assignments", content);
     }
 
     [Theory]
@@ -401,14 +402,22 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Theory]
-    [InlineData(Roles.Manager)]
-    [InlineData(Roles.Staff)]
     [InlineData(Roles.User)]
-    public async Task GetActiveParkingSessions_NonAdmin_Returns403Forbidden(string role)
+    public async Task GetActiveParkingSessions_User_Returns403Forbidden(string role)
     {
         var client = CreateClientForRole(role);
         var response = await client.GetAsync("/api/v1/parking-sessions/active");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    public async Task GetActiveParkingSessions_ManagerAndStaff_Returns200Ok(string role)
+    {
+        var client = CreateClientForRole(role);
+        var response = await client.GetAsync("/api/v1/parking-sessions/active");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Theory]
@@ -489,13 +498,39 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetParkingDispatches_WithoutAuth_Returns401Unauthorized()
+    {
+        var response = await _client.GetAsync("/api/v1/parking-dispatches");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Theory]
     [InlineData(Roles.Manager)]
     [InlineData(Roles.Staff)]
-    public async Task GetParkingDispatches_ManagerOrStaff_Returns403Forbidden(string role)
+    [InlineData(Roles.User)]
+    public async Task GetParkingDispatches_AuthenticatedRoles_Returns200Ok(string role)
     {
         var client = CreateClientForRole(role);
         var response = await client.GetAsync("/api/v1/parking-dispatches");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetStaffAssignments_WithoutAuth_Returns401Unauthorized()
+    {
+        var response = await _client.GetAsync("/api/v1/staff-assignments");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task GetStaffAssignments_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var response = await client.GetAsync("/api/v1/staff-assignments");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 

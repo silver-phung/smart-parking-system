@@ -429,7 +429,7 @@ public class ParkingManagementTests
         var patchStatusMethod = typeof(ParkingLotsController).GetMethod(nameof(ParkingLotsController.UpdateLotStatus));
         var patchStatusAuth = patchStatusMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(patchStatusAuth);
-        Assert.Equal(Roles.Admin, patchStatusAuth.Roles);
+        Assert.Equal($"{Roles.Admin},{Roles.Manager}", patchStatusAuth.Roles);
 
         var deleteMethod = typeof(ParkingLotsController).GetMethod(nameof(ParkingLotsController.DeleteLot));
         var deleteAuth = deleteMethod?.GetCustomAttribute<AuthorizeAttribute>();
@@ -488,8 +488,8 @@ public class ParkingManagementTests
         var patchStatusMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.UpdateSlotPhysicalStatus));
         var patchAuth = patchStatusMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(patchAuth);
-        // Under Phase 1B security fix: strictly Roles.Admin only until staff_lot_assignments is implemented
-        Assert.Equal(Roles.Admin, patchAuth.Roles);
+        // Under Task 05 Phase 2: Roles.Admin and Roles.Manager with lot scope
+        Assert.Equal($"{Roles.Admin},{Roles.Manager}", patchAuth.Roles);
 
         var deleteMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.DeleteSlot));
         var deleteAuth = deleteMethod?.GetCustomAttribute<AuthorizeAttribute>();

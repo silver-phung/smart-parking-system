@@ -14,11 +14,16 @@ namespace SmartParking.Api.Controllers;
 public class ParkingSlotsController : ControllerBase
 {
     private readonly IParkingManagementService _parkingService;
+    private readonly IParkingAuthorizationService _authService;
     private readonly ILogger<ParkingSlotsController> _logger;
 
-    public ParkingSlotsController(IParkingManagementService parkingService, ILogger<ParkingSlotsController> logger)
+    public ParkingSlotsController(
+        IParkingManagementService parkingService,
+        IParkingAuthorizationService authService,
+        ILogger<ParkingSlotsController> logger)
     {
         _parkingService = parkingService;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -144,11 +149,12 @@ public class ParkingSlotsController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật trạng thái vật lý của ô đỗ xe (Bảo trì/Không khả dụng/Trống) (Tạm thời chỉ dành cho ADMIN do chưa có staff_lot_assignments).
+    /// Cập nhật trạng thái vật lý của ô đỗ xe (Bảo trì/Không khả dụng/Trống).
+    /// Dành cho ADMIN hoặc MANAGER được phân công tại bãi đỗ xe chứa ô này.
     /// Tuân thủ quy tắc nghiêm ngặt: Tuyệt đối không cho phép chuyển ô OCCUPIED sang EMPTY khi xe chưa hoàn tất rời bãi.
     /// </summary>
     [HttpPatch("{id:long}/status")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(typeof(ParkingSlotDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -164,6 +170,17 @@ public class ParkingSlotsController : ControllerBase
         var actorId = GetCurrentUserId();
         var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        var slotInfo = await _parkingService.GetSlotByIdAsync(id, includeInternalDetails: true, ct);
+        if (slotInfo == null)
+        {
+            return NotFound(new { message = "Không tìm thấy ô đỗ xe." });
+        }
+
+        if (!await _authService.CanManageSlotStatusAsync(actorId ?? 0, actorRole, slotInfo.LotId, ct))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền quản lý trạng thái ô đỗ tại bãi đỗ xe này." });
+        }
 
         var (success, message, slot) = await _parkingService.UpdateSlotPhysicalStatusAsync(id, request, actorId, actorRole, clientIp, ct);
 

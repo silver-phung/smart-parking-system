@@ -48,6 +48,8 @@ public static class DependencyInjection
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IParkingSessionService, ParkingSessionService>();
         services.AddScoped<IParkingDispatchService, ParkingDispatchService>();
+        services.AddScoped<IParkingAuthorizationService, ParkingAuthorizationService>();
+        services.AddScoped<IStaffLotAssignmentService, StaffLotAssignmentService>();
 
         return services;
     }
