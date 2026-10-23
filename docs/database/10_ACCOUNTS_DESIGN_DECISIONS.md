@@ -36,13 +36,13 @@
    - Giúp kiến trúc CSDL tinh gọn, đơn giản hóa việc nạp Role Claim vào JWT, triệt tiêu nguy cơ leo quyền khi auto-approve.
 2. **Danh mục 4 Bảng Thuộc Phân hệ Accounts:**
    - `users`: Quản lý danh tính, tài khoản và hồ sơ người dùng.
-   - `roles`: Danh mục vai trò chuẩn hóa (`ADMIN`, `OPERATOR`, `CUSTOMER`).
+   - `roles`: Danh mục vai trò chuẩn hóa (`ADMIN`, `MANAGER`, `STAFF`, `USER`).
    - `user_tokens`: Quản lý mã OTP 6 số xác minh email qua dịch vụ email thật.
    - `refresh_tokens`: Quản lý phiên đăng nhập dài hạn và thu hồi phiên an toàn.
 3. **Quy trình Phê duyệt Tài khoản (Account Approval Policy):**
    - Giữ nguyên các trường nghiệp vụ: `approval_status` (`PENDING`, `APPROVED`, `REJECTED`), `approved_by`, `approved_at`.
-   - Tài khoản vai trò `CUSTOMER` được **tự động chuyển `approval_status = 'APPROVED'` ngay sau khi xác minh email thành công**.
-   - Tài khoản `OPERATOR` và `ADMIN` được cấp quyền qua quy trình quản trị an toàn do Quản trị viên chỉ định; tuyệt đối không cho phép đăng ký công khai yêu cầu vai trò `ADMIN` hoặc `OPERATOR`.
+   - Tài khoản vai trò `USER` được **tự động chuyển `approval_status = 'APPROVED'` ngay sau khi xác minh email thành công**.
+   - Tài khoản `STAFF`, `MANAGER` và `ADMIN` được cấp quyền qua quy trình quản trị an toàn do Quản trị viên chỉ định; tuyệt đối không cho phép đăng ký công khai yêu cầu vai trò `ADMIN`, `MANAGER` hoặc `STAFF`.
 
 ---
 
@@ -167,7 +167,7 @@ Hệ thống CSDL Smart Parking được chốt chính thức gồm **19 bảng*
 
 | STT | Endpoint | Method | Request DTO | Response DTO | Ghi chú kỹ thuật |
 | :---: | :--- | :---: | :--- | :--- | :--- |
-| 1 | `/api/v1/auth/register` | `POST` | `RegisterRequestDto`<br/>(`username`, `email`, `password`, `fullName`, `phoneNumber`, `recaptchaToken`) | `201 Created` | Rate limit 5/m/IP. reCAPTCHA verify server-side. Chuẩn hóa lowercase. Sinh OTP 6 số HMAC-SHA256. Gán role CUSTOMER. |
+| 1 | `/api/v1/auth/register` | `POST` | `RegisterRequestDto`<br/>(`username`, `email`, `password`, `fullName`, `phoneNumber`, `recaptchaToken`) | `201 Created` | Rate limit 5/m/IP. reCAPTCHA verify server-side. Chuẩn hóa lowercase. Sinh OTP 6 số HMAC-SHA256. Gán role USER. |
 | 2 | `/api/v1/auth/verify-email` | `POST` | `VerifyEmailRequestDto`<br/>(`email`, `code`) | `200 OK` | Rate limit 10/m/IP. Nhận mã 6 số. Atomic consume & set `is_email_verified = TRUE`, `approval_status = 'APPROVED'`. |
 | 3 | `/api/v1/auth/resend-verification` | `POST` | `ResendVerificationRequestDto`<br/>(`email`) | `200 OK` | Rate limit 3/10m/IP. Cooldown 60s. Hủy mã cũ, phát hành mã OTP mới qua email thật. |
 | 4 | `/api/v1/auth/login` | `POST` | `LoginRequestDto`<br/>(`username`, `password`) | `AuthResponseDto`<br/>(`accessToken`, `refreshToken`, `userProfile`) | Rate limit 10/m/IP. Đăng nhập BẮT BUỘC bằng username. Verify mật khẩu trước tiên; chặn chưa verify email. Không bắt OTP/reCAPTCHA. |

@@ -15,14 +15,14 @@
 Phân hệ Accounts & Authentication đã được triển khai hoàn chỉnh theo mô hình Clean Architecture trong .NET 10, tuân thủ nghiêm ngặt 4 bảng cơ sở dữ liệu đã được Owner phê duyệt:
 
 ### 1.1. Bốn bảng Accounts và trách nhiệm
-1. **`roles`**: Quản lý danh mục vai trò hệ thống. Khởi tạo 3 vai trò cố định: `ADMIN` (1), `OPERATOR` (2), `CUSTOMER` (3).
+1. **`roles`**: Quản lý danh mục vai trò hệ thống. Khởi tạo 4 vai trò cố định: `ADMIN` (1), `MANAGER` (2), `STAFF` (3), `USER` (4).
 2. **`users`**: Lưu trữ hồ sơ người dùng. Sử dụng khóa ngoại trực tiếp `role_id` tham chiếu `roles.id` (mô hình 1 User = 1 Role; bảng `user_roles` đã được loại bỏ hoàn toàn).
 3. **`user_tokens`**: Lưu trữ mã OTP xác minh email dưới dạng mã băm bảo mật HMAC-SHA256 (`HMAC-SHA256(secret, userId:tokenType:otpCode)`). Không lưu OTP dạng thô, không đặt chỉ mục UNIQUE toàn cục trên cột hash.
 4. **`refresh_tokens`**: Lưu trữ mã băm SHA-256 của Refresh Token (thời hạn 7 ngày) phục vụ duy trì phiên đăng nhập và thu hồi token (revocation).
 
 ### 1.2. Luồng nghiệp vụ cốt lõi & Quy tắc an toàn bảo mật
-- **Đăng ký (Registration)**: Người dùng công khai đăng ký bằng `username` + `email` + `password` + `fullName` + `phoneNumber` kèm `recaptchaToken`. Tài khoản tự động nhận vai trò `CUSTOMER`, trạng thái khởi tạo `is_email_verified = false` và `approval_status = 'PENDING'`. Hệ thống sinh mã OTP 6 số ngẫu nhiên CSPRNG và gửi đến email thật.
-- **Xác minh Email (Email Verification)**: Nhập email và mã OTP 6 số. Khi xác minh thành công, OTP được đánh dấu đã sử dụng (`is_used = true`), tài khoản chuyển thành `is_email_verified = true` và tự động được phê duyệt `approval_status = 'APPROVED'` đối với vai trò `CUSTOMER`. Tài khoản `OPERATOR` và `ADMIN` không tự phê duyệt qua endpoint này mà phải do Admin quản trị.
+- **Đăng ký (Registration)**: Người dùng công khai đăng ký bằng `username` + `email` + `password` + `fullName` + `phoneNumber` kèm `recaptchaToken`. Tài khoản tự động nhận vai trò `USER`, trạng thái khởi tạo `is_email_verified = false` và `approval_status = 'PENDING'`. Hệ thống sinh mã OTP 6 số ngẫu nhiên CSPRNG và gửi đến email thật. Không cho phép tự đăng ký vai trò `ADMIN`, `MANAGER` hoặc `STAFF`.
+- **Xác minh Email (Email Verification)**: Nhập email và mã OTP 6 số. Khi xác minh thành công, OTP được đánh dấu đã sử dụng (`is_used = true`), tài khoản chuyển thành `is_email_verified = true` và tự động được phê duyệt `approval_status = 'APPROVED'` đối với vai trò `USER`. Tài khoản `STAFF`, `MANAGER` và `ADMIN` không tự phê duyệt qua endpoint này mà phải do Quản trị viên chỉ định/phê duyệt.
 - **Đăng nhập (Login)**: Đăng nhập BẮT BUỘC bằng **`username` + `password`** (không dùng email làm định danh đăng nhập). Backend kiểm tra mật khẩu trước khi phản hồi bất kỳ trạng thái nào để chống brute-force và user enumeration. Khóa tạm thời 15 phút nếu nhập sai quá 5 lần liên tiếp. Khi thành công, trả về JWT Access Token (15 phút) và Refresh Token (7 ngày).
 - **Làm mới Token (Refresh Token)**: Gửi Refresh Token để cấp mới Access Token mà không cần người dùng nhập lại mật khẩu. Phiên bản này chưa xoay vòng refresh token.
 - **Đăng xuất (Logout)**: Thu hồi Refresh Token trên server. Hoạt động bình thường ngay cả khi Access Token đã hết hạn. Lưu ý: JWT Access Token là stateless nên vẫn có hiệu lực kỹ thuật cho đến khi hết hạn (tối đa 15 phút).
@@ -73,7 +73,7 @@ Header chung: `Content-Type: application/json`
     "fullName": "Nguyễn Văn A",
     "phoneNumber": "0901234567",
     "avatarUrl": null,
-    "role": "CUSTOMER",
+    "role": "USER",
     "isEmailVerified": false,
     "approvalStatus": "PENDING",
     "createdAt": "2026-10-23T04:30:00Z"
@@ -165,7 +165,7 @@ Header chung: `Content-Type: application/json`
       "fullName": "Nguyễn Văn A",
       "phoneNumber": "0901234567",
       "avatarUrl": null,
-      "role": "CUSTOMER",
+      "role": "USER",
       "isEmailVerified": true,
       "approvalStatus": "APPROVED",
       "createdAt": "2026-10-23T04:30:00Z"
@@ -240,7 +240,7 @@ Header chung: `Content-Type: application/json`
     "fullName": "Nguyễn Văn A",
     "phoneNumber": "0901234567",
     "avatarUrl": null,
-    "role": "CUSTOMER",
+    "role": "USER",
     "isEmailVerified": true,
     "approvalStatus": "APPROVED",
     "createdAt": "2026-10-23T04:30:00Z"
@@ -273,7 +273,7 @@ Header chung: `Content-Type: application/json`
     "fullName": "Nguyễn Văn A (Cập nhật)",
     "phoneNumber": "0988776655",
     "avatarUrl": null,
-    "role": "CUSTOMER",
+    "role": "USER",
     "isEmailVerified": true,
     "approvalStatus": "APPROVED",
     "createdAt": "2026-10-23T04:30:00Z"

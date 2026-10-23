@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -132,8 +132,9 @@ namespace SmartParking.Infrastructure.Migrations
                 values: new object[,]
                 {
                     { 1, "ADMIN", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Toàn quyền quản trị hệ thống Smart Parking", "Quản trị viên" },
-                    { 2, "OPERATOR", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Nhân viên vận hành bãi xe, trực cổng, xử lý điều phối", "Nhân viên điều hành" },
-                    { 3, "CUSTOMER", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Khách hàng gửi xe cá nhân", "Khách hàng" }
+                    { 2, "MANAGER", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Quản lý vận hành bãi xe, cấu hình giá, nhân sự và báo cáo doanh thu", "Quản lý bãi đỗ" },
+                    { 3, "STAFF", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Nhân viên trực cổng, kiểm soát vào ra và hỗ trợ xử lý sự cố", "Nhân viên vận hành" },
+                    { 4, "USER", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Người dùng tự đăng ký tài khoản, gửi xe và thanh toán cá nhân", "Người dùng" }
                 });
 
             migrationBuilder.CreateIndex(

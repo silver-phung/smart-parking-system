@@ -64,8 +64,8 @@
 | Tên cột | Kiểu PostgreSQL | Nullable | Mặc định | Khóa / Ràng buộc | Mô tả nghiệp vụ |
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | `id` | `INT` | NO | `IDENTITY` | **PK** | Khóa chính sinh tự động (`GENERATED ALWAYS AS IDENTITY`). |
-| `code` | `VARCHAR(50)` | NO | None | **UK** | Mã định danh chuẩn hóa viết hoa không dấu (`ADMIN`, `OPERATOR`, `CUSTOMER`). |
-| `name` | `VARCHAR(100)` | NO | None | - | Tên hiển thị tiếng Việt (Quản trị viên, Nhân viên điều hành, Khách hàng). |
+| `code` | `VARCHAR(50)` | NO | None | **UK** | Mã định danh chuẩn hóa viết hoa không dấu (`ADMIN`, `MANAGER`, `STAFF`, `USER`). |
+| `name` | `VARCHAR(100)` | NO | None | - | Tên hiển thị tiếng Việt (Quản trị viên, Quản lý bãi đỗ, Nhân viên vận hành, Người dùng). |
 | `description` | `VARCHAR(255)` | YES | NULL | - | Mô tả phạm vi quyền hạn và trách nhiệm của vai trò trong hệ thống. |
 | `created_at` | `TIMESTAMPTZ` | NO | `NOW()` | - | Thời điểm khởi tạo vai trò trong hệ thống. |
 
@@ -76,7 +76,7 @@
 - **Quyết định chính thức:** Owner Phụng đã chính thức phê duyệt mô hình **một user một vai trò (1-N)**:
   - Cột `users.role_id INT NOT NULL FK REFERENCES roles(id)` đại diện cho vai trò duy nhất của mỗi tài khoản.
   - **Bảng trung gian `user_roles` bị loại bỏ hoàn toàn khỏi thiết kế CSDL**.
-  - **Lợi ích kiến trúc:** Đơn giản hóa cấu trúc phân quyền, không có rủi ro leo quyền khi auto-approve tài khoản `CUSTOMER`, giảm số lượng JOIN và tối ưu hóa việc nạp Role Claim vào JWT Access Token.
+  - **Lợi ích kiến trúc:** Đơn giản hóa cấu trúc phân quyền, không có rủi ro leo quyền khi auto-approve tài khoản `USER`, giảm số lượng JOIN và tối ưu hóa việc nạp Role Claim vào JWT Access Token.
 
 ---
 
@@ -144,7 +144,7 @@
   "recaptchaToken": "03AFcWeA7..."
 }
 ```
-*(Server xác minh `recaptchaToken` server-side với Google, không lưu token vào DB; chuẩn hóa lowercase cho `username` và `email`; gán mặc định `role_id` là `CUSTOMER`; phát sinh mã OTP 6 số và gửi qua email thật).*
+*(Server xác minh `recaptchaToken` server-side với Google, không lưu token vào DB; chuẩn hóa lowercase cho `username` và `email`; gán mặc định `role_id` là `USER`; phát sinh mã OTP 6 số và gửi qua email thật).*
 
 ### 6.2. Contract Xác minh Email: `POST /api/v1/auth/verify-email`
 **Request DTO (`VerifyEmailRequestDto`):**
@@ -204,7 +204,7 @@
   "fullName": "Võ Phụng",
   "phoneNumber": "0901234567",
   "avatarUrl": null,
-  "role": "CUSTOMER",
+  "role": "USER",
   "isEmailVerified": true,
   "approvalStatus": "APPROVED",
   "createdAt": "2026-10-23T08:00:00Z"

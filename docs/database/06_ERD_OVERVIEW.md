@@ -238,7 +238,7 @@ erDiagram
 ### 3.2. Mối quan hệ giữa Accounts và Vận hành bãi xe
 - Người dùng (`users`) có thể liên kết 1-N với phương tiện cá nhân (`vehicles`).
 - Khách vãng lai chưa có tài khoản vẫn có thể vào bãi: Khi đó, trường `vehicles.user_id` có giá trị `NULL`, hệ thống vẫn lưu biển số xe vào `parking_sessions.plate_number` bình thường.
-- Nhân viên vận hành (`users` có role `OPERATOR`) và Quản trị viên (`ADMIN`) tương tác với hệ thống qua các hành động ghi nhận vào `audit_logs` (thao tác điều phối thủ công, mở barrier cưỡng bức, sửa giá).
+- Nhân viên vận hành (`users` có role `STAFF`), Quản lý (`MANAGER`) và Quản trị viên (`ADMIN`) tương tác với hệ thống qua các hành động ghi nhận vào `audit_logs` (thao tác điều phối thủ công, mở barrier cưỡng bức, sửa giá).
 
 ### 3.3. Tách biệt Trạng thái Ô đỗ và Trạng thái Điều phối
 - Ô đỗ (`parking_slots`) **chỉ quản lý trạng thái vật lý thực tế** (`physical_status`: `EMPTY`, `OCCUPIED`, `MAINTENANCE`, `UNAVAILABLE`). Không tự giả định toàn bộ slot có cùng kích thước.

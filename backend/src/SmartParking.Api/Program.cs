@@ -91,8 +91,9 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(Roles.Admin, policy => policy.RequireRole(Roles.Admin));
-    options.AddPolicy(Roles.Operator, policy => policy.RequireRole(Roles.Operator, Roles.Admin));
-    options.AddPolicy(Roles.Customer, policy => policy.RequireRole(Roles.Customer));
+    options.AddPolicy(Roles.Manager, policy => policy.RequireRole(Roles.Manager));
+    options.AddPolicy(Roles.Staff, policy => policy.RequireRole(Roles.Staff));
+    options.AddPolicy(Roles.User, policy => policy.RequireRole(Roles.User));
 });
 
 // 4. Configure Partitioned Rate Limiting (Per-IP partition against brute force and DDoS)

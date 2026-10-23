@@ -46,7 +46,7 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
 - **Mục đích (tiếng Việt):** Quản lý danh mục các vai trò trong hệ thống để thực hiện phân quyền truy cập (RBAC).
 - **Module / Thành viên sử dụng:** Module Identity & Auth / Phụng phụ trách.
 - **5 Câu hỏi phân tích:**
-  - *Bảng này dùng để làm gì?* Định nghĩa các vai trò hợp lệ trong hệ thống (`ADMIN`, `OPERATOR`, `CUSTOMER`).
+  - *Bảng này dùng để làm gì?* Định nghĩa các vai trò hợp lệ trong hệ thống (`ADMIN`, `MANAGER`, `STAFF`, `USER`).
   - *Ai tạo dữ liệu?* Hệ thống tạo sẵn qua dữ liệu khởi tạo (Data Seeding).
   - *Ai đọc hoặc cập nhật?* Middleware phân quyền đọc để kiểm tra quyền hạn của từng API.
   - *Nó liên kết với bảng nào?* Liên kết với `users` thông qua khóa ngoại 1-N (`users.role_id`).
@@ -100,7 +100,7 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
 - **5 Câu hỏi phân tích:**
   - *Bảng này dùng để làm gì?* Lưu danh sách các tầng (Tên tầng, số thứ tự tầng: Hầm B1, Tầng 1, Tầng 2,...).
   - *Ai tạo dữ liệu?* Quản trị viên tạo khi thiết lập bản đồ bãi xe.
-  - *Ai đọc hoặc cập nhật?* Song tải thông tin tầng để kết xuất mô hình 3D theo từng mặt bằng; Operator lọc ô đỗ theo tầng.
+  - *Ai đọc hoặc cập nhật?* Song tải thông tin tầng để kết xuất mô hình 3D theo từng mặt bằng; Nhân viên vận hành (Staff) lọc ô đỗ theo tầng.
   - *Nó liên kết với bảng nào?* Khóa ngoại trỏ đến `parking_lots.id`; liên kết 1-N với `parking_slots`.
   - *Nếu bỏ bảng này thì có ảnh hưởng gì?* Không thể phân tầng bãi xe, mô hình 3D không thể bóc tách hiển thị từng tầng.
 - **Mức độ ưu tiên:** **CORE** (Bắt buộc cho Sprint 3).
@@ -162,7 +162,7 @@ Toàn bộ hệ thống sau khi rà soát chặt chẽ gồm **19 bảng đề x
   - *Bảng này dùng để làm gì?* Lưu vết từng lệnh điều phối: Phiên xe nào (`session_id`), được chỉ định ô đỗ nào (`assigned_slot_id`), thực tế đỗ vào ô nào (`actual_slot_id`), trạng thái điều phối (`PENDING`, `ASSIGNED`, `OCCUPIED`, `WRONG_SLOT`, `CANCELLED`), chế độ điều phối (Tự động / Nhân viên chỉ định). Thuật toán chỉ cần tìm slot trống, không cần logic phân loại nhiên liệu/xe điện.
   - *Ai tạo dữ liệu?* Hệ thống tạo khi xe check-in xong và đưa vào hàng đợi điều phối.
   - *Ai đọc hoặc cập nhật?*
-    - Thuật toán Auto-dispatch hoặc Operator cập nhật ô được gán (`ASSIGNED`).
+    - Thuật toán Auto-dispatch hoặc Nhân viên vận hành (Staff) cập nhật ô được gán (`ASSIGNED`).
     - Cảm biến IoT / Mô phỏng 3D cập nhật khi xe vào ô thực tế (`OCCUPIED` hoặc `WRONG_SLOT`).
     - 3D View của Song đọc để vẽ đường dẫn di chuyển cho xe.
   - *Nó liên kết với bảng nào?* Khóa ngoại trỏ đến `parking_sessions.id` và `parking_slots.id`.

@@ -80,20 +80,20 @@ public class AuthService : IAuthService
             return AuthResult<UserProfileDto>.Failure("Tên đăng nhập hoặc Email đã tồn tại trong hệ thống.", 409);
         }
 
-        // 3. Retrieve default CUSTOMER role
-        var customerRole = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Code == Roles.Customer, cancellationToken);
-        if (customerRole == null)
+        // 3. Retrieve default USER role
+        var userRole = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Code == Roles.User, cancellationToken);
+        if (userRole == null)
         {
-            _logger.LogError("Critical configuration error: Role {RoleCustomer} not found in database.", Roles.Customer);
+            _logger.LogError("Critical configuration error: Role {RoleUser} not found in database.", Roles.User);
             return AuthResult<UserProfileDto>.Failure("Hệ thống chưa được thiết lập vai trò người dùng mặc định.", 500);
         }
 
-        // 4. Create new customer user entity
+        // 4. Create new user entity with USER role
         var newUser = new User
         {
             Username = normalizedUsername,
             Email = normalizedEmail,
-            RoleId = customerRole.Id,
+            RoleId = userRole.Id,
             FullName = request.FullName.Trim(),
             PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
             IsActive = true,
@@ -160,7 +160,7 @@ public class AuthService : IAuthService
             FullName = newUser.FullName,
             PhoneNumber = newUser.PhoneNumber,
             AvatarUrl = newUser.AvatarUrl,
-            Role = customerRole.Code,
+            Role = userRole.Code,
             IsEmailVerified = newUser.IsEmailVerified,
             ApprovalStatus = newUser.ApprovalStatus,
             CreatedAt = newUser.CreatedAt
@@ -271,11 +271,12 @@ public class AuthService : IAuthService
             user.IsEmailVerified = true;
             user.UpdatedAt = DateTime.UtcNow;
 
-            // CRITICAL: Only CUSTOMER accounts are automatically APPROVED upon email OTP verification.
-            // OPERATOR and ADMIN accounts must NOT be approved via VerifyEmail!
-            if (string.Equals(user.Role?.Code, Roles.Customer, StringComparison.OrdinalIgnoreCase))
+            // CRITICAL: Only USER accounts are automatically APPROVED upon email OTP verification.
+            // ADMIN, MANAGER, and STAFF accounts must NOT be approved via VerifyEmail!
+            if (string.Equals(user.Role?.Code, Roles.User, StringComparison.OrdinalIgnoreCase))
             {
                 user.ApprovalStatus = ApprovalStatuses.Approved;
+                user.ApprovedAt = DateTime.UtcNow;
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);

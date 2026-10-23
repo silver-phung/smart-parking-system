@@ -24,7 +24,7 @@
   - Phân cấp bãi xe: Bãi xe -> Tầng -> Vị trí đỗ ô tô (Smart Parking chỉ phục vụ ô tô tiêu chuẩn, không xe máy, không EV/trạm sạc, loại bỏ bảng `vehicle_types`).
   - Vòng đời phiên gửi xe từ Check-in, Điều phối, Đỗ xe, Thanh toán đến Check-out.
   - Sự tách biệt giữa thanh toán thành công và rời bãi (Grace Period).
-  - Phân quyền người dùng (Admin, Operator, Customer).
+  - Phân quyền người dùng (Admin, Manager, Staff, User).
   - Lưu vết kiểm toán các thao tác nhạy cảm (`audit_logs`).
 - **`PROPOSED` (Đề xuất giải pháp thiết kế từ Antigravity):**
   - Tách bảng `parking_dispatches` độc lập để quản lý trạng thái phân công, tuyệt đối không gộp chung cờ `is_reserved` vào bảng `parking_slots`.
@@ -68,7 +68,7 @@ Cần sự thống nhất giữa Phụng (Backend), Nam Anh (Payment) và Song (
 Cần xác nhận với **Đức (AI / Computer Vision)**:
 - Mô hình AI nhận diện biển số trả về thang điểm tin cậy (Confidence Score) như thế nào?
 - Ngưỡng tin cậy bao nhiêu (ví dụ: 0.80 hay 0.85) thì hệ thống được phép tự động mở barrier?
-- Khi biển số mờ hoặc đọc sai, giao diện của Song sẽ hiển thị ảnh snapshot để Operator sửa biển số thủ công như thế nào?
+- Khi biển số mờ hoặc đọc sai, giao diện của Song sẽ hiển thị ảnh snapshot để Nhân viên vận hành (Staff) sửa biển số thủ công như thế nào?
 
 ---
 

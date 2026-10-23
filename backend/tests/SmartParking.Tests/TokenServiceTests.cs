@@ -38,7 +38,7 @@ public class TokenServiceTests
         };
 
         // Act
-        var token = _tokenService.GenerateAccessToken(user, Roles.Customer);
+        var token = _tokenService.GenerateAccessToken(user, Roles.User);
 
         // Assert
         Assert.NotNull(token);
@@ -52,7 +52,7 @@ public class TokenServiceTests
         var roleClaim = jwt.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value;
 
         Assert.Equal("42", subClaim);
-        Assert.Equal(Roles.Customer, roleClaim);
+        Assert.Equal(Roles.User, roleClaim);
     }
 
     [Fact]

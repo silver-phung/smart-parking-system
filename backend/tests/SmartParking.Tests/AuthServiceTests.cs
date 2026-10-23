@@ -64,7 +64,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task RegisterAsync_WithValidData_CreatesCustomerAndSendsEmailOtp()
+    public async Task RegisterAsync_WithValidData_CreatesUserAndSendsEmailOtp()
     {
         // Arrange
         using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
@@ -72,8 +72,8 @@ public class AuthServiceTests
 
         var request = new RegisterRequestDto
         {
-            Username = "customer_one",
-            Email = "customer1@example.com",
+            Username = "user_one",
+            Email = "user1@example.com",
             Password = "Password123!",
             FullName = "Nguyễn Văn A",
             PhoneNumber = "0901234567",
@@ -86,14 +86,14 @@ public class AuthServiceTests
         // Assert
         Assert.True(result.Succeeded);
         Assert.NotNull(result.Data);
-        Assert.Equal("customer_one", result.Data.Username);
-        Assert.Equal(Roles.Customer, result.Data.Role);
+        Assert.Equal("user_one", result.Data.Username);
+        Assert.Equal(Roles.User, result.Data.Role);
         Assert.False(result.Data.IsEmailVerified);
         Assert.Equal(ApprovalStatuses.Pending, result.Data.ApprovalStatus);
 
         // Verify real email dispatch was called
         Assert.Single(_fakeEmail.SentEmails);
-        Assert.Equal("customer1@example.com", _fakeEmail.SentEmails[0].ToEmail);
+        Assert.Equal("user1@example.com", _fakeEmail.SentEmails[0].ToEmail);
         Assert.Equal(6, _fakeEmail.SentEmails[0].OtpCode.Length);
     }
 
@@ -156,7 +156,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task VerifyEmailAsync_WithValidOtp_ApprovesCustomerAccount()
+    public async Task VerifyEmailAsync_WithValidOtp_ApprovesUserAccount()
     {
         // Arrange
         using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
@@ -220,18 +220,18 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task VerifyEmailAsync_WhenUserIsOperator_DoesNotAutoApproveAccount()
+    public async Task VerifyEmailAsync_WhenUserIsStaff_DoesNotAutoApproveAccount()
     {
         // Arrange
         using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
-        var operatorRole = context.Roles.First(r => r.Code == Roles.Operator);
+        var staffRole = context.Roles.First(r => r.Code == Roles.Staff);
 
-        var operatorUser = new User
+        var staffUser = new User
         {
-            Username = "operator1",
-            Email = "operator1@example.com",
-            RoleId = operatorRole.Id,
-            Role = operatorRole,
+            Username = "staff1",
+            Email = "staff1@example.com",
+            RoleId = staffRole.Id,
+            Role = staffRole,
             FullName = "Nhân viên trực cổng",
             IsActive = true,
             IsEmailVerified = false,
@@ -239,15 +239,15 @@ public class AuthServiceTests
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
-        operatorUser.PasswordHash = _hasher.HashPassword(operatorUser, "OperatorPassword123!");
-        context.Users.Add(operatorUser);
+        staffUser.PasswordHash = _hasher.HashPassword(staffUser, "StaffPassword123!");
+        context.Users.Add(staffUser);
         await context.SaveChangesAsync();
 
         var otp = _otpService.GenerateOtpCode();
-        var otpHash = _otpService.ComputeOtpHash(operatorUser.Id, TokenTypes.EmailVerification, otp);
+        var otpHash = _otpService.ComputeOtpHash(staffUser.Id, TokenTypes.EmailVerification, otp);
         var token = new UserToken
         {
-            UserId = operatorUser.Id,
+            UserId = staffUser.Id,
             TokenType = TokenTypes.EmailVerification,
             TokenHash = otpHash,
             AttemptsCount = 0,
@@ -263,15 +263,72 @@ public class AuthServiceTests
         // Act
         var result = await authService.VerifyEmailAsync(new VerifyEmailRequestDto
         {
-            Email = "operator1@example.com",
+            Email = "staff1@example.com",
             Code = otp
         });
 
         // Assert
         Assert.True(result.Succeeded);
-        var updatedUser = context.Users.First(u => u.Email == "operator1@example.com");
+        var updatedUser = context.Users.First(u => u.Email == "staff1@example.com");
         Assert.True(updatedUser.IsEmailVerified);
-        // CRITICAL: Operator must remain PENDING approval
+        // CRITICAL: Staff must remain PENDING approval
+        Assert.Equal(ApprovalStatuses.Pending, updatedUser.ApprovalStatus);
+        Assert.NotEqual(ApprovalStatuses.Approved, updatedUser.ApprovalStatus);
+    }
+
+    [Fact]
+    public async Task VerifyEmailAsync_WhenUserIsManager_DoesNotAutoApproveAccount()
+    {
+        // Arrange
+        using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
+        var managerRole = context.Roles.First(r => r.Code == Roles.Manager);
+
+        var managerUser = new User
+        {
+            Username = "manager1",
+            Email = "manager1@example.com",
+            RoleId = managerRole.Id,
+            Role = managerRole,
+            FullName = "Quản lý bãi đỗ",
+            IsActive = true,
+            IsEmailVerified = false,
+            ApprovalStatus = ApprovalStatuses.Pending,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        managerUser.PasswordHash = _hasher.HashPassword(managerUser, "ManagerPassword123!");
+        context.Users.Add(managerUser);
+        await context.SaveChangesAsync();
+
+        var otp = _otpService.GenerateOtpCode();
+        var otpHash = _otpService.ComputeOtpHash(managerUser.Id, TokenTypes.EmailVerification, otp);
+        var token = new UserToken
+        {
+            UserId = managerUser.Id,
+            TokenType = TokenTypes.EmailVerification,
+            TokenHash = otpHash,
+            AttemptsCount = 0,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        context.UserTokens.Add(token);
+        await context.SaveChangesAsync();
+
+        var authService = CreateAuthService(context);
+
+        // Act
+        var result = await authService.VerifyEmailAsync(new VerifyEmailRequestDto
+        {
+            Email = "manager1@example.com",
+            Code = otp
+        });
+
+        // Assert
+        Assert.True(result.Succeeded);
+        var updatedUser = context.Users.First(u => u.Email == "manager1@example.com");
+        Assert.True(updatedUser.IsEmailVerified);
+        // CRITICAL: Manager must remain PENDING approval
         Assert.Equal(ApprovalStatuses.Pending, updatedUser.ApprovalStatus);
         Assert.NotEqual(ApprovalStatuses.Approved, updatedUser.ApprovalStatus);
     }
@@ -332,7 +389,7 @@ public class AuthServiceTests
         Assert.NotNull(loginResult.Data);
         Assert.NotEmpty(loginResult.Data.AccessToken);
         Assert.NotEmpty(loginResult.Data.RefreshToken);
-        Assert.Equal(Roles.Customer, loginResult.Data.UserProfile.Role);
+        Assert.Equal(Roles.User, loginResult.Data.UserProfile.Role);
     }
 
     [Fact]

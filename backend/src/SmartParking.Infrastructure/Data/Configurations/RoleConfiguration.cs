@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
 
 namespace SmartParking.Infrastructure.Data.Configurations;
@@ -41,11 +42,12 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
             .HasDefaultValueSql("now()")
             .IsRequired();
 
-        // Seed core roles
+        // Seed core roles: ADMIN, MANAGER, STAFF, USER
         builder.HasData(
-            new Role { Id = 1, Code = "ADMIN", Name = "Quản trị viên", Description = "Toàn quyền quản trị hệ thống Smart Parking", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-            new Role { Id = 2, Code = "OPERATOR", Name = "Nhân viên điều hành", Description = "Nhân viên vận hành bãi xe, trực cổng, xử lý điều phối", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-            new Role { Id = 3, Code = "CUSTOMER", Name = "Khách hàng", Description = "Khách hàng gửi xe cá nhân", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
+            new Role { Id = 1, Code = Roles.Admin, Name = "Quản trị viên", Description = "Toàn quyền quản trị hệ thống Smart Parking", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Role { Id = 2, Code = Roles.Manager, Name = "Quản lý bãi đỗ", Description = "Quản lý vận hành bãi xe, cấu hình giá, nhân sự và báo cáo doanh thu", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Role { Id = 3, Code = Roles.Staff, Name = "Nhân viên vận hành", Description = "Nhân viên trực cổng, kiểm soát vào ra và hỗ trợ xử lý sự cố", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Role { Id = 4, Code = Roles.User, Name = "Người dùng", Description = "Người dùng tự đăng ký tài khoản, gửi xe và thanh toán cá nhân", CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
         );
     }
 }

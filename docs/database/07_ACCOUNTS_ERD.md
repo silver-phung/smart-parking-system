@@ -18,8 +18,8 @@
 5. **Điều kiện tiên quyết đăng nhập:** Tài khoản chưa hoàn tất xác minh email (`is_email_verified = FALSE`) **tuyệt đối không được phép đăng nhập**.
 6. **Mô hình Phân quyền:** Sử dụng **mô hình một user một vai trò (1-N)** qua cột `users.role_id` tham chiếu `roles.id`. **Loại bỏ hoàn toàn bảng `user_roles` khỏi thiết kế chính thức.**
 7. **Quy trình Phê duyệt Tài khoản (Account Approval):**
-   - Tài khoản vai trò `CUSTOMER` được **tự động chuyển `approval_status = 'APPROVED'` ngay sau khi xác minh email thành công**.
-   - Tài khoản `OPERATOR` và `ADMIN` được cấp quyền qua quy trình quản trị an toàn do Quản trị viên chỉ định; không cho phép đăng ký công khai yêu cầu vai trò `ADMIN` hoặc `OPERATOR`.
+   - Tài khoản vai trò `USER` được **tự động chuyển `approval_status = 'APPROVED'` ngay sau khi xác minh email thành công**.
+   - Tài khoản `STAFF`, `MANAGER` và `ADMIN` được cấp quyền qua quy trình quản trị an toàn do Quản trị viên chỉ định; không cho phép đăng ký công khai yêu cầu vai trò `ADMIN`, `MANAGER` hoặc `STAFF`.
 8. **Google Login:** Xếp loại **OPTIONAL / FUTURE** (chưa triển khai trong Sprint 3, không thêm cột/bảng OAuth).
 
 ---
@@ -55,7 +55,7 @@ erDiagram
 
     roles {
         INT id PK "Khóa chính vai trò (IDENTITY)"
-        VARCHAR(50) code UK "Mã chuẩn hóa: ADMIN, OPERATOR, CUSTOMER"
+        VARCHAR(50) code UK "Mã chuẩn hóa: ADMIN, MANAGER, STAFF, USER"
         VARCHAR(100) name "Tên hiển thị tiếng Việt của vai trò"
         VARCHAR(255) description "Mô tả chi tiết quyền hạn của vai trò"
         TIMESTAMPTZ created_at "Thời điểm tạo vai trò"

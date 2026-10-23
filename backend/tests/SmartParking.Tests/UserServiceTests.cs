@@ -14,7 +14,7 @@ public class UserServiceTests
     {
         // Arrange
         using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
-        var customerRole = context.Roles.First(r => r.Code == Roles.Customer);
+        var userRole = context.Roles.First(r => r.Code == Roles.User);
 
         var user = new User
         {
@@ -24,8 +24,8 @@ public class UserServiceTests
             PasswordHash = "hashed_secret_password",
             FullName = "Profile User",
             PhoneNumber = "0912345678",
-            RoleId = customerRole.Id,
-            Role = customerRole,
+            RoleId = userRole.Id,
+            Role = userRole,
             IsEmailVerified = true,
             ApprovalStatus = ApprovalStatuses.Approved,
             CreatedAt = DateTime.UtcNow,
@@ -45,7 +45,7 @@ public class UserServiceTests
         Assert.Equal("profile@example.com", profile.Email);
         Assert.Equal("Profile User", profile.FullName);
         Assert.Equal("0912345678", profile.PhoneNumber);
-        Assert.Equal(Roles.Customer, profile.Role);
+        Assert.Equal(Roles.User, profile.Role);
         Assert.True(profile.IsEmailVerified);
         Assert.Equal(ApprovalStatuses.Approved, profile.ApprovalStatus);
     }
@@ -55,7 +55,7 @@ public class UserServiceTests
     {
         // Arrange
         using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
-        var customerRole = context.Roles.First(r => r.Code == Roles.Customer);
+        var userRole = context.Roles.First(r => r.Code == Roles.User);
 
         var user = new User
         {
@@ -65,8 +65,8 @@ public class UserServiceTests
             PasswordHash = "original_hash",
             FullName = "Original Name",
             PhoneNumber = "0900000000",
-            RoleId = customerRole.Id,
-            Role = customerRole,
+            RoleId = userRole.Id,
+            Role = userRole,
             IsEmailVerified = true,
             ApprovalStatus = ApprovalStatuses.Approved
         };
@@ -93,7 +93,7 @@ public class UserServiceTests
         Assert.Equal("original_username", dbUser.Username);
         Assert.Equal("original@example.com", dbUser.Email);
         Assert.Equal("original_hash", dbUser.PasswordHash);
-        Assert.Equal(customerRole.Id, dbUser.RoleId);
+        Assert.Equal(userRole.Id, dbUser.RoleId);
         Assert.Equal(ApprovalStatuses.Approved, dbUser.ApprovalStatus);
     }
 }

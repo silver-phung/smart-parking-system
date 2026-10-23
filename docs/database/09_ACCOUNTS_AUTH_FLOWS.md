@@ -28,7 +28,7 @@
 - Người dùng đăng ký bằng **Username + Email + Password** (kèm `fullName`, `phoneNumber`, `recaptchaToken`).
 - **reCAPTCHA Server-Side Verification:** Token `recaptchaToken` được Backend xác minh trực tiếp với Google; **không lưu token reCAPTCHA vào cơ sở dữ liệu**.
 - `username` là tên đăng nhập độc lập duy nhất; `email` là email thật nhận mã xác minh OTP 6 chữ số.
-- Không nhận trường role từ client; hệ thống tự động gán khóa ngoại `users.role_id` trỏ đến vai trò `CUSTOMER`.
+- Không nhận trường role từ client; hệ thống tự động gán khóa ngoại `users.role_id` trỏ đến vai trò `USER`.
 
 ### 2.2. Sơ đồ tuần tự (Sequence Diagram)
 
@@ -55,7 +55,7 @@ sequenceDiagram
         API->>API: Tính HMAC-SHA256: tokenHash = HMAC_SHA256(secretKey, $"{userId}:EMAIL_VERIFICATION:{otpCode}")
         
         API->>DB: BEGIN TRANSACTION
-        API->>DB: INSERT INTO users (username, email, password_hash, role_id, full_name, phone_number, is_active, is_email_verified, approval_status)<br/>VALUES (:username, :email, :passwordHash, (SELECT id FROM roles WHERE code = 'CUSTOMER'), :fullName, :phoneNumber, TRUE, FALSE, 'PENDING')<br/>RETURNING id;
+        API->>DB: INSERT INTO users (username, email, password_hash, role_id, full_name, phone_number, is_active, is_email_verified, approval_status)<br/>VALUES (:username, :email, :passwordHash, (SELECT id FROM roles WHERE code = 'USER'), :fullName, :phoneNumber, TRUE, FALSE, 'PENDING')<br/>RETURNING id;
         alt Trùng username hoặc email (PostgreSQL Unique Violation 23505)
             DB-->>API: Ném ngoại lệ Unique Violation 23505
             API->>DB: ROLLBACK
@@ -77,12 +77,12 @@ sequenceDiagram
 
 ---
 
-## 3. LUỒNG 2: XÁC MINH EMAIL BẰNG MÃ OTP (CUSTOMER AUTO-APPROVED)
+## 3. LUỒNG 2: XÁC MINH EMAIL BẰNG MÃ OTP (USER AUTO-APPROVED)
 
 ### 3.1. Mục tiêu & Nguyên tắc nghiệp vụ
 - Người dùng gửi `email` và `code` (6 chữ số).
 - **Atomic OTP Consume:** Kiểm tra điều kiện và consume mã trong cùng transaction. Kiểm tra affected rows: nếu bằng 0 (hết hạn, mã sai quá 5 lần, hoặc đã bị consume) thì Rollback.
-- **CUSTOMER Auto-Approve:** Khi mã OTP hợp lệ, tài khoản khách hàng tự động được cập nhật `is_email_verified = TRUE` và `approval_status = 'APPROVED'`.
+- **USER Auto-Approve:** Khi mã OTP hợp lệ, tài khoản người dùng tự động được cập nhật `is_email_verified = TRUE` và `approval_status = 'APPROVED'`.
 
 ### 3.2. Sơ đồ xử lý chi tiết
 
@@ -117,7 +117,7 @@ sequenceDiagram
                     API->>DB: ROLLBACK
                     API-->>Client: 400 Bad Request ("Mã xác minh không hợp lệ hoặc đã được sử dụng.")
                 else affected rows == 1 (Thành công tuyệt đối)
-                    Note over DB: [Approved by Owner] Tự động kích hoạt & duyệt CUSTOMER:
+                    Note over DB: [Approved by Owner] Tự động kích hoạt & duyệt USER:
                     API->>DB: UPDATE users SET is_email_verified = TRUE, approval_status = 'APPROVED', updated_at = NOW() WHERE id = :userId;
                     API->>DB: COMMIT TRANSACTION
                     API-->>Client: 200 OK ("Xác minh email thành công. Tài khoản của bạn đã được kích hoạt và có thể đăng nhập ngay.")

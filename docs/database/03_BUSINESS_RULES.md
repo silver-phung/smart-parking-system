@@ -59,7 +59,7 @@
   3. *Ngưỡng tin cậy OCR (OCR Confidence Verification):*
      - Điểm tin cậy của OCR được so sánh với ngưỡng quy định của hệ thống:
        - *Đạt ngưỡng tin cậy:* Hệ thống tự động tạo phiên và phát tín hiệu mở barrier.
-       - *Dưới ngưỡng tin cậy:* Giao diện trực cổng hiển thị hình ảnh chụp snapshot phóng to để Nhân viên điều hành (Operator) xác nhận biển số bằng mắt hoặc sửa biển số trước khi bấm mở cổng thủ công (hành động này tự động ghi vết vào `audit_logs`).
+       - *Dưới ngưỡng tin cậy:* Giao diện trực cổng hiển thị hình ảnh chụp snapshot phóng to để Nhân viên vận hành (Staff) xác nhận biển số bằng mắt hoặc sửa biển số trước khi bấm mở cổng thủ công (hành động này tự động ghi vết vào `audit_logs`).
 
 ---
 
@@ -170,7 +170,7 @@
 ### 4.1. Ràng buộc duy nhất (Unique Constraints)
 - `users(username)`: Mỗi tài khoản có 1 tên đăng nhập `username` duy nhất (chuẩn hóa lowercase).
 - `users(email)`: Mỗi tài khoản chỉ có 1 địa chỉ email thật duy nhất (chuẩn hóa lowercase).
-- `roles(code)`: Mã vai trò là duy nhất (`ADMIN`, `OPERATOR`, `CUSTOMER`).
+- `roles(code)`: Mã vai trò là duy nhất (`ADMIN`, `MANAGER`, `STAFF`, `USER`).
 - `parking_lots(name)`: Tên bãi đỗ không trùng lặp.
 - `parking_slots(floor_id, slot_code)`: Trong cùng một tầng, mã ô đỗ không được phép trùng nhau.
 - `payments(transaction_code)`: Mỗi giao dịch thanh toán có một mã duy nhất.

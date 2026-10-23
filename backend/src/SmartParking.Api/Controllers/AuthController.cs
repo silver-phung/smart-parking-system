@@ -20,7 +20,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Đăng ký tài khoản người dùng mới (vai trò mặc định: CUSTOMER).
+    /// Đăng ký tài khoản người dùng mới (vai trò mặc định: USER).
     /// </summary>
     [HttpPost("register")]
     [EnableRateLimiting("register-rate-limit")]

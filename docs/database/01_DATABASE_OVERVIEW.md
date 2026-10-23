@@ -77,7 +77,7 @@ Toàn bộ nghiệp vụ Smart Parking được phân thành 7 nhóm độc lậ
 +-----------------------------------------------------------------------------------+
 ```
 
-- **Nhóm A: Accounts, Identity & Authorization:** Quản lý tài khoản, xác thực, phân quyền vai trò (Admin, Operator, Customer).
+- **Nhóm A: Accounts, Identity & Authorization:** Quản lý tài khoản, xác thực, phân quyền 4 vai trò (Admin, Manager, Staff, User).
 - **Nhóm B: Parking Structure & Space Representation:** Mô hình hóa địa điểm bãi xe, các tầng/khu vực và các ô đỗ ô tô cụ thể (không giả định kích thước toàn bộ slot đồng nhất).
 - **Nhóm C: Vehicles & Parking Sessions:** Thông tin xe ô tô và quản lý vòng đời phiên gửi xe từ vào đến ra (hệ thống chuyên biệt cho ô tô tiêu chuẩn, không phân loại xe máy/xe điện/nhiên liệu).
 - **Nhóm D: Parking Dispatch & Allocation:** Hàng đợi điều phối, gán vị trí đỗ, xác nhận đỗ thực tế và xử lý xe đỗ sai vị trí.

@@ -64,8 +64,9 @@ public static class TestDbHelper
         // Seed Roles
         context.Roles.AddRange(
             new Role { Id = 1, Code = Roles.Admin, Name = "Quản trị viên" },
-            new Role { Id = 2, Code = Roles.Operator, Name = "Nhân viên vận hành" },
-            new Role { Id = 3, Code = Roles.Customer, Name = "Khách hàng" }
+            new Role { Id = 2, Code = Roles.Manager, Name = "Quản lý bãi đỗ" },
+            new Role { Id = 3, Code = Roles.Staff, Name = "Nhân viên vận hành" },
+            new Role { Id = 4, Code = Roles.User, Name = "Người dùng" }
         );
 
         await context.SaveChangesAsync();
