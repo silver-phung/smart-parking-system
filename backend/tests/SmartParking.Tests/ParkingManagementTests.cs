@@ -421,6 +421,16 @@ public class ParkingManagementTests
         Assert.NotNull(createAuth);
         Assert.Equal(Roles.Admin, createAuth.Roles);
 
+        var updateMethod = typeof(ParkingLotsController).GetMethod(nameof(ParkingLotsController.UpdateLot));
+        var updateAuth = updateMethod?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(updateAuth);
+        Assert.Equal(Roles.Admin, updateAuth.Roles);
+
+        var patchStatusMethod = typeof(ParkingLotsController).GetMethod(nameof(ParkingLotsController.UpdateLotStatus));
+        var patchStatusAuth = patchStatusMethod?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(patchStatusAuth);
+        Assert.Equal(Roles.Admin, patchStatusAuth.Roles);
+
         var deleteMethod = typeof(ParkingLotsController).GetMethod(nameof(ParkingLotsController.DeleteLot));
         var deleteAuth = deleteMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(deleteAuth);
@@ -429,26 +439,70 @@ public class ParkingManagementTests
         var getMethod = typeof(ParkingLotsController).GetMethod(nameof(ParkingLotsController.GetLots));
         var getAllowAnon = getMethod?.GetCustomAttribute<AllowAnonymousAttribute>();
         Assert.NotNull(getAllowAnon);
+
+        var getByIdMethod = typeof(ParkingLotsController).GetMethod(nameof(ParkingLotsController.GetLotById));
+        var getByIdAllowAnon = getByIdMethod?.GetCustomAttribute<AllowAnonymousAttribute>();
+        Assert.NotNull(getByIdAllowAnon);
+    }
+
+    [Fact]
+    public void ParkingFloorsController_HasCorrectRoleRestrictions()
+    {
+        var createMethod = typeof(ParkingFloorsController).GetMethod(nameof(ParkingFloorsController.CreateFloor));
+        var createAuth = createMethod?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(createAuth);
+        Assert.Equal(Roles.Admin, createAuth.Roles);
+
+        var updateMethod = typeof(ParkingFloorsController).GetMethod(nameof(ParkingFloorsController.UpdateFloor));
+        var updateAuth = updateMethod?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(updateAuth);
+        Assert.Equal(Roles.Admin, updateAuth.Roles);
+
+        var deleteMethod = typeof(ParkingFloorsController).GetMethod(nameof(ParkingFloorsController.DeleteFloor));
+        var deleteAuth = deleteMethod?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(deleteAuth);
+        Assert.Equal(Roles.Admin, deleteAuth.Roles);
+
+        var getByLotMethod = typeof(ParkingFloorsController).GetMethod(nameof(ParkingFloorsController.GetFloorsByLotId));
+        var getByLotAllowAnon = getByLotMethod?.GetCustomAttribute<AllowAnonymousAttribute>();
+        Assert.NotNull(getByLotAllowAnon);
+
+        var getByIdMethod = typeof(ParkingFloorsController).GetMethod(nameof(ParkingFloorsController.GetFloorById));
+        var getByIdAllowAnon = getByIdMethod?.GetCustomAttribute<AllowAnonymousAttribute>();
+        Assert.NotNull(getByIdAllowAnon);
     }
 
     [Fact]
     public void ParkingSlotsController_HasCorrectRoleRestrictions()
     {
+        var createMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.CreateSlot));
+        var createAuth = createMethod?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(createAuth);
+        Assert.Equal(Roles.Admin, createAuth.Roles);
+
+        var updateMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.UpdateSlot));
+        var updateAuth = updateMethod?.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(updateAuth);
+        Assert.Equal(Roles.Admin, updateAuth.Roles);
+
         var patchStatusMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.UpdateSlotPhysicalStatus));
         var patchAuth = patchStatusMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(patchAuth);
         // Under Phase 1B security fix: strictly Roles.Admin only until staff_lot_assignments is implemented
         Assert.Equal(Roles.Admin, patchAuth.Roles);
 
-        var createMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.CreateSlot));
-        var createAuth = createMethod?.GetCustomAttribute<AuthorizeAttribute>();
-        Assert.NotNull(createAuth);
-        Assert.Equal(Roles.Admin, createAuth.Roles);
-
         var deleteMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.DeleteSlot));
         var deleteAuth = deleteMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(deleteAuth);
         Assert.Equal(Roles.Admin, deleteAuth.Roles);
+
+        var getByFloorMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.GetSlotsByFloorId));
+        var getByFloorAllowAnon = getByFloorMethod?.GetCustomAttribute<AllowAnonymousAttribute>();
+        Assert.NotNull(getByFloorAllowAnon);
+
+        var getByIdMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.GetSlotById));
+        var getByIdAllowAnon = getByIdMethod?.GetCustomAttribute<AllowAnonymousAttribute>();
+        Assert.NotNull(getByIdAllowAnon);
     }
 
     #endregion

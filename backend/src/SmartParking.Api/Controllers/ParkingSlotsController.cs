@@ -162,7 +162,7 @@ public class ParkingSlotsController : ControllerBase
         }
 
         var actorId = GetCurrentUserId();
-        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Staff;
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         var (success, message, slot) = await _parkingService.UpdateSlotPhysicalStatusAsync(id, request, actorId, actorRole, clientIp, ct);

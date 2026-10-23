@@ -1,16 +1,42 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using SmartParking.Application.Common.Interfaces;
+using SmartParking.Domain.Constants;
+using SmartParking.Domain.Entities;
 using Xunit;
 
 namespace SmartParking.Tests;
 
 public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
 
     public ApiIntegrationTests(WebApplicationFactory<Program> factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
+    }
+
+    private HttpClient CreateClientForRole(string role)
+    {
+        var client = _factory.CreateClient();
+        using var scope = _factory.Services.CreateScope();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+        var user = new User
+        {
+            Id = 9999,
+            Username = $"test_{role.ToLower()}",
+            Email = $"{role.ToLower()}@smartparking.test",
+            FullName = $"Test {role}",
+            PasswordHash = "dummy_hash"
+        };
+        var token = tokenService.GenerateAccessToken(user, role);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
     }
 
     [Fact]
@@ -170,4 +196,159 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+
+    #region Role-Based Access Control (RBAC) 403 Forbidden Verifications
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PatchParkingLotStatus_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"isOpenForAdmission\":false}", Encoding.UTF8, "application/json");
+
+        var response = await client.PatchAsync("/api/v1/parking-lots/1/status", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingFloor_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"floorNumber\":1,\"name\":\"Tầng 1\"}", Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/api/v1/parking-floors/lot/1", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PutParkingFloor_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"floorNumber\":1,\"name\":\"Tầng 1 mới\"}", Encoding.UTF8, "application/json");
+
+        var response = await client.PutAsync("/api/v1/parking-floors/1", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingSlot_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"slotCode\":\"A-01\",\"slotType\":\"CAR_4_SEATS\"}", Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/api/v1/parking-slots/floor/1", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PutParkingSlot_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"slotCode\":\"A-01-RENAMED\",\"slotType\":\"CAR_4_SEATS\"}", Encoding.UTF8, "application/json");
+
+        var response = await client.PutAsync("/api/v1/parking-slots/1", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PatchParkingSlotStatus_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"physicalStatus\":\"MAINTENANCE\"}", Encoding.UTF8, "application/json");
+
+        var response = await client.PatchAsync("/api/v1/parking-slots/1/status", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PostParkingLot_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"code\":\"LOT-TEST\",\"name\":\"Bãi Test\",\"totalCapacity\":100}", Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/api/v1/parking-lots", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task PutParkingLot_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+        var body = new StringContent("{\"name\":\"Bãi Test Sửa\",\"totalCapacity\":150}", Encoding.UTF8, "application/json");
+
+        var response = await client.PutAsync("/api/v1/parking-lots/1", body);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task DeleteParkingLot_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+
+        var response = await client.DeleteAsync("/api/v1/parking-lots/1");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task DeleteParkingFloor_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+
+        var response = await client.DeleteAsync("/api/v1/parking-floors/1");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task DeleteParkingSlot_NonAdmin_Returns403Forbidden(string role)
+    {
+        var client = CreateClientForRole(role);
+
+        var response = await client.DeleteAsync("/api/v1/parking-slots/1");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    #endregion
 }
