@@ -16,3 +16,7 @@ Dự án Hệ thống Quản lý Bãi đỗ xe thông minh (Smart Parking System
 ## 3. Bảo mật (Security)
 - Tuyệt đối không commit file `.env`, connection strings có chứa password hoặc credentials của Neon Cloud vào repository.
 - Sử dụng file cấu hình mẫu `.env.example` hoặc user secrets khi phát triển cục bộ.
+
+## 4. Kết nối Neon dùng chung
+
+Xem [hướng dẫn Windows/macOS](docs/database/KET-NOI-DB-CHUNG.md). Chạy script một lần để nhập thông tin DB, kiểm tra query thực tế và lưu cấu hình trên máy; mật khẩu không nằm trong repo. Bộ script chuẩn bị `ConnectionStrings:DefaultConnection`; việc đăng ký DbContext/repository PostgreSQL trong backend là phần triển khai riêng.
