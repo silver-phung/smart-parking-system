@@ -87,7 +87,27 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// 3. Configure Role-based Authorization
+// 3. Configure Explicit Origin CORS Policy for Frontend (Song)
+const string FrontendCorsPolicy = "FrontendCorsPolicy";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? builder.Configuration["Cors:AllowedOrigins"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? [];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(FrontendCorsPolicy, policy =>
+    {
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins)
+                  .WithMethods("GET", "POST", "PUT", "OPTIONS")
+                  .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With")
+                  .DisallowCredentials();
+        }
+    });
+});
+
+// 4. Configure Role-based Authorization
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(Roles.Admin, policy => policy.RequireRole(Roles.Admin));
@@ -210,6 +230,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors(FrontendCorsPolicy);
 
 app.UseRateLimiter();
 
