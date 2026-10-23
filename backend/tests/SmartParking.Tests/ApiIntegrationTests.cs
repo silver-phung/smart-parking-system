@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
+using SmartParking.Infrastructure.Data;
 using Xunit;
 
 namespace SmartParking.Tests;
@@ -531,6 +532,148 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var client = CreateClientForRole(role);
         var response = await client.GetAsync("/api/v1/staff-assignments");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    #endregion
+
+    #region Stale JWT Token Dynamic Revocation Integration Tests
+
+    [Fact]
+    public async Task AdminApi_StaleToken_DemotedToUserInDatabase_Returns403Forbidden()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+
+        var user = new User
+        {
+            Id = 8001,
+            Username = "demoted_admin_test",
+            Email = "demoted_admin@test.com",
+            FullName = "Demoted Admin",
+            PasswordHash = "dummy",
+            RoleId = 1, // Admin initially
+            IsActive = true,
+            ApprovalStatus = "APPROVED"
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var token = tokenService.GenerateAccessToken(user, Roles.Admin);
+
+        // Admin is demoted to USER in database
+        user.RoleId = 4;
+        await db.SaveChangesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/api/v1/staff-assignments");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminApi_StaleToken_DisabledInDatabase_Returns401Unauthorized()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+
+        var user = new User
+        {
+            Id = 8002,
+            Username = "disabled_admin_test",
+            Email = "disabled_admin@test.com",
+            FullName = "Disabled Admin",
+            PasswordHash = "dummy",
+            RoleId = 1, // Admin
+            IsActive = true,
+            ApprovalStatus = "APPROVED"
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var token = tokenService.GenerateAccessToken(user, Roles.Admin);
+
+        // User is disabled in database
+        user.IsActive = false;
+        await db.SaveChangesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/api/v1/staff-assignments");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task VehiclesApi_StaleToken_DisabledUserInDatabase_Returns401Unauthorized()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+
+        var user = new User
+        {
+            Id = 8003,
+            Username = "disabled_user_test",
+            Email = "disabled_user@test.com",
+            FullName = "Disabled User",
+            PasswordHash = "dummy",
+            RoleId = 4, // User
+            IsActive = true,
+            ApprovalStatus = "APPROVED"
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var token = tokenService.GenerateAccessToken(user, Roles.User);
+
+        // User is disabled in database
+        user.IsActive = false;
+        await db.SaveChangesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/api/v1/vehicles");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ParkingManagementApi_StaleToken_DemotedAdminToUser_Returns403Forbidden()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+
+        var user = new User
+        {
+            Id = 8004,
+            Username = "demoted_admin_pm_test",
+            Email = "demoted_pm@test.com",
+            FullName = "Demoted PM Admin",
+            PasswordHash = "dummy",
+            RoleId = 1,
+            IsActive = true,
+            ApprovalStatus = "APPROVED"
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var token = tokenService.GenerateAccessToken(user, Roles.Admin);
+
+        // Demote in DB
+        user.RoleId = 4;
+        await db.SaveChangesAsync();
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var body = new StringContent("{\"name\":\"Test Lot\",\"address\":\"123\",\"totalCapacity\":100}", Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/v1/parking-lots", body);
+
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 

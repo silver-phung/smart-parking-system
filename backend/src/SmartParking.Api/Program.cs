@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SmartParking.Application;
@@ -84,6 +85,43 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero,
         RoleClaimType = ClaimTypes.Role,
         NameClaimType = ClaimTypes.Name
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var db = context.HttpContext.RequestServices.GetRequiredService<IApplicationDbContext>();
+            var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? context.Principal?.FindFirst("sub")?.Value;
+
+            if (long.TryParse(userIdClaim, out var userId))
+            {
+                var user = await db.Users
+                    .AsNoTracking()
+                    .Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.Id == userId, context.HttpContext.RequestAborted);
+
+                if (user != null)
+                {
+                    if (!user.IsActive)
+                    {
+                        context.Fail("Tài khoản người dùng đã bị vô hiệu hóa.");
+                        return;
+                    }
+
+                    if (user.Role != null && context.Principal?.Identity is ClaimsIdentity identity)
+                    {
+                        var roleClaims = identity.FindAll(ClaimTypes.Role).ToList();
+                        foreach (var rc in roleClaims)
+                        {
+                            identity.RemoveClaim(rc);
+                        }
+                        identity.AddClaim(new Claim(ClaimTypes.Role, user.Role.Code));
+                    }
+                }
+            }
+        }
     };
 });
 
