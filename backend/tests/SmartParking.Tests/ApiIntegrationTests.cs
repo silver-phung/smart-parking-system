@@ -57,6 +57,9 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
         Assert.Contains("Smart Parking API", content);
+        Assert.Contains("/api/v1/parking-lots", content);
+        Assert.Contains("/api/v1/parking-floors", content);
+        Assert.Contains("/api/v1/parking-slots", content);
     }
 
     [Theory]
@@ -128,5 +131,43 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+    }
+
+    [Fact]
+    public async Task GetParkingLots_Anonymous_Returns200Ok()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/v1/parking-lots");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Lấy danh sách bãi đỗ xe thành công", content);
+    }
+
+    [Fact]
+    public async Task PostParkingLot_WithoutAuth_Returns401Unauthorized()
+    {
+        // Arrange
+        var body = new StringContent("{\"name\":\"Test Lot\"}", System.Text.Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await _client.PostAsync("/api/v1/parking-lots", body);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchParkingSlotStatus_WithoutAuth_Returns401Unauthorized()
+    {
+        // Arrange
+        var body = new StringContent("{\"physicalStatus\":\"MAINTENANCE\"}", System.Text.Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await _client.PatchAsync("/api/v1/parking-slots/1/status", body);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }

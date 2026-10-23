@@ -100,7 +100,7 @@ builder.Services.AddCors(options =>
         if (allowedOrigins.Length > 0)
         {
             policy.WithOrigins(allowedOrigins)
-                  .WithMethods("GET", "POST", "PUT", "OPTIONS")
+                  .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                   .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With")
                   .DisallowCredentials();
         }
