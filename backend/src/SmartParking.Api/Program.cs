@@ -29,6 +29,9 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -47,6 +50,8 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 
 app.MapControllers();
+app.MapGet("/", () => Results.Redirect("/app/"));
+app.MapFallbackToFile("/app/{*path:nonfile}", "app/index.html");
 
 app.Run();
 
