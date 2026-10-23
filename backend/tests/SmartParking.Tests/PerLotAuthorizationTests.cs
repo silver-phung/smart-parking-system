@@ -347,5 +347,41 @@ public class PerLotAuthorizationTests
         Assert.Contains("không thuộc bãi đỗ xe", msgDisp);
     }
 
+    [Fact]
+    public async Task StaleJwtRole_DemotedInDatabase_AccessDenied()
+    {
+        var (auth, _, _, context, _, staff1, _, _, _, lot1, _, _, _, _) = await SetupPerLotEnvironmentAsync();
+
+        // Ban đầu Staff 1 có quyền tại Lot 1
+        Assert.True(await auth.HasLotAccessAsync(staff1.Id, Roles.Staff, lot1.Id));
+
+        // Admin giáng cấp Staff 1 thành USER trong database
+        var dbUser = await context.Users.FindAsync(staff1.Id);
+        dbUser!.RoleId = 4; // USER role
+        await context.SaveChangesAsync();
+
+        // Request tiếp theo gửi JWT claim cũ (Roles.Staff) -> Phải bị từ chối vì database role là USER
+        var hasAccess = await auth.HasLotAccessAsync(staff1.Id, Roles.Staff, lot1.Id);
+        Assert.False(hasAccess);
+
+        var canOperate = await auth.CanOperateSessionOrDispatchAsync(staff1.Id, Roles.Staff, lot1.Id);
+        Assert.False(canOperate);
+    }
+
+    [Fact]
+    public async Task StaleJwtRole_DisabledAccountInDatabase_AccessDenied()
+    {
+        var (auth, _, _, context, _, staff1, _, _, _, lot1, _, _, _, _) = await SetupPerLotEnvironmentAsync();
+
+        // Vô hiệu hóa tài khoản Staff 1 trong database
+        var dbUser = await context.Users.FindAsync(staff1.Id);
+        dbUser!.IsActive = false;
+        await context.SaveChangesAsync();
+
+        // Request gửi JWT claim còn hạn (Roles.Staff) -> Phải bị từ chối vì tài khoản đã bị khóa trong database
+        var hasAccess = await auth.HasLotAccessAsync(staff1.Id, Roles.Staff, lot1.Id);
+        Assert.False(hasAccess);
+    }
+
     #endregion
 }

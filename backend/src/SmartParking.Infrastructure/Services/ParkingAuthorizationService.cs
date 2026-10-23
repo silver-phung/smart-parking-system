@@ -13,14 +13,40 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         _context = context;
     }
 
+    private async Task<string?> ResolveEffectiveRoleAsync(long userId, string claimRole, CancellationToken ct)
+    {
+        var user = await _context.Users
+            .AsNoTracking()
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+
+        if (user != null)
+        {
+            if (!user.IsActive)
+            {
+                return null;
+            }
+
+            return user.Role?.Code ?? claimRole;
+        }
+
+        return claimRole;
+    }
+
     public async Task<bool> HasLotAccessAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        if (userRole == Roles.Admin)
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        if (effectiveRole == null)
+        {
+            return false;
+        }
+
+        if (effectiveRole == Roles.Admin)
         {
             return true;
         }
 
-        if (userRole == Roles.Manager || userRole == Roles.Staff)
+        if (effectiveRole == Roles.Manager || effectiveRole == Roles.Staff)
         {
             return await _context.StaffLotAssignments
                 .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
@@ -31,14 +57,20 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<List<int>> GetAssignedLotIdsAsync(long userId, string userRole, CancellationToken ct = default)
     {
-        if (userRole == Roles.Admin)
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        if (effectiveRole == null)
+        {
+            return [];
+        }
+
+        if (effectiveRole == Roles.Admin)
         {
             return await _context.ParkingLots
                 .Select(l => l.Id)
                 .ToListAsync(ct);
         }
 
-        if (userRole == Roles.Manager || userRole == Roles.Staff)
+        if (effectiveRole == Roles.Manager || effectiveRole == Roles.Staff)
         {
             return await _context.StaffLotAssignments
                 .Where(a => a.UserId == userId && a.IsActive)
@@ -52,14 +84,21 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<bool> CanManageLotStatusAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        if (userRole == Roles.Admin)
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        if (effectiveRole == null)
+        {
+            return false;
+        }
+
+        if (effectiveRole == Roles.Admin)
         {
             return true;
         }
 
-        if (userRole == Roles.Manager)
+        if (effectiveRole == Roles.Manager)
         {
-            return await HasLotAccessAsync(userId, userRole, lotId, ct);
+            return await _context.StaffLotAssignments
+                .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
         }
 
         return false;
@@ -67,14 +106,21 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<bool> CanManageSlotStatusAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        if (userRole == Roles.Admin)
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        if (effectiveRole == null)
+        {
+            return false;
+        }
+
+        if (effectiveRole == Roles.Admin)
         {
             return true;
         }
 
-        if (userRole == Roles.Manager)
+        if (effectiveRole == Roles.Manager)
         {
-            return await HasLotAccessAsync(userId, userRole, lotId, ct);
+            return await _context.StaffLotAssignments
+                .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
         }
 
         return false;
@@ -82,14 +128,21 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<bool> CanOperateSessionOrDispatchAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        if (userRole == Roles.Admin)
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        if (effectiveRole == null)
+        {
+            return false;
+        }
+
+        if (effectiveRole == Roles.Admin)
         {
             return true;
         }
 
-        if (userRole == Roles.Manager || userRole == Roles.Staff)
+        if (effectiveRole == Roles.Manager || effectiveRole == Roles.Staff)
         {
-            return await HasLotAccessAsync(userId, userRole, lotId, ct);
+            return await _context.StaffLotAssignments
+                .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
         }
 
         return false;
