@@ -22,6 +22,17 @@ builder.Services.AddSwaggerGen(options =>
 // Configure ASP.NET Core Health Checks
 builder.Services.AddHealthChecks();
 
+// Configure CORS for Frontend and IoT Simulator
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 // Register Clean Architecture layers
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
@@ -40,6 +51,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors();
 
 app.UseAuthorization();
 
