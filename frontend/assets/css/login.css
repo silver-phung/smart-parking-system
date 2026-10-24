@@ -1,0 +1,53 @@
+/* SmartPark - Trang đăng nhập (trang mở đầu).
+   Tìm "[HINH-NEN]" để thấy chỗ gắn ảnh nền, "[ANIM]" để thấy các hiệu ứng. */
+body { min-height: 100%; overflow-x: hidden; }
+
+/* ---------- Lớp nền ---------- */
+.bg { position: fixed; inset: 0; overflow: hidden; z-index: 0; background: #0b2a66; }
+/* [HINH-NEN] ẢNH NỀN CHÍNH CỦA TRANG ĐĂNG NHẬP
+   - Ảnh nền hiện tại: assets/img/login-bg.png
+   - Khi thay ảnh, dùng ảnh ngang; ảnh sẽ tự co phủ toàn màn hình.
+   - Chưa có ảnh thì tự hiện nền chuyển màu ở dòng linear-gradient phía sau. */
+.bg-img { position: absolute; inset: -4%;
+  background: url("../img/login-bg.png") center / cover no-repeat, linear-gradient(135deg, #0b2a66 0%, #1357e0 55%, #0f9d9a 100%);
+  /* [ANIM] Ảnh nền phóng to rất chậm rồi thu lại (hiệu ứng Ken Burns). Xóa dòng animation nếu muốn nền đứng yên. */
+  animation: drift 28s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.07) translate(-1.5%, -1%); } }
+/* Lớp tối phủ lên ảnh để chữ trắng luôn đọc được. Ảnh sáng thì tăng số 0.6, ảnh tối thì giảm xuống 0.35. */
+.bg-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6, 18, 44, .78), rgba(6, 18, 44, .45) 60%, rgba(6, 18, 44, .25)); }
+/* [ANIM] Chiếc xe chạy dọc làn đường. Đổi 22s để chạy nhanh hơn hoặc chậm hơn, đổi opacity để mờ hơn. */
+.bg-lane { position: absolute; left: 0; right: 0; bottom: 6%; height: 34px; border-bottom: 2px dashed rgba(255, 255, 255, .22); color: #fff; opacity: .75; }
+.bg-car { position: absolute; bottom: 4px; left: -90px; animation: drive 22s linear infinite; }
+@keyframes drive { from { transform: translateX(0); } to { transform: translateX(calc(100vw + 180px)); } }
+
+.theme-btn { position: fixed; top: 14px; right: 14px; z-index: 5; color: #fff; }
+.theme-btn:hover:not(:disabled) { background: rgba(255, 255, 255, .15) !important; }
+
+/* ---------- Bố cục ---------- */
+.stage { position: relative; z-index: 1; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 440px); justify-content: center; align-items: center; max-width: 480px; margin-inline: auto; padding: 32px 20px; }
+
+.login { padding: 26px; box-shadow: 0 20px 60px rgba(0, 0, 0, .35); border-radius: 18px; }
+.login h2 { font-size: 26px; }
+#form { display: grid; gap: 14px; }
+.register-fields { display: grid; gap: 14px; }
+.register-fields[hidden] { display: none; }
+.pw { position: relative; }
+.pw input { padding-right: 70px; }
+.pw button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
+.pw button:hover { color: var(--ink); background: var(--surface2); }
+.btn.big { min-height: 46px; font-size: 15.5px; }
+.form-msg { background: var(--occ-bg); color: var(--occ); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.resume { background: var(--accent-soft); border-radius: 12px; padding: 14px; display: grid; gap: 10px; margin-bottom: 14px; }
+.resume[hidden] { display: none; }
+.resume b { font-size: 15px; }
+
+/* [ANIM] Thẻ đăng nhập trượt lên nhẹ khi vừa mở trang. */
+.a2 { animation: fade-up .6s .2s ease-out both; }
+/* [ANIM] Thẻ đăng nhập rung nhẹ khi nhập sai (JS thêm class "shake" trong login.js) */
+.login.shake { animation: shake .4s ease; }
+@keyframes shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+
+@media (max-width: 860px) {
+  .stage { grid-template-columns: minmax(0, 1fr); align-content: center; padding-top: 56px; }
+  .bg-shade { background: rgba(6, 18, 44, .62); }
+}

@@ -1,0 +1,162 @@
+/* ==========================================================
+   SmartPark - CSS dùng chung cho Client và Admin
+   Muốn đổi màu thương hiệu: sửa --accent / --accent-soft bên dưới.
+   ========================================================== */
+:root {
+  --bg: #f2f5f9;
+  --surface: #ffffff;
+  --surface2: #eef2f7;
+  --ink: #0e1a2b;
+  --muted: #5a6b80;
+  --line: #dbe2ea;
+  --accent: #1357e0;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4ecfc;
+  --free: #17935a;
+  --res: #c98a00;
+  --occ: #d23f3f;
+  --blk: #7a8696;
+  --free-bg: #e0f4ea;
+  --res-bg: #fbf0d3;
+  --occ-bg: #fbe4e4;
+  --blk-bg: #e6eaef;
+  --shadow: 0 1px 2px rgba(14, 26, 43, .06), 0 8px 24px rgba(14, 26, 43, .08);
+  --f-display: "Bricolage Grotesque", "Be Vietnam Pro", system-ui, sans-serif;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r: 12px;
+  /* [HINH-NEN] Nền màu hiện ra khi chưa có ảnh bãi xe. Đổi hai màu này nếu muốn. */
+  --cover-fallback: linear-gradient(135deg, #1357e0, #0f9d9a);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131c; --surface: #131d29; --surface2: #1a2736; --ink: #e7edf4; --muted: #93a4b8; --line: #24323f;
+    --accent: #5b9bff; --accent-ink: #04152e; --accent-soft: #172b49;
+    --free: #3ccb8b; --res: #f0b429; --occ: #ff7b73; --blk: #8b98a8;
+    --free-bg: #12342a; --res-bg: #3a2f10; --occ-bg: #3f1d1f; --blk-bg: #222d39;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131c; --surface: #131d29; --surface2: #1a2736; --ink: #e7edf4; --muted: #93a4b8; --line: #24323f;
+  --accent: #5b9bff; --accent-ink: #04152e; --accent-soft: #172b49;
+  --free: #3ccb8b; --res: #f0b429; --occ: #ff7b73; --blk: #8b98a8;
+  --free-bg: #12342a; --res-bg: #3a2f10; --occ-bg: #3f1d1f; --blk-bg: #222d39;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, h4 { margin: 0; font-family: var(--f-display); letter-spacing: -0.01em; line-height: 1.15; text-wrap: balance; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-feature-settings: "zero" 0; }
+.muted { color: var(--muted); }
+.ic { flex: none; vertical-align: middle; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.row { display: flex; align-items: center; gap: 10px; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.stack { display: grid; gap: 12px; }
+.right { margin-left: auto; }
+
+/* Nút */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 9px 14px; font-weight: 600; font-size: 14px; text-decoration: none; color: var(--ink); min-height: 38px; }
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn.danger { color: var(--occ); }
+.btn.sm { padding: 5px 10px; min-height: 30px; font-size: 13px; border-radius: 8px; }
+.btn.block { width: 100%; }
+.btn.icon { padding: 0; width: 38px; }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.ghost:hover:not(:disabled) { background: var(--surface2); border-color: transparent; }
+
+/* Form */
+.field { display: grid; gap: 5px; }
+.field > label, .lab { font-size: 13px; font-weight: 600; }
+input[type=text], input[type=password], input[type=number], input[type=search], select, textarea { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; min-height: 40px; min-width: 0; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16px; height: 16px; }
+input[type=range] { accent-color: var(--accent); width: 100%; }
+.hint { font-size: 12.5px; color: var(--muted); }
+.err { color: var(--occ); font-size: 12.5px; }
+
+/* Thẻ, chip, badge */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 13px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.chip:hover { border-color: var(--muted); }
+.chip[aria-pressed="true"], .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; background: var(--surface2); color: var(--muted); }
+.badge.free { background: var(--free-bg); color: var(--free); }
+.badge.res { background: var(--res-bg); color: var(--res); }
+.badge.occ { background: var(--occ-bg); color: var(--occ); }
+.badge.blk { background: var(--blk-bg); color: var(--blk); }
+.badge.acc { background: var(--accent-soft); color: var(--accent); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+/* Sơ đồ chỗ đỗ (dùng chung) */
+.lanes { display: grid; gap: 6px; }
+.lane-note { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 4px; border-bottom: 2px dashed var(--line); margin-bottom: 4px; }
+.prow { display: grid; grid-template-columns: 22px 1fr; gap: 6px; align-items: stretch; }
+.prow .rl { display: grid; place-items: center; font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-weight: 600; }
+.pcells { display: grid; gap: 5px; }
+.slot { position: relative; border: 1.5px solid transparent; border-radius: 8px; min-height: 46px; padding: 3px 2px; display: grid; place-items: center; gap: 0; font-family: var(--f-mono); font-size: 11px; font-weight: 600; line-height: 1.1; background: var(--free-bg); color: var(--free); }
+.slot svg { opacity: .9; }
+.slot.res { background: var(--res-bg); color: var(--res); }
+.slot.occ { background: var(--occ-bg); color: var(--occ); }
+.slot.blk { background: var(--blk-bg); color: var(--blk); background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgba(122, 134, 150, .22) 5px 7px); }
+button.slot { cursor: pointer; }
+button.slot.free:hover { border-color: var(--free); }
+.slot.dim { opacity: .35; }
+.slot.sel { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.slot.type-moto { min-height: 46px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.legend .l-free { background: var(--free-bg); border: 1.5px solid var(--free); }
+.legend .l-res { background: var(--res-bg); border: 1.5px solid var(--res); }
+.legend .l-occ { background: var(--occ-bg); border: 1.5px solid var(--occ); }
+.legend .l-blk { background: var(--blk-bg); border: 1.5px solid var(--blk); }
+.legend .l-sel { background: var(--accent); border: 1.5px solid var(--accent); }
+
+/* Thanh trạng thái xếp chồng */
+.sbar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--surface2); }
+.sbar i { display: block; height: 100%; }
+.sbar .b-occ { background: var(--occ); }
+.sbar .b-res { background: var(--res); }
+.sbar .b-blk { background: var(--blk); }
+.sbar .b-free { background: var(--free); }
+
+/* ==========================================================
+   [ANIM] Hiệu ứng dùng chung. Tìm chuỗi "[ANIM]" trong toàn dự án để thấy mọi chỗ có hiệu ứng.
+   Tất cả hiệu ứng tắt khi người dùng bật "giảm chuyển động" của hệ điều hành (cuối tệp).
+   ========================================================== */
+@keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes pop-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes slide-up { from { transform: translateY(40px); opacity: .4; } to { transform: none; opacity: 1; } }
+.anim-fade-up { animation: fade-up .4s ease-out both; }   /* thêm class này vào bất kỳ phần tử nào để cho nó trượt lên khi xuất hiện */
+.anim-pop { animation: pop-in .22s ease-out both; }
+.btn, .chip { transition: border-color .15s, background-color .15s, transform .1s, filter .15s; }
+.btn:active:not(:disabled), .chip:active { transform: translateY(1px) scale(.99); }
+.slot { transition: transform .12s, background-color .15s, box-shadow .15s; }
+button.slot.free:hover { transform: scale(1.07); }
+.slot.sel { animation: pop-in .2s ease-out; }
+
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-size: 14px; z-index: 1000; max-width: calc(100% - 32px); box-shadow: var(--shadow); }
+.dot.live { background: var(--free); box-shadow: 0 0 0 0 rgba(23, 147, 90, .6); animation: pulse 1.8s infinite; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(23, 147, 90, 0); } 100% { box-shadow: 0 0 0 0 rgba(23, 147, 90, 0); } }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translateX(-50%); } }
+.toast { animation: toast-in .25s ease-out both; }   /* [ANIM] thông báo nổi ở cuối màn hình */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

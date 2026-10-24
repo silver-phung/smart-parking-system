@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SmartPark - Tìm bãi và đặt chỗ đỗ xe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=JetBrains+Mono:wght@500;600&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="../assets/css/base.css">
+  <link rel="stylesheet" href="client.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="#find" data-act="tab" data-tab="find"><span class="logo" aria-hidden="true">P</span><span id="brandName">SmartPark</span></a>
+      <nav class="tabs" id="tabs" aria-label="Điều hướng chính">
+        <button type="button" data-act="tab" data-tab="find" aria-current="page"><span data-i="map"></span>Tìm bãi</button>
+        <button type="button" data-act="tab" data-tab="tickets"><span data-i="ticket"></span>Vé của tôi<b class="count" id="ticketCount" hidden></b></button>
+        <button type="button" data-act="tab" data-tab="scan"><span data-i="qr"></span>Quét QR</button>
+        <button type="button" data-act="tab" data-tab="me"><span data-i="user"></span>Tài khoản</button>
+      </nav>
+      <button class="btn icon ghost" id="themeBtn" type="button"></button>
+      <button class="btn sm" id="logoutBtn" type="button" data-act="logout" aria-label="Đăng xuất" title="Đăng xuất"></button>
+    </header>
+
+    <main class="main">
+      <!-- TÌM BÃI -->
+      <section class="view find" id="view-find">
+        <div class="mapwrap"><div id="map" role="application" aria-label="Bản đồ bãi đỗ xe"></div></div>
+        <aside class="panel" id="panel"></aside>
+      </section>
+
+      <!-- VÉ CỦA TÔI -->
+      <section class="view page" id="view-tickets" hidden>
+        <div class="page-in">
+          <h1>Vé của tôi</h1>
+          <p class="muted">Các lượt đặt chỗ của bạn. Mở mã QR để quét tại cổng vào và cổng ra.</p>
+          <div class="stack" id="ticketList"></div>
+        </div>
+      </section>
+
+      <!-- QUÉT QR -->
+      <section class="view page" id="view-scan" hidden>
+        <div class="page-in">
+          <h1>Quét QR tại cổng</h1>
+          <p class="muted">Quét mã QR dán ở cổng để vào hoặc ra bãi. Nếu không có camera, dùng phần giả lập bên dưới.</p>
+          <div class="scanbox card">
+            <div class="cam" id="cam"><video id="video" playsinline muted></video><div class="cam-empty" id="camEmpty">Camera đang tắt</div><i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i></div>
+            <div class="row wrap">
+              <button class="btn primary" type="button" data-act="camOn">Bật camera</button>
+              <button class="btn" type="button" data-act="camOff">Tắt camera</button>
+            </div>
+          </div>
+          <div class="card stack">
+            <h3>Giả lập quét cổng</h3>
+            <div id="simBox"></div>
+          </div>
+          <div class="card stack">
+            <h3>Nhập mã cổng</h3>
+            <div class="row"><input type="text" id="gateInput" placeholder="SPGATE|L1|IN" aria-label="Mã cổng" autocomplete="off"><button class="btn primary" type="button" data-act="gateSubmit">Xác nhận</button></div>
+            <p class="hint">Mã cổng có dạng SPGATE|mã bãi|IN hoặc OUT.</p>
+          </div>
+          <div class="card stack" id="gateQr"></div>
+        </div>
+      </section>
+
+      <!-- TÀI KHOẢN -->
+      <section class="view page" id="view-me" hidden>
+        <div class="page-in">
+          <h1>Tài khoản</h1>
+          <div class="card row wrap">
+            <span class="avatar-lg" id="meAvatar" aria-hidden="true">K</span>
+            <div class="grow"><b id="meEmailName">Khách</b><div class="hint" id="meEmail"></div></div>
+            <button class="btn" type="button" data-act="logout">Đăng xuất</button>
+          </div>
+          <div class="card stack">
+            <div class="field"><label for="meName">Tên hiển thị</label><input type="text" id="meName" value="Khách" maxlength="40"></div>
+            <div class="field"><label for="mePlate">Biển số đã lưu</label>
+              <div class="row"><input type="text" id="mePlate" placeholder="51F-123.45" maxlength="14" autocapitalize="characters"><button class="btn" type="button" data-act="addPlate">Thêm</button></div>
+            </div>
+            <div class="chips" id="plateList"></div>
+          </div>
+          <div class="card stack">
+            <h3>Dữ liệu demo</h3>
+            <p class="hint">Toàn bộ dữ liệu hiện là dữ liệu mẫu lưu trên trình duyệt này, dùng chung với trang Admin.</p>
+            <button class="btn danger" type="button" data-act="resetDemo">Đặt lại dữ liệu demo</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle" id="sheet"></div>
+  </div>
+  <div class="toast" id="toast" hidden role="status"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="../assets/js/core.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

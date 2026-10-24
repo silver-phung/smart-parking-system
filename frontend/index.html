@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SmartPark - Đăng nhập</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=JetBrains+Mono:wght@500;600&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/login.css">
+</head>
+<body>
+  <!-- [HINH-NEN] Lớp nền toàn màn hình lấy ảnh từ assets/img/login-bg.png (xem assets/css/login.css, mục .bg-img) -->
+  <div class="bg" aria-hidden="true">
+    <div class="bg-img"></div>
+    <div class="bg-shade"></div>
+    <!-- [ANIM] Xe chạy dọc làn đường ở đáy màn hình (CSS thuần, xem .bg-lane trong login.css) -->
+    <div class="bg-lane"><svg class="bg-car" width="64" height="30" viewBox="0 0 64 30" fill="none"><path d="M4 22v-6l6-9h30l9 9h9v6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17" cy="23" r="4" fill="currentColor"/><circle cx="48" cy="23" r="4" fill="currentColor"/></svg></div>
+  </div>
+
+  <button class="btn icon ghost theme-btn" id="themeBtn" type="button"></button>
+
+  <main class="stage">
+    <section class="card login a2" aria-labelledby="loginTitle">
+      <div id="resume" class="resume" hidden></div>
+      <form id="form" novalidate>
+        <h2 id="loginTitle">Đăng nhập</h2>
+        <p class="muted" style="margin-top:4px">Nhập tài khoản; hệ thống sẽ tự chuyển bạn đến đúng giao diện.</p>
+        <div class="form-msg" id="msg" role="alert" hidden></div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="text" id="email" inputmode="email" autocomplete="username" placeholder="ten@example.com" autocapitalize="none" spellcheck="false">
+          <div class="err" id="emailErr"></div>
+        </div>
+        <div class="field">
+          <label for="pass">Mật khẩu</label>
+          <div class="pw"><input type="password" id="pass" autocomplete="current-password"><button type="button" id="togglePw">Hiện</button></div>
+          <div class="err" id="passErr"></div>
+        </div>
+        <div class="register-fields" id="registerFields" hidden>
+          <div class="field">
+            <label for="registerName">Họ và tên</label>
+            <input type="text" id="registerName" autocomplete="name" maxlength="60">
+            <div class="err" id="nameErr"></div>
+          </div>
+          <div class="field">
+            <label for="confirmPass">Nhập lại mật khẩu</label>
+            <input type="password" id="confirmPass" autocomplete="new-password">
+            <div class="err" id="confirmPassErr"></div>
+          </div>
+        </div>
+        <button class="btn primary block big" type="submit" id="submitBtn">Đăng nhập</button>
+        <button class="btn block" type="button" id="modeBtn">Chưa có tài khoản? Đăng ký</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/login.js"></script>
+</body>
+</html>
