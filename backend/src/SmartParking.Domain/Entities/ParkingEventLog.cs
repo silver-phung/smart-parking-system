@@ -62,6 +62,9 @@ public static class EventProcessingStatus
     public const string Accepted  = "accepted";
     public const string Rejected  = "rejected";
     public const string Duplicate = "duplicate";
+
+    /// <summary>Sự kiện đến không đúng thứ tự – chờ xác minh thủ công.</summary>
+    public const string PendingVerification = "pending_verification";
 }
 
 /// <summary>Hằng số loại sự kiện IoT/Staff.</summary>

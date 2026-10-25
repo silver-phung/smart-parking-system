@@ -66,6 +66,9 @@ public class IoTController : ControllerBase
     /// <summary>
     /// Reset dữ liệu 3 bãi đỗ xe, telemetry và danh sách xe đang đỗ về trạng thái mặc định.
     /// </summary>
+    // DEPRECATED Sprint 3: Đừng gọi endpoint này trong production. Dùng ParkingEventController thay thế.
+    [Obsolete("DEPRECATED Sprint 3: Dùng ParkingEventController thay thế.")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpPost("reset")]
     public async Task<IActionResult> Reset()
     {

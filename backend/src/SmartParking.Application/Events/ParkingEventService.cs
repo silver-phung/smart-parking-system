@@ -23,15 +23,18 @@ namespace SmartParking.Application.Events;
 /// </summary>
 public class ParkingEventService
 {
-    private readonly IParkingEventLogRepository _eventLogRepo;
-    private readonly IParkingSessionRepository  _sessionRepo;
+    private readonly IParkingEventLogRepository  _eventLogRepo;
+    private readonly IParkingSessionRepository   _sessionRepo;
+    private readonly IVehicleCompatibilityChecker _compatibilityChecker;
 
     public ParkingEventService(
-        IParkingEventLogRepository eventLogRepo,
-        IParkingSessionRepository  sessionRepo)
+        IParkingEventLogRepository   eventLogRepo,
+        IParkingSessionRepository    sessionRepo,
+        IVehicleCompatibilityChecker compatibilityChecker)
     {
-        _eventLogRepo = eventLogRepo;
-        _sessionRepo  = sessionRepo;
+        _eventLogRepo         = eventLogRepo;
+        _sessionRepo          = sessionRepo;
+        _compatibilityChecker = compatibilityChecker;
     }
 
     public async Task<IngestEventResponse> IngestAsync(
@@ -152,8 +155,8 @@ public class ParkingEventService
 
         var session = await _sessionRepo.FindBySessionIdAsync(request.SessionId, ct);
         if (session is null)
-            return await RejectAndLogAsync(request,
-                $"Không tìm thấy phiên '{request.SessionId}'.", ct);
+            return await PendingVerifyAsync(request,
+                $"Sự kiện đến không đúng thứ tự – không tìm thấy phiên '{request.SessionId}'. Chờ xác minh thủ công.", ct);
 
         if (session.Status != ParkingSessionStatus.PendingSlot)
             return await RejectAndLogAsync(request,
@@ -161,6 +164,14 @@ public class ParkingEventService
 
         string? warningCode    = null;
         string? warningMessage = null;
+
+        // Kiểm tra tương thích nhiên liệu (xăng/điện) với loại ô đậu
+        var compatWarning = await _compatibilityChecker.CheckAsync(request.SlotCode!, session.FuelType, ct);
+        if (compatWarning is not null)
+        {
+            warningCode    = compatWarning;
+            warningMessage = "Xe đậu sai loại ô (xăng/điện) – cảnh báo ghi nhận, không chặn.";
+        }
 
         // Gán slot, chuyển phiên sang parked
         session.SlotCode    = request.SlotCode;
@@ -196,8 +207,8 @@ public class ParkingEventService
 
         var session = await _sessionRepo.FindBySessionIdAsync(request.SessionId, ct);
         if (session is null)
-            return await RejectAndLogAsync(request,
-                $"Không tìm thấy phiên '{request.SessionId}'.", ct);
+            return await PendingVerifyAsync(request,
+                $"Sự kiện đến không đúng thứ tự – không tìm thấy phiên '{request.SessionId}'. Chờ xác minh thủ công.", ct);
 
         if (session.Status == ParkingSessionStatus.Exited)
             return await RejectAndLogAsync(request,
@@ -233,6 +244,20 @@ public class ParkingEventService
         {
             Success          = false,
             ProcessingStatus = EventProcessingStatus.Rejected,
+            EventId          = request.EventId,
+            SessionId        = request.SessionId,
+            Message          = reason
+        };
+    }
+
+    private async Task<IngestEventResponse> PendingVerifyAsync(
+        IngestEventRequest request, string reason, CancellationToken ct)
+    {
+        await WriteLogAsync(request, request.SessionId, EventProcessingStatus.PendingVerification, reason, ct);
+        return new IngestEventResponse
+        {
+            Success          = false,
+            ProcessingStatus = EventProcessingStatus.PendingVerification,
             EventId          = request.EventId,
             SessionId        = request.SessionId,
             Message          = reason
