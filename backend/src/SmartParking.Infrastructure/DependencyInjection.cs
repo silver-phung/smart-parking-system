@@ -17,6 +17,10 @@ public static class DependencyInjection
         }
         services.AddScoped<IParkingLotRepository>(_ => new ParkingLotRepository(fullPath));
 
+        // Sprint 3 – Thức: Event Ingestion Pipeline (in-memory, sẵn sàng chuyển sang EF khi DB hoàn tất)
+        services.AddSingleton<IParkingEventLogRepository, InMemoryParkingEventLogRepository>();
+        services.AddSingleton<IParkingSessionRepository,  InMemoryParkingSessionRepository>();
+
         return services;
     }
 }
