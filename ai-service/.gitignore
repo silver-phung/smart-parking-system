@@ -15,11 +15,11 @@ ENV/
 .idea/
 
 # Large model weights (>50MB-100MB, keep in cloud storage or Git LFS)
-weights/*.pt
-weights/*.onnx
-weights/ppocrv4/*.onnx
-!weights/.gitkeep
-!weights/ppocrv4/.gitkeep
+# weights/*.pt
+# weights/*.onnx
+# weights/ppocrv4/*.onnx
+# !weights/.gitkeep
+# !weights/ppocrv4/.gitkeep
 
 # Tracker checkpoints
 tracking/deep_sort/deep/checkpoint/*.t7
