@@ -51,3 +51,21 @@ desktop.ini
 node_modules/
 dist/
 build/
+
+## =====================================
+## 6. AI Service (Python / Weights / Cache)
+## =====================================
+ai-service/**/__pycache__/
+ai-service/**/*.py[cod]
+ai-service/.venv/
+ai-service/venv/
+ai-service/env/
+ai-service/data/
+ai-service/logs/
+ai-service/weights/*.pt
+ai-service/weights/*.onnx
+ai-service/weights/ppocrv4/*.onnx
+!ai-service/weights/.gitkeep
+!ai-service/weights/ppocrv4/.gitkeep
+ai-service/tracking/deep_sort/deep/checkpoint/*.t7
+ai-service/tracking/deep_sort/deep/checkpoint/*.pb
