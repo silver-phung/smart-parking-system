@@ -179,7 +179,7 @@ public class BookingAndCapacityTests
         Assert.Equal(BookingStatuses.Pending, bookingInDb.Status);
 
         // Verify capacity is reserved (1 hold out of 10)
-        var capacity = await bookingService.GetLotCapacityAsync(1, isStaffOrAdmin: true);
+        var capacity = await bookingService.GetLotCapacityAsync(1, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capacity);
         Assert.Equal(10, capacity.TotalCapacity);
         Assert.Equal(1, capacity.ActiveReservationsCount);
@@ -335,7 +335,7 @@ public class BookingAndCapacityTests
         Assert.True(createRes.Success);
 
         // Check hold was active
-        var cap1 = await bookingService.GetLotCapacityAsync(8, isStaffOrAdmin: true);
+        var cap1 = await bookingService.GetLotCapacityAsync(8, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap1);
         Assert.Equal(1, cap1.ActiveReservationsCount);
         Assert.Equal(4, cap1.AvailableForBooking);
@@ -350,7 +350,7 @@ public class BookingAndCapacityTests
         Assert.Equal("Kế hoạch thay đổi", cancelRes.Data.CancellationReason);
 
         // Verify capacity is released
-        var cap2 = await bookingService.GetLotCapacityAsync(8, isStaffOrAdmin: true);
+        var cap2 = await bookingService.GetLotCapacityAsync(8, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap2);
         Assert.Equal(0, cap2.ActiveReservationsCount);
         Assert.Equal(5, cap2.AvailableForBooking);
@@ -439,7 +439,7 @@ public class BookingAndCapacityTests
 
         // Before Check-in:
         // Total = 2, Admitted = 0, Reserved = 1, Available = 1
-        var capBefore = await bookingService.GetLotCapacityAsync(11, isStaffOrAdmin: true);
+        var capBefore = await bookingService.GetLotCapacityAsync(11, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capBefore);
         Assert.Equal(2, capBefore.TotalCapacity);
         Assert.Equal(0, capBefore.ActiveSessionsCount);
@@ -468,7 +468,7 @@ public class BookingAndCapacityTests
         // INVARIANT VERIFICATION:
         // Total = 2, Admitted = 1, Reserved = 0, Available = 1!
         // The reserved vehicle did NOT consume an additional unreserved space!
-        var capAfter = await bookingService.GetLotCapacityAsync(11, isStaffOrAdmin: true);
+        var capAfter = await bookingService.GetLotCapacityAsync(11, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capAfter);
         Assert.Equal(2, capAfter.TotalCapacity);
         Assert.Equal(1, capAfter.ActiveSessionsCount);
@@ -521,7 +521,7 @@ public class BookingAndCapacityTests
         Assert.True(checkInSuccess);
 
         // Capacity is full
-        var cap1 = await bookingService.GetLotCapacityAsync(13, isStaffOrAdmin: true);
+        var cap1 = await bookingService.GetLotCapacityAsync(13, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap1);
         Assert.Equal(1, cap1.ActiveSessionsCount);
         Assert.Equal(0, cap1.AvailableForBooking);
@@ -531,7 +531,7 @@ public class BookingAndCapacityTests
         Assert.True(checkOutSuccess);
 
         // Capacity is released
-        var cap2 = await bookingService.GetLotCapacityAsync(13, isStaffOrAdmin: true);
+        var cap2 = await bookingService.GetLotCapacityAsync(13, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap2);
         Assert.Equal(0, cap2.ActiveSessionsCount);
         Assert.Equal(1, cap2.AvailableForBooking);
@@ -561,7 +561,7 @@ public class BookingAndCapacityTests
         slots[1].PhysicalStatus = SlotPhysicalStatuses.Occupied;
         await context.SaveChangesAsync();
 
-        var capacity = await bookingService.GetLotCapacityAsync(15, isStaffOrAdmin: true);
+        var capacity = await bookingService.GetLotCapacityAsync(15, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capacity);
         Assert.Equal(4, capacity.TotalCapacity);
         Assert.Equal(0, capacity.ActiveSessionsCount);
@@ -594,9 +594,10 @@ public class BookingAndCapacityTests
                 new Role { Id = 1, Code = Roles.Admin, Name = "Admin" },
                 new Role { Id = 4, Code = Roles.User, Name = "User" });
 
+            var admin = new User { Id = 1, Username = "admin", Email = "admin@test.com", FullName = "Admin", PasswordHash = "x", RoleId = 1, IsActive = true, ApprovalStatus = "APPROVED" };
             var u1 = new User { Id = 10, Username = "user1", Email = "u1@test.com", FullName = "U1", PasswordHash = "x", RoleId = 4, IsActive = true, ApprovalStatus = "APPROVED" };
             var u2 = new User { Id = 20, Username = "user2", Email = "u2@test.com", FullName = "U2", PasswordHash = "x", RoleId = 4, IsActive = true, ApprovalStatus = "APPROVED" };
-            seedContext.Users.AddRange(u1, u2);
+            seedContext.Users.AddRange(admin, u1, u2);
 
             SeedLotWithSlots(seedContext, 16, "Bãi Đua Chỗ", slotCount: 1, activeSlotsCount: 1);
 
@@ -631,7 +632,7 @@ public class BookingAndCapacityTests
         {
             var verifyAuth = new ParkingAuthorizationService(verifyContext);
             var verifyService = new BookingService(verifyContext, verifyAuth, NullLogger<BookingService>.Instance);
-            var capacity = await verifyService.GetLotCapacityAsync(16, isStaffOrAdmin: true);
+            var capacity = await verifyService.GetLotCapacityAsync(16, currentUserId: 1, currentUserRole: Roles.Admin);
             Assert.NotNull(capacity);
             Assert.Equal(1, capacity.ActiveReservationsCount);
             Assert.Equal(0, capacity.AvailableForBooking);
@@ -770,7 +771,7 @@ public class BookingAndCapacityTests
         });
         await context.SaveChangesAsync();
 
-        var capacity = await bookingService.GetLotCapacityAsync(101, isStaffOrAdmin: true);
+        var capacity = await bookingService.GetLotCapacityAsync(101, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capacity);
         // Fallback permitted when NO slots exist
         Assert.Equal(20, capacity.TotalCapacity);
@@ -822,7 +823,7 @@ public class BookingAndCapacityTests
         context.Vehicles.Add(v);
         await context.SaveChangesAsync();
 
-        var capacity = await bookingService.GetLotCapacityAsync(102, isStaffOrAdmin: true);
+        var capacity = await bookingService.GetLotCapacityAsync(102, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capacity);
         // CRITICAL INVARIANT: Usable capacity must be ZERO, NOT 50!
         Assert.Equal(0, capacity.TotalCapacity);
@@ -908,7 +909,7 @@ public class BookingAndCapacityTests
         }
         await context.SaveChangesAsync();
 
-        var capacity = await bookingService.GetLotCapacityAsync(103, isStaffOrAdmin: true);
+        var capacity = await bookingService.GetLotCapacityAsync(103, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capacity);
         // Only 2 slots on Floor 1 are eligible & usable!
         Assert.Equal(2, capacity.TotalCapacity);
@@ -941,7 +942,7 @@ public class BookingAndCapacityTests
         await context.SaveChangesAsync();
 
         // Verify capacity is 0 (overcommitted)
-        var capacity = await bookingService.GetLotCapacityAsync(104, isStaffOrAdmin: true);
+        var capacity = await bookingService.GetLotCapacityAsync(104, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capacity);
         Assert.Equal(0, capacity.TotalCapacity);
         Assert.Equal(0, capacity.AvailableForBooking);
@@ -1008,7 +1009,7 @@ public class BookingAndCapacityTests
 
         // Formula: Used = max(Sessions: 1, PhysicalOccupied: 3) + Holds: 1 = 4
         // Available = max(0, 5 - 4) = 1
-        var cap = await bookingService.GetLotCapacityAsync(105, isStaffOrAdmin: true);
+        var cap = await bookingService.GetLotCapacityAsync(105, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap);
         Assert.Equal(5, cap.TotalCapacity);
         Assert.Equal(1, cap.ActiveSessionsCount);
@@ -1048,7 +1049,7 @@ public class BookingAndCapacityTests
 
         // Formula: Used = max(Sessions: 3, PhysicalOccupied: 1) + Holds: 0 = 3
         // Available = max(0, 5 - 3) = 2
-        var cap = await bookingService.GetLotCapacityAsync(106, isStaffOrAdmin: true);
+        var cap = await bookingService.GetLotCapacityAsync(106, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap);
         Assert.Equal(5, cap.TotalCapacity);
         Assert.Equal(3, cap.ActiveSessionsCount);
@@ -1084,7 +1085,7 @@ public class BookingAndCapacityTests
         await context.SaveChangesAsync();
 
         // Formula: Used = max(2, 2) + 0 = 2, Available = 5 - 2 = 3
-        var cap = await bookingService.GetLotCapacityAsync(107, isStaffOrAdmin: true);
+        var cap = await bookingService.GetLotCapacityAsync(107, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap);
         Assert.Equal(3, cap.AvailableForBooking);
         Assert.Null(cap.DiscrepancyNotes); // No discrepancy when counts match!
@@ -1126,7 +1127,7 @@ public class BookingAndCapacityTests
         Assert.Equal(BookingStatuses.CheckedIn, bookingAfter!.Status);
 
         // After check-in: 1 session, 0 holds, available remains 0
-        var capAfter = await bookingService.GetLotCapacityAsync(108, isStaffOrAdmin: true);
+        var capAfter = await bookingService.GetLotCapacityAsync(108, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.Equal(1, capAfter!.ActiveSessionsCount);
         Assert.Equal(0, capAfter.ActiveReservationsCount);
         Assert.Equal(0, capAfter.AvailableForBooking);
@@ -1166,7 +1167,7 @@ public class BookingAndCapacityTests
         await context.SaveChangesAsync();
 
         // 1. Anonymous / Public query (isStaffOrAdmin = false)
-        var publicCap = await bookingService.GetLotCapacityAsync(110, isStaffOrAdmin: false);
+        var publicCap = await bookingService.GetLotCapacityAsync(110);
         Assert.NotNull(publicCap);
 
         // Operational fields MUST be null in the C# object
@@ -1205,7 +1206,7 @@ public class BookingAndCapacityTests
         await context.SaveChangesAsync();
 
         // 2. Staff / Admin query (isStaffOrAdmin = true)
-        var staffCap = await bookingService.GetLotCapacityAsync(111, isStaffOrAdmin: true);
+        var staffCap = await bookingService.GetLotCapacityAsync(111, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(staffCap);
 
         // Operational fields MUST be populated
@@ -1225,6 +1226,59 @@ public class BookingAndCapacityTests
         Assert.Contains("activeSessionsCount", json);
         Assert.Contains("physicalOccupiedSlotsCount", json);
         Assert.Contains("discrepancyNotes", json);
+    }
+
+    [Fact]
+    public async Task CapacityDiagnostics_HiddenFromAnonymousUserAndUnassignedStaff()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        var (_, _, slotsA) = SeedLotWithSlots(context, 120, "Bãi Staff Được Gán", slotCount: 3, activeSlotsCount: 3);
+        SeedLotWithSlots(context, 121, "Bãi Staff Không Gán", slotCount: 3, activeSlotsCount: 3);
+        slotsA[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+
+        context.StaffLotAssignments.Add(new StaffLotAssignment
+        {
+            UserId = 3,
+            LotId = 120,
+            AssignedBy = 1,
+            AssignedAt = DateTime.UtcNow,
+            IsActive = true
+        });
+        context.StaffLotAssignments.Add(new StaffLotAssignment
+        {
+            UserId = 2,
+            LotId = 121,
+            AssignedBy = 1,
+            AssignedAt = DateTime.UtcNow,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var anonymous = await bookingService.GetLotCapacityAsync(120);
+        Assert.Null(anonymous!.ActiveSessionsCount);
+        Assert.Null(anonymous.DiscrepancyNotes);
+
+        var userView = await bookingService.GetLotCapacityAsync(120, currentUserId: 10, currentUserRole: Roles.User);
+        Assert.Null(userView!.PhysicalOccupiedSlotsCount);
+        Assert.Null(userView.DiscrepancyNotes);
+
+        var assignedStaff = await bookingService.GetLotCapacityAsync(120, currentUserId: 3, currentUserRole: Roles.Staff);
+        Assert.Equal(1, assignedStaff!.PhysicalOccupiedSlotsCount);
+        Assert.NotNull(assignedStaff.DiscrepancyNotes);
+
+        var unassignedStaff = await bookingService.GetLotCapacityAsync(121, currentUserId: 3, currentUserRole: Roles.Staff);
+        Assert.Null(unassignedStaff!.PhysicalOccupiedSlotsCount);
+        Assert.Null(unassignedStaff.DiscrepancyNotes);
+
+        var assignedManager = await bookingService.GetLotCapacityAsync(121, currentUserId: 2, currentUserRole: Roles.Manager);
+        Assert.NotNull(assignedManager!.ActiveSessionsCount);
+
+        var unassignedManager = await bookingService.GetLotCapacityAsync(120, currentUserId: 2, currentUserRole: Roles.Manager);
+        Assert.Null(unassignedManager!.ActiveSessionsCount);
+
+        var adminView = await bookingService.GetLotCapacityAsync(121, currentUserId: 1, currentUserRole: Roles.Admin);
+        Assert.NotNull(adminView!.ActiveSessionsCount);
+        Assert.NotNull(adminView.PhysicalOccupiedSlotsCount);
     }
 
     [Fact]

@@ -533,12 +533,23 @@ public class BookingService : IBookingService
         return PagedResult<BookingDto>.Create(dtos, totalCount, page, pageSize);
     }
 
-    public async Task<LotCapacityDto?> GetLotCapacityAsync(int lotId, bool isStaffOrAdmin = false, CancellationToken ct = default)
+    public async Task<LotCapacityDto?> GetLotCapacityAsync(
+        int lotId,
+        long? currentUserId = null,
+        string? currentUserRole = null,
+        CancellationToken ct = default)
     {
         var lot = await _context.ParkingLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct);
         if (lot == null)
         {
             return null;
+        }
+
+        var includeDiagnostics = false;
+        if (currentUserId.HasValue
+            && (currentUserRole == Roles.Admin || currentUserRole == Roles.Manager || currentUserRole == Roles.Staff))
+        {
+            includeDiagnostics = await _authService.HasLotAccessAsync(currentUserId.Value, currentUserRole, lotId, ct);
         }
 
         var calc = await ParkingLotCapacityHelper.CalculateAsync(_context, lotId, lot, ct);
@@ -552,12 +563,12 @@ public class BookingService : IBookingService
             AvailableForWalkIn = calc.AvailableCapacity,
             AvailableForBooking = calc.AvailableCapacity,
             IsFull = calc.AvailableCapacity <= 0,
-            ActiveSessionsCount = isStaffOrAdmin ? calc.ActiveSessionsCount : null,
-            ActiveReservationsCount = isStaffOrAdmin ? calc.PendingBookingsCount : null,
-            TotalOccupiedOrReserved = isStaffOrAdmin ? calc.TotalOccupiedOrReserved : null,
-            PhysicalOccupiedSlotsCount = isStaffOrAdmin ? calc.PhysicalOccupiedSlotsCount : null,
-            PhysicalEmptySlotsCount = isStaffOrAdmin ? calc.PhysicalEmptySlotsCount : null,
-            DiscrepancyNotes = isStaffOrAdmin ? calc.DiscrepancyNotes : null
+            ActiveSessionsCount = includeDiagnostics ? calc.ActiveSessionsCount : null,
+            ActiveReservationsCount = includeDiagnostics ? calc.PendingBookingsCount : null,
+            TotalOccupiedOrReserved = includeDiagnostics ? calc.TotalOccupiedOrReserved : null,
+            PhysicalOccupiedSlotsCount = includeDiagnostics ? calc.PhysicalOccupiedSlotsCount : null,
+            PhysicalEmptySlotsCount = includeDiagnostics ? calc.PhysicalEmptySlotsCount : null,
+            DiscrepancyNotes = includeDiagnostics ? calc.DiscrepancyNotes : null
         };
     }
 

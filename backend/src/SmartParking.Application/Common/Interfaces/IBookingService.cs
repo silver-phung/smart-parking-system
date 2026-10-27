@@ -39,6 +39,7 @@ public interface IBookingService
 
     Task<LotCapacityDto?> GetLotCapacityAsync(
         int lotId,
-        bool isStaffOrAdmin = false,
+        long? currentUserId = null,
+        string? currentUserRole = null,
         CancellationToken ct = default);
 }
