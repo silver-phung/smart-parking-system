@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.AdminUsers;
@@ -174,8 +175,8 @@ public class AdminUserService : IAdminUserService
 
         var user = new User
         {
-            Username = request.Username.Trim(),
-            Email = request.Email.Trim().ToLowerInvariant(),
+            Username = normalizedUsername,
+            Email = normalizedEmail,
             RoleId = role.Id,
             Role = role,
             FullName = request.FullName.Trim(),
@@ -227,6 +228,31 @@ public class AdminUserService : IAdminUserService
 
             var detail = MapToDetailDto(user, [], 0, actorUsername);
             return (true, 201, "Tạo tài khoản người dùng thành công.", detail);
+        }
+        catch (DbUpdateException ex)
+        {
+            await transaction.RollbackAsync(ct);
+
+            if (IsPostgresUniqueViolation(ex, "uq_users_username"))
+            {
+                _logger.LogWarning(ex, "Unique constraint violation uq_users_username during user creation for username {Username}", normalizedUsername);
+                return (false, 409, "Tên đăng nhập đã được sử dụng.", null);
+            }
+
+            if (IsPostgresUniqueViolation(ex, "uq_users_email"))
+            {
+                _logger.LogWarning(ex, "Unique constraint violation uq_users_email during user creation for email {Email}", normalizedEmail);
+                return (false, 409, "Địa chỉ email đã được sử dụng.", null);
+            }
+
+            if (IsPostgresUniqueViolation(ex, string.Empty))
+            {
+                _logger.LogWarning(ex, "Unique constraint violation 23505 during user creation for username {Username} hoặc email {Email}", normalizedUsername, normalizedEmail);
+                return (false, 409, "Tên đăng nhập hoặc Email đã tồn tại trong hệ thống.", null);
+            }
+
+            _logger.LogError(ex, "Lỗi cơ sở dữ liệu khi tạo người dùng {Username} bởi Admin ID {AdminId}", request.Username, actorId);
+            throw;
         }
         catch (Exception ex)
         {
@@ -545,6 +571,23 @@ public class AdminUserService : IAdminUserService
             .CountAsync(u => u.Role.Code == Roles.Admin && u.IsActive && u.Id != userId, ct);
 
         return otherActiveAdminsCount == 0;
+    }
+
+    private static bool IsPostgresUniqueViolation(DbUpdateException ex, string constraintName)
+    {
+        if (ex.InnerException is PostgresException pgEx)
+        {
+            return pgEx.SqlState == PostgresErrorCodes.UniqueViolation &&
+                   (string.IsNullOrEmpty(constraintName) || pgEx.ConstraintName?.Equals(constraintName, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        var innerMsg = ex.InnerException?.Message ?? ex.Message;
+        if (!innerMsg.Contains("23505"))
+        {
+            return false;
+        }
+
+        return string.IsNullOrEmpty(constraintName) || innerMsg.Contains(constraintName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static AdminUserDetailDto MapToDetailDto(

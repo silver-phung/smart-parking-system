@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.Application.Common.Interfaces;
@@ -218,6 +219,248 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
         Assert.False(result.Success);
         Assert.Equal(409, result.StatusCode);
         Assert.Contains("Tên đăng nhập đã được sử dụng", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithMixedCaseUsername_StoresNormalizedLowercaseUsername()
+    {
+        var (service, context, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "Staff_Alice_MixedCase",
+            Email = "Alice.MixedCase@smartparking.test",
+            Password = "Password123@",
+            FullName = "Mixed Case Staff",
+            Role = Roles.Staff,
+            IsActive = true
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.True(result.Success);
+        Assert.Equal(201, result.StatusCode);
+        Assert.Equal("staff_alice_mixedcase", result.Data!.Username);
+        Assert.Equal("alice.mixedcase@smartparking.test", result.Data.Email);
+
+        // Verify entity in database is normalized
+        var userInDb = await context.Users.FindAsync(result.Data.Id);
+        Assert.NotNull(userInDb);
+        Assert.Equal("staff_alice_mixedcase", userInDb.Username);
+        Assert.Equal("alice.mixedcase@smartparking.test", userInDb.Email);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithDuplicateUsernameDifferentCasing_Returns409Conflict()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        // Existing user has username "manager_john"
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "MANAGER_JOHN",
+            Email = "diff_email_john@smartparking.test",
+            Password = "Password123@",
+            FullName = "Duplicate Case User",
+            Role = Roles.Staff
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(409, result.StatusCode);
+        Assert.Contains("Tên đăng nhập đã được sử dụng", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithDuplicateEmail_Returns409Conflict()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "brand_new_staff",
+            Email = "john.manager@smartparking.test", // Existing manager's email
+            Password = "Password123@",
+            FullName = "Duplicate Email User",
+            Role = Roles.Staff
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(409, result.StatusCode);
+        Assert.Contains("Địa chỉ email đã được sử dụng", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_StaffCreatedWithMixedCase_CanLoginWithAnyCasing()
+    {
+        var (service, context, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "Staff_Login_Mixed",
+            Email = "staff.login.mixed@smartparking.test",
+            Password = "Password123@",
+            FullName = "Login Mixed Staff",
+            Role = Roles.Staff,
+            IsActive = true
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+        Assert.True(result.Success);
+
+        var jwtOptions = Microsoft.Extensions.Options.Options.Create(new SmartParking.Application.Common.Options.JwtOptions
+        {
+            Issuer = "SmartParkingTest",
+            Audience = "SmartParkingTestClient",
+            SecretKey = "SuperSecureJwtSecretKeyForTesting2026!Min32BytesLongSecret",
+            AccessTokenLifetimeMinutes = 15,
+            RefreshTokenLifetimeDays = 7
+        });
+        var secOptions = Microsoft.Extensions.Options.Options.Create(new SmartParking.Application.Common.Options.SecurityOptions
+        {
+            OtpSecretKey = "SuperSecureOtpSecretKeyForTestingHMAC2026!Min32Bytes",
+            OtpLifetimeMinutes = 15,
+            MaxFailedOtpAttempts = 5,
+            OtpResendCooldownSeconds = 60,
+            MaxFailedLoginAttempts = 5,
+            LockoutDurationMinutes = 15
+        });
+
+        var authService = new AuthService(
+            context,
+            new PasswordHasherService(),
+            new TokenService(jwtOptions),
+            new OtpService(secOptions),
+            new FakeEmailService(),
+            new FakeRecaptchaService(),
+            jwtOptions,
+            secOptions,
+            Microsoft.Extensions.Options.Options.Create(new SmartParking.Application.Common.Options.RecaptchaOptions { Enabled = false }),
+            NullLogger<AuthService>.Instance
+        );
+
+        // 1. Login with uppercase
+        var loginUpper = await authService.LoginAsync(new SmartParking.Application.DTOs.Auth.LoginRequestDto
+        {
+            Username = "STAFF_LOGIN_MIXED",
+            Password = "Password123@"
+        }, "TestAgent", "127.0.0.1");
+        Assert.True(loginUpper.Succeeded);
+
+        // 2. Login with lowercase
+        var loginLower = await authService.LoginAsync(new SmartParking.Application.DTOs.Auth.LoginRequestDto
+        {
+            Username = "staff_login_mixed",
+            Password = "Password123@"
+        }, "TestAgent", "127.0.0.1");
+        Assert.True(loginLower.Succeeded);
+
+        // 3. Login with mixed case as created
+        var loginExact = await authService.LoginAsync(new SmartParking.Application.DTOs.Auth.LoginRequestDto
+        {
+            Username = "Staff_Login_Mixed",
+            Password = "Password123@"
+        }, "TestAgent", "127.0.0.1");
+        Assert.True(loginExact.Succeeded);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WhenPostgresUniqueViolationOnUsername_MapsTo409Conflict()
+    {
+        var options = new DbContextOptionsBuilder<SmartParkingDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        var throwingContext = new ThrowingTestDbContext(options);
+        throwingContext.Roles.Add(new Role { Id = 3, Code = Roles.Staff, Name = "Nhân viên vận hành" });
+        throwingContext.Users.Add(new User { Id = 1, Username = "admin", Email = "admin@test.com", FullName = "Admin User", RoleId = 1, PasswordHash = "h" });
+        await throwingContext.SaveChangesAsync();
+
+        // Simulate PostgreSQL unique constraint exception on uq_users_username
+        throwingContext.ExceptionToThrow = new DbUpdateException("Duplicate key", new Exception("23505: duplicate key value violates unique constraint \"uq_users_username\""));
+
+        var service = new AdminUserService(throwingContext, new PasswordHasherService(), NullLogger<AdminUserService>.Instance);
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "concurrent_staff",
+            Email = "concurrent_staff@test.com",
+            Password = "Password123@",
+            FullName = "Concurrent Staff",
+            Role = Roles.Staff
+        };
+
+        var result = await service.CreateUserAsync(request, 1, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(409, result.StatusCode);
+        Assert.Equal("Tên đăng nhập đã được sử dụng.", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WhenPostgresUniqueViolationOnEmail_MapsTo409Conflict()
+    {
+        var options = new DbContextOptionsBuilder<SmartParkingDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        var throwingContext = new ThrowingTestDbContext(options);
+        throwingContext.Roles.Add(new Role { Id = 3, Code = Roles.Staff, Name = "Nhân viên vận hành" });
+        throwingContext.Users.Add(new User { Id = 1, Username = "admin", Email = "admin@test.com", FullName = "Admin User", RoleId = 1, PasswordHash = "h" });
+        await throwingContext.SaveChangesAsync();
+
+        // Simulate PostgreSQL unique constraint exception on uq_users_email
+        throwingContext.ExceptionToThrow = new DbUpdateException("Duplicate key", new Exception("23505: duplicate key value violates unique constraint \"uq_users_email\""));
+
+        var service = new AdminUserService(throwingContext, new PasswordHasherService(), NullLogger<AdminUserService>.Instance);
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "concurrent_staff2",
+            Email = "concurrent_staff2@test.com",
+            Password = "Password123@",
+            FullName = "Concurrent Staff 2",
+            Role = Roles.Staff
+        };
+
+        var result = await service.CreateUserAsync(request, 1, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(409, result.StatusCode);
+        Assert.Equal("Địa chỉ email đã được sử dụng.", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WhenGenericDatabaseExceptionOccurs_ThrowsWithoutConvertingTo409()
+    {
+        var options = new DbContextOptionsBuilder<SmartParkingDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        var throwingContext = new ThrowingTestDbContext(options);
+        throwingContext.Roles.Add(new Role { Id = 3, Code = Roles.Staff, Name = "Nhân viên vận hành" });
+        throwingContext.Users.Add(new User { Id = 1, Username = "admin", Email = "admin@test.com", FullName = "Admin User", RoleId = 1, PasswordHash = "h" });
+        await throwingContext.SaveChangesAsync();
+
+        // Simulate generic non-unique database exception (e.g. connection error)
+        throwingContext.ExceptionToThrow = new DbUpdateException("Connection failure", new Exception("Npgsql.NpgsqlException: Connection refused"));
+
+        var service = new AdminUserService(throwingContext, new PasswordHasherService(), NullLogger<AdminUserService>.Instance);
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "failing_staff",
+            Email = "failing_staff@test.com",
+            Password = "Password123@",
+            FullName = "Failing Staff",
+            Role = Roles.Staff
+        };
+
+        // Must rethrow and NOT convert to 409
+        await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateUserAsync(request, 1, "127.0.0.1"));
     }
 
     [Fact]
@@ -634,4 +877,20 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
     }
 
     #endregion
+}
+
+public class ThrowingTestDbContext : TestSmartParkingDbContext
+{
+    public Exception? ExceptionToThrow { get; set; }
+
+    public ThrowingTestDbContext(DbContextOptions<SmartParkingDbContext> options) : base(options) { }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        if (ExceptionToThrow != null)
+        {
+            throw ExceptionToThrow;
+        }
+        return base.SaveChangesAsync(cancellationToken);
+    }
 }

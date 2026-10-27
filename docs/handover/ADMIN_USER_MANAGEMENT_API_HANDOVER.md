@@ -142,7 +142,7 @@
 ```
 
 **Quy tắc Validate:**
-- `username`: Bắt buộc, 3–50 ký tự (`^[a-zA-Z0-9_.]{3,50}$`).
+- `username`: Bắt buộc, 3–50 ký tự (`^[a-zA-Z0-9_.]{3,50}$`). Hệ thống tự động chuẩn hóa về chữ thường (`lowercase`) khi lưu trữ; người dùng có thể đăng nhập bằng chữ hoa hoặc chữ thường tùy ý.
 - `email`: Bắt buộc, đúng chuẩn email RFC.
 - `password`: Bắt buộc, tối thiểu 8 ký tự (Mật khẩu khởi tạo ban đầu do Admin cấp trực tiếp cho nhân sự qua kênh nội bộ).
 - `fullName`: Bắt buộc, tối đa 100 ký tự.
