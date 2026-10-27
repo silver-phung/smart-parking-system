@@ -105,6 +105,15 @@ public class ParkingSessionConfiguration : IEntityTypeConfiguration<ParkingSessi
             .HasColumnName("check_out_image_url")
             .HasMaxLength(500);
 
+        builder.Property(s => s.BookingId)
+            .HasColumnName("booking_id");
+
+        builder.HasOne(s => s.Booking)
+            .WithOne(b => b.Session)
+            .HasForeignKey<ParkingSession>(s => s.BookingId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_parking_sessions_booking");
+
         builder.Property(s => s.CreatedAt)
             .HasColumnName("created_at")
             .HasDefaultValueSql("now()")

@@ -19,4 +19,5 @@ public class Vehicle
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<ParkingSession> Sessions { get; set; } = new List<ParkingSession>();
+    public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 }

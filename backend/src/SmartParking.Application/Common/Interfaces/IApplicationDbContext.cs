@@ -18,6 +18,7 @@ public interface IApplicationDbContext
     DbSet<ParkingSession> ParkingSessions { get; }
     DbSet<ParkingDispatch> ParkingDispatches { get; }
     DbSet<StaffLotAssignment> StaffLotAssignments { get; }
+    DbSet<Booking> Bookings { get; }
     DbSet<AuditLog> AuditLogs { get; }
 
     DatabaseFacade Database { get; }

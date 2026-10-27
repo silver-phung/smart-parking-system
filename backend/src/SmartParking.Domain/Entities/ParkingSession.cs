@@ -22,6 +22,8 @@ public class ParkingSession
     public DateTime? PaidAt { get; set; }
     public string? CheckInImageUrl { get; set; }
     public string? CheckOutImageUrl { get; set; }
+    public long? BookingId { get; set; }
+    public Booking? Booking { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

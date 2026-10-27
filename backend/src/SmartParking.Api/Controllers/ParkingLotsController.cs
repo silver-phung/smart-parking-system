@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Models;
+using SmartParking.Application.DTOs.Bookings;
 using SmartParking.Application.DTOs.Parking;
 using SmartParking.Domain.Constants;
 
@@ -15,15 +16,18 @@ public class ParkingLotsController : ControllerBase
 {
     private readonly IParkingManagementService _parkingService;
     private readonly IParkingAuthorizationService _authService;
+    private readonly IBookingService _bookingService;
     private readonly ILogger<ParkingLotsController> _logger;
 
     public ParkingLotsController(
         IParkingManagementService parkingService,
         IParkingAuthorizationService authService,
+        IBookingService bookingService,
         ILogger<ParkingLotsController> logger)
     {
         _parkingService = parkingService;
         _authService = authService;
+        _bookingService = bookingService;
         _logger = logger;
     }
 
@@ -64,6 +68,29 @@ public class ParkingLotsController : ControllerBase
         {
             message = "Lấy thông tin chi tiết bãi đỗ xe thành công.",
             data = lot
+        });
+    }
+
+    /// <summary>
+    /// Lấy thông tin sức chứa và tình trạng khả dụng thời gian thực của bãi đỗ xe (Công khai).
+    /// Phục vụ hiển thị trực quan cho người dùng đặt chỗ và xe vãng lai.
+    /// </summary>
+    [HttpGet("{id:int}/capacity")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(LotCapacityDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetLotCapacity(int id, CancellationToken ct)
+    {
+        var capacity = await _bookingService.GetLotCapacityAsync(id, ct);
+        if (capacity == null)
+        {
+            return NotFound(new { message = $"Không tìm thấy bãi đỗ xe với ID: {id}." });
+        }
+
+        return Ok(new
+        {
+            message = "Lấy thông tin sức chứa bãi đỗ xe thành công.",
+            data = capacity
         });
     }
 

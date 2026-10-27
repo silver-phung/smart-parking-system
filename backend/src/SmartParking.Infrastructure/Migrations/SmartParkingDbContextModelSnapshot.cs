@@ -86,6 +86,102 @@ namespace SmartParking.Infrastructure.Migrations
                     b.ToTable("audit_logs", (string)null);
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.Booking", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cancellation_reason");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<DateTime?>("CheckedInAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_in_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("EndTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("end_time");
+
+                    b.Property<int>("LotId")
+                        .HasColumnType("integer")
+                        .HasColumnName("lot_id");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("PlateNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("plate_number");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("start_time");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("PENDING")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<long>("VehicleId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("vehicle_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bookings");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_bookings_user_id");
+
+                    b.HasIndex("VehicleId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_bookings_pending_vehicle")
+                        .HasFilter("status = 'PENDING'");
+
+                    b.HasIndex("LotId", "Status")
+                        .HasDatabaseName("ix_bookings_lot_status");
+
+                    b.HasIndex("PlateNumber", "Status")
+                        .HasDatabaseName("ix_bookings_plate_status");
+
+                    b.ToTable("bookings", null, t =>
+                        {
+                            t.HasCheckConstraint("chk_bookings_plate_normalized", "plate_number = UPPER(TRIM(plate_number))");
+
+                            t.HasCheckConstraint("chk_bookings_status", "status IN ('PENDING', 'CHECKED_IN', 'CANCELLED', 'EXPIRED')");
+
+                            t.HasCheckConstraint("chk_bookings_time_order", "end_time IS NULL OR end_time >= start_time");
+                        });
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingDispatch", b =>
                 {
                     b.Property<long>("Id")
@@ -304,6 +400,10 @@ namespace SmartParking.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
 
+                    b.Property<long?>("BookingId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("booking_id");
+
                     b.Property<string>("CheckInImageUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -375,6 +475,9 @@ namespace SmartParking.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_parking_sessions");
+
+                    b.HasIndex("BookingId")
+                        .IsUnique();
 
                     b.HasIndex("CheckInTime")
                         .HasDatabaseName("ix_parking_sessions_check_in_time");
@@ -968,6 +1071,36 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Navigation("Actor");
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.Booking", b =>
+                {
+                    b.HasOne("SmartParking.Domain.Entities.ParkingLot", "Lot")
+                        .WithMany("Bookings")
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_lot");
+
+                    b.HasOne("SmartParking.Domain.Entities.User", "User")
+                        .WithMany("Bookings")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_user");
+
+                    b.HasOne("SmartParking.Domain.Entities.Vehicle", "Vehicle")
+                        .WithMany("Bookings")
+                        .HasForeignKey("VehicleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_vehicle");
+
+                    b.Navigation("Lot");
+
+                    b.Navigation("User");
+
+                    b.Navigation("Vehicle");
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingDispatch", b =>
                 {
                     b.HasOne("SmartParking.Domain.Entities.ParkingSlot", "ActualSlot")
@@ -1011,6 +1144,12 @@ namespace SmartParking.Infrastructure.Migrations
 
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingSession", b =>
                 {
+                    b.HasOne("SmartParking.Domain.Entities.Booking", "Booking")
+                        .WithOne("Session")
+                        .HasForeignKey("SmartParking.Domain.Entities.ParkingSession", "BookingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_parking_sessions_booking");
+
                     b.HasOne("SmartParking.Domain.Entities.ParkingSlot", "CurrentSlot")
                         .WithMany("CurrentSessions")
                         .HasForeignKey("CurrentSlotId")
@@ -1029,6 +1168,8 @@ namespace SmartParking.Infrastructure.Migrations
                         .HasForeignKey("VehicleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_parking_sessions_vehicle");
+
+                    b.Navigation("Booking");
 
                     b.Navigation("CurrentSlot");
 
@@ -1142,6 +1283,11 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.Booking", b =>
+                {
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingFloor", b =>
                 {
                     b.Navigation("Slots");
@@ -1149,6 +1295,8 @@ namespace SmartParking.Infrastructure.Migrations
 
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingLot", b =>
                 {
+                    b.Navigation("Bookings");
+
                     b.Navigation("Floors");
 
                     b.Navigation("Sessions");
@@ -1181,6 +1329,8 @@ namespace SmartParking.Infrastructure.Migrations
 
                     b.Navigation("AuditLogs");
 
+                    b.Navigation("Bookings");
+
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("RevokedStaffAssignments");
@@ -1194,6 +1344,8 @@ namespace SmartParking.Infrastructure.Migrations
 
             modelBuilder.Entity("SmartParking.Domain.Entities.Vehicle", b =>
                 {
+                    b.Navigation("Bookings");
+
                     b.Navigation("Sessions");
                 });
 #pragma warning restore 612, 618

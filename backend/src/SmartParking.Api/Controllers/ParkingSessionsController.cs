@@ -56,7 +56,7 @@ public class ParkingSessionsController : ControllerBase
             {
                 return NotFound(new { message });
             }
-            if (message.Contains("chưa kết thúc (ACTIVE/PAID)") || message.Contains("hiện đang được phân công"))
+            if (message.Contains("chưa kết thúc (ACTIVE/PAID)") || message.Contains("hiện đang được phân công") || message.Contains("hết chỗ khả dụng") || message.Contains("đã hết chỗ"))
             {
                 return Conflict(new { message });
             }

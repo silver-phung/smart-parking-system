@@ -8,6 +8,7 @@ public class ParkingSessionDto
     public int LotId { get; set; }
     public string LotName { get; set; } = string.Empty;
     public long? VehicleId { get; set; }
+    public long? BookingId { get; set; }
     public string PlateNumber { get; set; } = string.Empty;
     public DateTime CheckInTime { get; set; }
     public DateTime? CheckOutTime { get; set; }
