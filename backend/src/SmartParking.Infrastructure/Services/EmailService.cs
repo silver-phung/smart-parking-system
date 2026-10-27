@@ -41,9 +41,9 @@ public class EmailService : IEmailService
         }
 
         // 3. Validate required SMTP settings
-        if (string.IsNullOrWhiteSpace(_options.Host) || string.IsNullOrWhiteSpace(_options.SenderEmail))
+        if (string.IsNullOrWhiteSpace(_options.Host))
         {
-            _logger.LogError("Email sending failed: SMTP Host or SenderEmail is not configured.");
+            _logger.LogError("Email sending failed: SMTP Host is not configured.");
             return false;
         }
 
@@ -51,6 +51,25 @@ public class EmailService : IEmailService
         if (_environment.IsProduction() && (string.IsNullOrWhiteSpace(_options.UserName) || string.IsNullOrWhiteSpace(_options.Password)))
         {
             _logger.LogError("CRITICAL SECURITY VIOLATION: In Production, SMTP UserName and Password must be configured. Anonymous relay is rejected.");
+            return false;
+        }
+
+        // 5. In Development, if using Gmail SMTP without credentials, fail fast with actionable guidance
+        if (_options.Host.Contains("gmail.com", StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(_options.UserName) || string.IsNullOrWhiteSpace(_options.Password)))
+        {
+            _logger.LogWarning("Email sending skipped: Gmail SMTP requires authentication. Please configure credentials via User Secrets (e.g. dotnet user-secrets set \"Email:UserName\" \"...\" and \"Email:Password\" \"...\") or switch Email:Provider to 'Mock' for local simulation.");
+            return false;
+        }
+
+        // Resolve effective sender email (if SenderEmail is default placeholder 'noreply@smartparking.vn' or empty, use UserName if it's an email)
+        var senderEmail = !string.IsNullOrWhiteSpace(_options.SenderEmail) && !string.Equals(_options.SenderEmail, "noreply@smartparking.vn", StringComparison.OrdinalIgnoreCase)
+            ? _options.SenderEmail
+            : (!string.IsNullOrWhiteSpace(_options.UserName) && _options.UserName.Contains('@') ? _options.UserName : _options.SenderEmail);
+
+        if (string.IsNullOrWhiteSpace(senderEmail))
+        {
+            _logger.LogError("Email sending failed: SenderEmail is not configured.");
             return false;
         }
 
@@ -67,7 +86,8 @@ public class EmailService : IEmailService
 
             if (!string.IsNullOrWhiteSpace(_options.UserName) && !string.IsNullOrWhiteSpace(_options.Password))
             {
-                client.Credentials = new NetworkCredential(_options.UserName, _options.Password);
+                var sanitizedPassword = _options.Password.Replace(" ", "").Trim();
+                client.Credentials = new NetworkCredential(_options.UserName.Trim(), sanitizedPassword);
             }
 
             var subject = "Mã xác minh tài khoản Smart Parking";
@@ -104,7 +124,7 @@ Trân trọng,
 
             using var message = new MailMessage
             {
-                From = new MailAddress(_options.SenderEmail, _options.SenderName),
+                From = new MailAddress(senderEmail, _options.SenderName),
                 Subject = subject,
                 Body = plainTextBody,
                 IsBodyHtml = false

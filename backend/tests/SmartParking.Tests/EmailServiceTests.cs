@@ -110,4 +110,27 @@ public class EmailServiceTests
         // Assert
         Assert.False(result);
     }
+
+    [Fact]
+    public async Task SendVerificationOtpAsync_WhenGmailHostInDevWithoutCredentials_ReturnsFalseGracefully()
+    {
+        // Arrange: In Development, when Gmail SMTP is selected without credentials, it fails fast gracefully
+        var devEnv = new FakeHostEnvironment { EnvironmentName = Environments.Development };
+        var options = Options.Create(new EmailOptions
+        {
+            Provider = "Smtp",
+            Host = "smtp.gmail.com",
+            Port = 587,
+            SenderEmail = "noreply@smartparking.vn",
+            UserName = "",
+            Password = ""
+        });
+        var service = new EmailService(options, devEnv, NullLogger<EmailService>.Instance);
+
+        // Act
+        var result = await service.SendVerificationOtpAsync("test@example.com", "123456");
+
+        // Assert
+        Assert.False(result);
+    }
 }
