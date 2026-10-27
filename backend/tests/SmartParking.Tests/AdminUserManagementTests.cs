@@ -1,0 +1,540 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using SmartParking.Application.Common.Interfaces;
+using SmartParking.Application.Common.Models;
+using SmartParking.Application.DTOs.AdminUsers;
+using SmartParking.Domain.Constants;
+using SmartParking.Domain.Entities;
+using SmartParking.Infrastructure.Data;
+using SmartParking.Infrastructure.Services;
+using Xunit;
+
+namespace SmartParking.Tests;
+
+public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactory>
+{
+    private readonly CustomWebApplicationFactory _factory;
+
+    public AdminUserManagementTests(CustomWebApplicationFactory factory)
+    {
+        _factory = factory;
+    }
+
+    private async Task<(AdminUserService Service, TestSmartParkingDbContext Context, User Admin1, User Admin2, User Manager, User Staff, User RegularUser, ParkingLot Lot)> SetupServiceAsync()
+    {
+        var context = await TestDbHelper.CreateInMemoryDbContextAsync();
+        var passwordHasher = new PasswordHasherService();
+        var service = new AdminUserService(context, passwordHasher, NullLogger<AdminUserService>.Instance);
+
+        var admin1 = new User
+        {
+            Id = 1,
+            Username = "super_admin",
+            Email = "admin1@smartparking.test",
+            FullName = "Super Admin",
+            PasswordHash = "hash1",
+            RoleId = 1,
+            IsActive = true,
+            ApprovalStatus = ApprovalStatuses.Approved
+        };
+
+        var admin2 = new User
+        {
+            Id = 2,
+            Username = "backup_admin",
+            Email = "admin2@smartparking.test",
+            FullName = "Backup Admin",
+            PasswordHash = "hash2",
+            RoleId = 1,
+            IsActive = true,
+            ApprovalStatus = ApprovalStatuses.Approved
+        };
+
+        var manager = new User
+        {
+            Id = 3,
+            Username = "manager_john",
+            Email = "john.manager@smartparking.test",
+            FullName = "John Manager",
+            PasswordHash = "hash3",
+            RoleId = 2,
+            IsActive = true,
+            ApprovalStatus = ApprovalStatuses.Approved
+        };
+
+        var staff = new User
+        {
+            Id = 4,
+            Username = "staff_alice",
+            Email = "alice.staff@smartparking.test",
+            FullName = "Alice Staff",
+            PasswordHash = "hash4",
+            RoleId = 3,
+            IsActive = true,
+            ApprovalStatus = ApprovalStatuses.Approved
+        };
+
+        var regularUser = new User
+        {
+            Id = 5,
+            Username = "user_bob",
+            Email = "bob.user@smartparking.test",
+            FullName = "Bob Driver",
+            PasswordHash = "hash5",
+            RoleId = 4,
+            IsActive = true,
+            ApprovalStatus = ApprovalStatuses.Approved
+        };
+
+        var lot = new ParkingLot
+        {
+            Id = 1,
+            Name = "Lot Alpha",
+            Address = "123 Main St",
+            TotalCapacity = 50,
+            IsActive = true
+        };
+
+        context.Users.AddRange(admin1, admin2, manager, staff, regularUser);
+        context.ParkingLots.Add(lot);
+        await context.SaveChangesAsync();
+
+        return (service, context, admin1, admin2, manager, staff, regularUser, lot);
+    }
+
+    #region Unit Tests - AdminUserService
+
+    [Fact]
+    public async Task GetUsersAsync_WithPaginationAndFilter_ReturnsCorrectUsers()
+    {
+        var (service, _, _, _, _, _, _, _) = await SetupServiceAsync();
+
+        // Filter by role MANAGER
+        var result = await service.GetUsersAsync(new AdminUserFilterDto { Role = Roles.Manager });
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal("manager_john", result.Items[0].Username);
+        Assert.Equal(Roles.Manager, result.Items[0].Role);
+    }
+
+    [Fact]
+    public async Task GetUsersAsync_WithSearchQuery_MatchesUsernameAndEmail()
+    {
+        var (service, _, _, _, _, _, _, _) = await SetupServiceAsync();
+
+        var result = await service.GetUsersAsync(new AdminUserFilterDto { Search = "alice" });
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("staff_alice", result.Items[0].Username);
+    }
+
+    [Fact]
+    public async Task GetUserByIdAsync_WhenUserExists_ReturnsDetailWithLotAssignments()
+    {
+        var (service, context, _, _, manager, _, _, lot) = await SetupServiceAsync();
+
+        // Add a lot assignment for the manager
+        context.StaffLotAssignments.Add(new StaffLotAssignment
+        {
+            UserId = manager.Id,
+            LotId = lot.Id,
+            IsActive = true,
+            AssignedBy = 1,
+            AssignedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var detail = await service.GetUserByIdAsync(manager.Id);
+
+        Assert.NotNull(detail);
+        Assert.Equal(manager.Username, detail.Username);
+        Assert.Equal(1, detail.ActiveAssignmentsCount);
+        Assert.Single(detail.ActiveAssignments);
+        Assert.Equal(lot.Name, detail.ActiveAssignments[0].LotName);
+    }
+
+    [Fact]
+    public async Task GetUserByIdAsync_WhenUserDoesNotExist_ReturnsNull()
+    {
+        var (service, _, _, _, _, _, _, _) = await SetupServiceAsync();
+
+        var detail = await service.GetUserByIdAsync(99999);
+
+        Assert.Null(detail);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithValidStaffRole_CreatesPreApprovedAccountWithAudit()
+    {
+        var (service, context, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "new_staff_01",
+            Email = "newstaff01@smartparking.test",
+            Password = "Password123@",
+            FullName = "New Staff Member",
+            PhoneNumber = "0987654321",
+            Role = Roles.Staff,
+            IsActive = true
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.True(result.Success);
+        Assert.Equal(201, result.StatusCode);
+        Assert.NotNull(result.Data);
+        Assert.Equal("new_staff_01", result.Data.Username);
+        Assert.Equal(Roles.Staff, result.Data.Role);
+        Assert.True(result.Data.IsActive);
+        Assert.True(result.Data.IsEmailVerified);
+        Assert.Equal(ApprovalStatuses.Approved, result.Data.ApprovalStatus);
+
+        // Verify audit log
+        var audit = context.AuditLogs.FirstOrDefault(a => a.TargetId == result.Data.Id.ToString() && a.Action == "CREATE_USER");
+        Assert.NotNull(audit);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithDuplicateUsername_Returns409Conflict()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "manager_john", // Existing username
+            Email = "unique_email@smartparking.test",
+            Password = "Password123@",
+            FullName = "Duplicate User",
+            Role = Roles.Staff
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(409, result.StatusCode);
+        Assert.Contains("Tên đăng nhập đã được sử dụng", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithInvalidRole_Returns400BadRequest()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "invalid_role_user",
+            Email = "invalidrole@smartparking.test",
+            Password = "Password123@",
+            FullName = "Invalid Role",
+            Role = "SUPER_DEVELOPER"
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("không hợp lệ", result.Message);
+    }
+
+    [Fact]
+    public async Task UpdateUserStatusAsync_DisablingStaff_RevokesActiveAssignmentsAndTokens()
+    {
+        var (service, context, admin1, _, _, staff, _, lot) = await SetupServiceAsync();
+
+        // Give staff an active assignment and a refresh token
+        var assignment = new StaffLotAssignment
+        {
+            UserId = staff.Id,
+            LotId = lot.Id,
+            IsActive = true,
+            AssignedBy = admin1.Id,
+            AssignedAt = DateTime.UtcNow
+        };
+        var token = new RefreshToken
+        {
+            UserId = staff.Id,
+            TokenHash = "token_hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IsRevoked = false
+        };
+        context.StaffLotAssignments.Add(assignment);
+        context.RefreshTokens.Add(token);
+        await context.SaveChangesAsync();
+
+        var result = await service.UpdateUserStatusAsync(
+            staff.Id,
+            new AdminUpdateStatusRequestDto { IsActive = false, Reason = "Tạm ngưng hợp đồng." },
+            admin1.Id,
+            "127.0.0.1");
+
+        Assert.True(result.Success);
+        Assert.Equal(200, result.StatusCode);
+        Assert.False(result.Data!.IsActive);
+
+        // Verify assignment is revoked
+        var refreshedAssignment = await context.StaffLotAssignments.FindAsync(assignment.Id);
+        Assert.False(refreshedAssignment!.IsActive);
+        Assert.Equal(admin1.Id, refreshedAssignment.RevokedBy);
+        Assert.Contains("Tạm ngưng hợp đồng", refreshedAssignment.RevocationReason);
+
+        // Verify refresh token is revoked
+        var refreshedToken = await context.RefreshTokens.FindAsync(token.Id);
+        Assert.True(refreshedToken!.IsRevoked);
+
+        // Verify audit log
+        var audit = context.AuditLogs.FirstOrDefault(a => a.TargetId == staff.Id.ToString() && a.Action == "UPDATE_USER_STATUS");
+        Assert.NotNull(audit);
+    }
+
+    [Fact]
+    public async Task UpdateUserStatusAsync_WhenAdminDisablesSelf_Returns400BadRequest()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var result = await service.UpdateUserStatusAsync(
+            admin1.Id,
+            new AdminUpdateStatusRequestDto { IsActive = false },
+            admin1.Id,
+            "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("không thể tự vô hiệu hóa", result.Message);
+    }
+
+    [Fact]
+    public async Task UpdateUserStatusAsync_WhenDisablingLastActiveAdmin_Returns400BadRequest()
+    {
+        var (service, context, admin1, admin2, _, _, _, _) = await SetupServiceAsync();
+
+        // Deactivate admin2 first, leaving admin1 as the sole active admin
+        admin2.IsActive = false;
+        await context.SaveChangesAsync();
+
+        // Attempting to disable admin1 by another actor
+        var result = await service.UpdateUserStatusAsync(
+            admin1.Id,
+            new AdminUpdateStatusRequestDto { IsActive = false },
+            999, // Another caller
+            "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("cuối cùng của hệ thống", result.Message);
+    }
+
+    [Fact]
+    public async Task UpdateUserRoleAsync_DemotingStaffToUser_RevokesLotAssignments()
+    {
+        var (service, context, admin1, _, _, staff, _, lot) = await SetupServiceAsync();
+
+        var assignment = new StaffLotAssignment
+        {
+            UserId = staff.Id,
+            LotId = lot.Id,
+            IsActive = true,
+            AssignedBy = admin1.Id,
+            AssignedAt = DateTime.UtcNow
+        };
+        context.StaffLotAssignments.Add(assignment);
+        await context.SaveChangesAsync();
+
+        var result = await service.UpdateUserRoleAsync(
+            staff.Id,
+            new AdminUpdateRoleRequestDto { Role = Roles.User, Reason = "Chuyển thành khách hàng tiêu chuẩn." },
+            admin1.Id,
+            "127.0.0.1");
+
+        Assert.True(result.Success);
+        Assert.Equal(200, result.StatusCode);
+        Assert.Equal(Roles.User, result.Data!.Role);
+
+        // Assignment must be revoked since USER cannot have lot assignments
+        var refreshedAssignment = await context.StaffLotAssignments.FindAsync(assignment.Id);
+        Assert.False(refreshedAssignment!.IsActive);
+        Assert.Contains("USER", refreshedAssignment.RevocationReason);
+
+        // Audit log exists
+        var audit = context.AuditLogs.FirstOrDefault(a => a.TargetId == staff.Id.ToString() && a.Action == "UPDATE_USER_ROLE");
+        Assert.NotNull(audit);
+    }
+
+    [Fact]
+    public async Task UpdateUserRoleAsync_WhenAdminDemotesSelf_Returns400BadRequest()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var result = await service.UpdateUserRoleAsync(
+            admin1.Id,
+            new AdminUpdateRoleRequestDto { Role = Roles.Manager },
+            admin1.Id,
+            "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("không thể tự hạ quyền", result.Message);
+    }
+
+    [Fact]
+    public async Task UpdateUserRoleAsync_WhenDemotingLastActiveAdmin_Returns400BadRequest()
+    {
+        var (service, context, admin1, admin2, _, _, _, _) = await SetupServiceAsync();
+
+        // Deactivate admin2 so admin1 is the only active admin
+        admin2.IsActive = false;
+        await context.SaveChangesAsync();
+
+        var result = await service.UpdateUserRoleAsync(
+            admin1.Id,
+            new AdminUpdateRoleRequestDto { Role = Roles.Manager },
+            999,
+            "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("cuối cùng của hệ thống", result.Message);
+    }
+
+    #endregion
+
+    #region Integration HTTP Tests - Role Authorization & Endpoints
+
+    private HttpClient CreateClientForRole(string role)
+    {
+        var client = _factory.CreateClient();
+        using var scope = _factory.Services.CreateScope();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+        var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
+
+        var roleId = role switch
+        {
+            Roles.Admin => 1,
+            Roles.Manager => 2,
+            Roles.Staff => 3,
+            _ => 4
+        };
+
+        var userId = 8000L + roleId;
+        var user = db.Users.Find(userId);
+        if (user == null)
+        {
+            user = new User
+            {
+                Id = userId,
+                Username = $"admin_test_{role.ToLower()}",
+                Email = $"{role.ToLower()}_mgmt@smartparking.test",
+                FullName = $"Admin Test {role}",
+                PasswordHash = "dummy_hash",
+                RoleId = roleId,
+                IsActive = true,
+                ApprovalStatus = ApprovalStatuses.Approved
+            };
+            db.Users.Add(user);
+            db.SaveChanges();
+        }
+
+        var token = tokenService.GenerateAccessToken(user, role);
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
+    [Fact]
+    public async Task AdminEndpoints_WithoutToken_Return401Unauthorized()
+    {
+        var unauthenticatedClient = _factory.CreateClient();
+
+        var response = await unauthenticatedClient.GetAsync("/api/v1/admin/users");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Manager)]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.User)]
+    public async Task AdminEndpoints_CalledByNonAdminRoles_Return403Forbidden(string role)
+    {
+        var nonAdminClient = CreateClientForRole(role);
+
+        var getResponse = await nonAdminClient.GetAsync("/api/v1/admin/users");
+        Assert.Equal(HttpStatusCode.Forbidden, getResponse.StatusCode);
+
+        var postResponse = await nonAdminClient.PostAsJsonAsync("/api/v1/admin/users", new AdminCreateUserRequestDto
+        {
+            Username = "some_user",
+            Email = "user@test.com",
+            Password = "Password123@",
+            FullName = "Some User",
+            Role = Roles.Staff
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, postResponse.StatusCode);
+
+        var patchStatusResponse = await nonAdminClient.PatchAsJsonAsync("/api/v1/admin/users/1/status", new AdminUpdateStatusRequestDto
+        {
+            IsActive = false
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, patchStatusResponse.StatusCode);
+
+        var patchRoleResponse = await nonAdminClient.PatchAsJsonAsync("/api/v1/admin/users/1/role", new AdminUpdateRoleRequestDto
+        {
+            Role = Roles.User
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, patchRoleResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminEndpoints_CalledByAdmin_Succeed()
+    {
+        var adminClient = CreateClientForRole(Roles.Admin);
+
+        // 1. GET /api/v1/admin/users
+        var getListResponse = await adminClient.GetAsync("/api/v1/admin/users?page=1&pageSize=10");
+        Assert.Equal(HttpStatusCode.OK, getListResponse.StatusCode);
+
+        // 2. POST /api/v1/admin/users (Create a new Staff)
+        var uniqueSuffix = Guid.NewGuid().ToString("N")[..6];
+        var createRequest = new AdminCreateUserRequestDto
+        {
+            Username = $"staff_{uniqueSuffix}",
+            Email = $"staff_{uniqueSuffix}@smartparking.test",
+            Password = "Password123@",
+            FullName = "Integration Staff",
+            PhoneNumber = "0901234567",
+            Role = Roles.Staff,
+            IsActive = true
+        };
+
+        var createResponse = await adminClient.PostAsJsonAsync("/api/v1/admin/users", createRequest);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var createdJson = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var newUserId = createdJson.GetProperty("data").GetProperty("id").GetInt64();
+
+        // 3. GET /api/v1/admin/users/{id}
+        var getDetailResponse = await adminClient.GetAsync($"/api/v1/admin/users/{newUserId}");
+        Assert.Equal(HttpStatusCode.OK, getDetailResponse.StatusCode);
+
+        // 4. PATCH /api/v1/admin/users/{id}/status (Disable account)
+        var patchStatusResponse = await adminClient.PatchAsJsonAsync($"/api/v1/admin/users/{newUserId}/status", new AdminUpdateStatusRequestDto
+        {
+            IsActive = false,
+            Reason = "Vô hiệu hóa thử nghiệm"
+        });
+        Assert.Equal(HttpStatusCode.OK, patchStatusResponse.StatusCode);
+
+        // 5. PATCH /api/v1/admin/users/{id}/role (Elevate to Manager)
+        var patchRoleResponse = await adminClient.PatchAsJsonAsync($"/api/v1/admin/users/{newUserId}/role", new AdminUpdateRoleRequestDto
+        {
+            Role = Roles.Manager,
+            Reason = "Thăng cấp lên quản lý"
+        });
+        Assert.Equal(HttpStatusCode.OK, patchRoleResponse.StatusCode);
+    }
+
+    #endregion
+}

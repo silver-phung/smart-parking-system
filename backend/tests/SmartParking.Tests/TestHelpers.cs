@@ -102,6 +102,7 @@ public class CustomWebApplicationFactory : Microsoft.AspNetCore.Mvc.Testing.WebA
             {
                 options.UseInMemoryDatabase(_dbName);
                 options.UseInternalServiceProvider(inMemoryServiceProvider);
+                options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning));
             });
 
             services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<SmartParkingDbContext>());
