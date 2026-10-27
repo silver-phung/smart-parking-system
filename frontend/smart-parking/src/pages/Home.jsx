@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import AnchorLink from "../components/AnchorLink.jsx";
 import { apiRequest } from "../services/api.js";
+import { getAuthSession, subscribeAuthSession } from "../services/authSession.js";
 
 const highlights = [
   "Biết chỗ đậu xe còn trống trên web, không phải chạy vòng tìm chỗ",
@@ -171,31 +172,56 @@ function ParkingIllustration() {
 }
 
 export default function Home() {
-  const [isParkingMapOpen, setIsParkingMapOpen] = useState(false);
-  const [slots, setSlots] = useState([]);
-  const [slotsLoading, setSlotsLoading] = useState(true);
-  const [slotsError, setSlotsError] = useState("");
-  const loadSlots = useCallback(async () => {
-    try {
-      const data = await apiRequest("/parking-slots");
-      setSlots(data.slots);
-      setSlotsError("");
-    } catch (error) {
-      setSlotsError(error.message);
-    } finally {
-      setSlotsLoading(false);
-    }
+  const session = useSyncExternalStore(
+    subscribeAuthSession,
+    getAuthSession,
+    getAuthSession
+  );
+  const [systemStatus, setSystemStatus] = useState({
+    health: null,
+    info: null,
+    healthError: "",
+    infoError: "",
+    loading: true,
+    checkedAt: null,
+  });
+  const loadSystemStatus = useCallback(async () => {
+    setSystemStatus((current) => ({ ...current, loading: true }));
+    const [healthResult, infoResult] = await Promise.allSettled([
+      apiRequest("/system/health"),
+      apiRequest("/system/info"),
+    ]);
+
+    setSystemStatus({
+      health: healthResult.status === "fulfilled" ? healthResult.value : null,
+      info: infoResult.status === "fulfilled" ? infoResult.value : null,
+      healthError: healthResult.status === "rejected" ? healthResult.reason.message : "",
+      infoError: infoResult.status === "rejected" ? infoResult.reason.message : "",
+      loading: false,
+      checkedAt: new Date(),
+    });
   }, []);
 
   useEffect(() => {
-    void loadSlots();
-    const refreshTimer = window.setInterval(loadSlots, 30000);
+    void loadSystemStatus();
+    const refreshTimer = window.setInterval(loadSystemStatus, 30000);
     return () => window.clearInterval(refreshTimer);
-  }, [loadSlots]);
+  }, [loadSystemStatus]);
 
-  const occupiedSlots = slots.filter((slot) => slot.status === "occupied").length;
-  const availableSlots = slots.filter((slot) => slot.status === "available").length;
-  const parkingRows = [...new Set(slots.map((slot) => slot.code.replace(/\d+$/, "")))];
+  const healthOnline = systemStatus.health?.status === "Healthy";
+  const infoOnline = systemStatus.info?.status === "Online";
+  const apiOnline = healthOnline && infoOnline;
+  const apiPartiallyOnline = healthOnline || infoOnline;
+  const apiStatusLabel = apiOnline
+    ? "Đang hoạt động"
+    : apiPartiallyOnline
+      ? "Hoạt động một phần"
+      : "Chưa kết nối";
+  const formatTimestamp = (value) => {
+    if (!value) return "Chưa có dữ liệu";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Chưa có dữ liệu" : date.toLocaleString("vi-VN");
+  };
 
   return (
     <>
@@ -218,9 +244,15 @@ export default function Home() {
             <AnchorLink id="cach-hoat-dong" className="btn btn--primary btn--lg">
               Xem cách thức hoạt động
             </AnchorLink>
-            <Link to="/register" className="btn btn--dark-outline btn--lg">
-              Đăng ký tài khoản
-            </Link>
+            {session?.userProfile.role === "USER" ? (
+              <Link to="/customer" className="btn btn--dark-outline btn--lg">
+                Đăng ký bãi đỗ / chọn chỗ đỗ
+              </Link>
+            ) : !session ? (
+              <Link to="/login" className="btn btn--dark-outline btn--lg">
+                Đăng nhập để chọn bãi đỗ
+              </Link>
+            ) : null}
           </div>
         </div>
         <div className="hero__art">
@@ -292,137 +324,73 @@ export default function Home() {
             <span className="icon-box icon-box--blue">
               <Icon name="pin" />
             </span>
-            <h3>Quản lý chỗ đậu theo vị trí</h3>
+            <h3>Trạng thái API hệ thống</h3>
             <p className="muted">
-              Mỗi chỗ đậu được quản lý theo vị trí riêng. Khi một xe được gán vào vị trí nào, hệ
-              thống đánh dấu vị trí đó là đã có xe và cập nhật trên sơ đồ bãi, trong app.
+              Theo dõi tình trạng hoạt động và thông tin môi trường từ các API hiện có của Smart
+              Parking.
             </p>
-            {slotsLoading && <p className="parking-data-message">Đang tải trạng thái bãi đỗ...</p>}
-            {slotsError && (
-              <div className="parking-data-message parking-data-message--error" role="alert">
-                <span>{slotsError}</span>
-                <button type="button" onClick={() => void loadSlots()}>
-                  Thử lại
-                </button>
-              </div>
-            )}
-            {!slotsLoading && !slotsError && slots.length === 0 && (
-              <p className="parking-data-message">Chưa có dữ liệu vị trí chỗ đỗ.</p>
-            )}
-            {!slotsLoading && !slotsError && slots.length > 0 && (
-              <>
-                <div className="parking-status-summary" aria-label="Tổng quan bãi đỗ">
-                  <div>
-                    <strong>{availableSlots}</strong>
-                    <span>Chỗ trống</span>
-                  </div>
-                  <div>
-                    <strong>{occupiedSlots}</strong>
-                    <span>Đã có xe</span>
-                  </div>
-                  <div>
-                    <strong>{slots.length}</strong>
-                    <span>Tổng chỗ</span>
-                  </div>
-                </div>
-                <ul className="slots" aria-label="Trạng thái một số chỗ đậu">
-                  {slots.slice(0, 6).map((slot) => {
-                    const isOccupied = slot.status === "occupied";
-                    return (
-                      <li
-                        key={slot.code}
-                        className={isOccupied ? "slot slot--taken" : "slot slot--free"}
-                      >
-                        {slot.code} · {isOccupied ? "Có xe" : "Trống"}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            )}
-            <button
-              type="button"
-              className="parking-map-toggle"
-              aria-expanded={isParkingMapOpen}
-              aria-controls="parking-map"
-              disabled={slotsLoading || slotsError || slots.length === 0}
-              onClick={() => setIsParkingMapOpen((isOpen) => !isOpen)}
-            >
-              {isParkingMapOpen ? "Thu gọn sơ đồ" : "Xem sơ đồ tất cả vị trí"}
-              <span aria-hidden="true">{isParkingMapOpen ? "−" : "+"}</span>
-            </button>
-            {isParkingMapOpen && !slotsLoading && !slotsError && slots.length > 0 && (
-              <div id="parking-map" className="parking-map">
-                <div className="parking-map__heading">
-                  <div>
-                    <strong>Sơ đồ bãi đỗ</strong>
-                    <span>{slots.length} vị trí · {parkingRows.length} hàng</span>
-                  </div>
-                  <span className="parking-map__demo">ĐỒNG BỘ TỪ API</span>
-                </div>
-                <div className="parking-map__road" aria-hidden="true">
-                  LỐI DI CHUYỂN
-                </div>
-                <div className="parking-map__rows">
-                  {parkingRows.map((row) => (
-                    <div className="parking-map__row" key={row}>
-                      <span className="parking-map__row-label">Hàng {row}</span>
-                      <ul className="parking-map__slots" aria-label={`Vị trí hàng ${row}`}>
-                        {slots
-                          .filter((slot) => slot.code.replace(/\d+$/, "") === row)
-                          .map((slot) => (
-                            <li
-                              key={slot.code}
-                              className={`parking-map__slot ${
-                                slot.status === "occupied"
-                                  ? "parking-map__slot--taken"
-                                  : "parking-map__slot--free"
-                              }`}
-                            >
-                              <span className="parking-map__car" aria-hidden="true">
-                                {slot.status === "occupied" ? "▰" : "P"}
-                              </span>
-                              <strong>{slot.code}</strong>
-                              <small>{slot.status === "occupied" ? "Có xe" : "Trống"}</small>
-                            </li>
-                          ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-                <div className="parking-map__legend" aria-label="Chú giải">
-                  <span>
-                    <i className="parking-map__legend-mark parking-map__legend-mark--free" />
-                    Còn trống
-                  </span>
-                  <span>
-                    <i className="parking-map__legend-mark parking-map__legend-mark--taken" />
-                    Đã có xe
-                  </span>
+            <div className="api-status-card">
+              <div className="api-status-card__heading">
+                <span className={`api-status-card__indicator ${apiOnline ? "is-online" : apiPartiallyOnline ? "is-partial" : ""}`} />
+                <div>
+                  <strong>{systemStatus.info?.service || "Smart Parking API"}</strong>
+                  <span>{systemStatus.loading ? "Đang kiểm tra kết nối..." : apiStatusLabel}</span>
                 </div>
               </div>
-            )}
+              <dl className="api-status-card__details">
+                <div>
+                  <dt>Health check</dt>
+                  <dd>{systemStatus.health?.status || (systemStatus.healthError ? "Không khả dụng" : "Đang kiểm tra")}</dd>
+                </div>
+                <div>
+                  <dt>API hệ thống</dt>
+                  <dd>{systemStatus.info?.status || (systemStatus.infoError ? "Không khả dụng" : "Đang kiểm tra")}</dd>
+                </div>
+                <div>
+                  <dt>Môi trường</dt>
+                  <dd>{systemStatus.info?.environment || "Chưa có dữ liệu"}</dd>
+                </div>
+                <div>
+                  <dt>Kiểm tra lần cuối</dt>
+                  <dd>{formatTimestamp(systemStatus.checkedAt)}</dd>
+                </div>
+              </dl>
+              {(systemStatus.healthError || systemStatus.infoError) && (
+                <div className="api-status-card__error" role="alert">
+                  {[systemStatus.healthError, systemStatus.infoError].filter(Boolean).join(" ")}
+                </div>
+              )}
+              <button
+                type="button"
+                className="api-status-card__refresh"
+                onClick={() => void loadSystemStatus()}
+                disabled={systemStatus.loading}
+              >
+                {systemStatus.loading ? "Đang kiểm tra..." : "Kiểm tra lại"}
+              </button>
+            </div>
           </article>
         </div>
       </section>
 
-      {/* ---------- CTA ---------- */}
-      <section className="container cta-wrap">
-        <div className="cta">
-          <div>
-            <h2>Sẵn sàng đậu xe thông minh hơn?</h2>
-            <p>Tạo tài khoản để đặt chỗ từ app và xem lịch sử gửi xe của bạn.</p>
+      {!session && (
+        <section className="container cta-wrap">
+          <div className="cta">
+            <div>
+              <h2>Sẵn sàng đậu xe thông minh hơn?</h2>
+              <p>Tạo tài khoản để đặt chỗ từ app và xem lịch sử gửi xe của bạn.</p>
+            </div>
+            <div className="cta__actions">
+              <Link to="/login" className="btn btn--white-outline btn--lg">
+                Đăng nhập
+              </Link>
+              <Link to="/register" className="btn btn--yellow btn--lg">
+                Đăng ký
+              </Link>
+            </div>
           </div>
-          <div className="cta__actions">
-            <Link to="/login" className="btn btn--white-outline btn--lg">
-              Đăng nhập
-            </Link>
-            <Link to="/register" className="btn btn--yellow btn--lg">
-              Đăng ký
-            </Link>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
     </>
   );
 }

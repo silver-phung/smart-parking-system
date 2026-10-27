@@ -2,28 +2,56 @@ import { Component } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout.jsx";
 import { apiRequest } from "../services/api.js";
+import { setAuthSession } from "../services/authSession.js";
+
+const demoAccounts = {
+  ADMIN: "admin",
+  MANAGER: "manager",
+  STAFF: "staff",
+  USER: "user",
+};
 
 class LoginForm extends Component {
-  state = { username: "", password: "", remember: false, error: "", loading: false };
+  state = {
+    role: "USER",
+    username: demoAccounts.USER,
+    password: "",
+    error: "",
+    loading: false,
+  };
 
   onChange = (event) => {
-    const { name, type, checked, value } = event.target;
-    this.setState({ [name]: type === "checkbox" ? checked : value, error: "" });
+    const { name, value } = event.target;
+    this.setState((current) => ({
+      [name]: value,
+      ...(name === "role" ? { username: demoAccounts[value] } : {}),
+      error: "",
+    }));
   };
 
   onSubmit = async (event) => {
     event.preventDefault();
     this.setState({ loading: true, error: "" });
     try {
-      await apiRequest("/auth/login", {
+      const response = await apiRequest("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
           username: this.state.username,
           password: this.state.password,
-          remember: this.state.remember,
         }),
+        skipAuth: true,
       });
-      this.props.navigate("/");
+      if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.userProfile) {
+        throw new Error("Phản hồi đăng nhập từ máy chủ không hợp lệ.");
+      }
+      setAuthSession(response.data);
+      const dashboardPaths = {
+        ADMIN: "/admin",
+        MANAGER: "/manager",
+        STAFF: "/staff",
+        USER: "/customer",
+      };
+      this.props.navigate(dashboardPaths[response.data.userProfile.role] || "/");
     } catch (error) {
       this.setState({ error: error.message });
     } finally {
@@ -42,12 +70,26 @@ class LoginForm extends Component {
           </p>
 
           <form className="auth-form" onSubmit={this.onSubmit}>
-            <label htmlFor="login-username">Tên đăng nhập hoặc email</label>
+            <label htmlFor="login-role">Tài khoản thử nghiệm</label>
+            <select
+              id="login-role"
+              name="role"
+              value={this.state.role}
+              onChange={this.onChange}
+              disabled={this.state.loading}
+            >
+              <option value="ADMIN">Quản trị viên (admin)</option>
+              <option value="MANAGER">Quản lý (manager)</option>
+              <option value="STAFF">Nhân viên (staff)</option>
+              <option value="USER">Người dùng (user)</option>
+            </select>
+
+            <label htmlFor="login-username">Tên đăng nhập</label>
             <input
               id="login-username"
               type="text"
               name="username"
-              placeholder="Tên đăng nhập hoặc email"
+              placeholder="Tên đăng nhập"
               autoComplete="username"
               value={this.state.username}
               onChange={this.onChange}
@@ -68,19 +110,6 @@ class LoginForm extends Component {
               required
             />
 
-            <div className="auth-form__options">
-              <label className="auth-checkbox">
-                <input
-                  type="checkbox"
-                  name="remember"
-                  checked={this.state.remember}
-                  onChange={this.onChange}
-                  disabled={this.state.loading}
-                />
-                <span>Ghi nhớ đăng nhập</span>
-              </label>
-            </div>
-
             {this.state.error && (
               <p className="auth-form__message auth-form__message--error" role="alert">
                 {this.state.error}
@@ -92,8 +121,9 @@ class LoginForm extends Component {
             </button>
           </form>
 
+          <p className="auth-switch">Đăng nhập bằng username và mật khẩu tài khoản thử nghiệm.</p>
           <p className="auth-switch">
-            Chưa có tài khoản? <Link to="/register">Tạo tài khoản</Link>
+            Đăng ký tài khoản mới? <Link to="/register">Tạo tài khoản</Link>
           </p>
           <p className="auth-terms">
             Bằng việc tiếp tục, bạn đồng ý với các điều khoản sử dụng của chúng tôi.

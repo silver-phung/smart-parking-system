@@ -1,5 +1,12 @@
-import { Link, NavLink } from "react-router-dom";
+import { useState, useSyncExternalStore } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import AnchorLink from "./AnchorLink.jsx";
+import { apiRequest } from "../services/api.js";
+import {
+  clearAuthSession,
+  getAuthSession,
+  subscribeAuthSession,
+} from "../services/authSession.js";
 
 export function Logo({ small = false }) {
   return (
@@ -10,7 +17,38 @@ export function Logo({ small = false }) {
   );
 }
 
+const dashboardPaths = {
+  ADMIN: "/admin",
+  MANAGER: "/manager",
+  STAFF: "/staff",
+};
+
 export default function Header() {
+  const { pathname } = useLocation();
+  const [logoutError, setLogoutError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
+  const session = useSyncExternalStore(
+    subscribeAuthSession,
+    getAuthSession,
+    getAuthSession
+  );
+
+  const logout = async () => {
+    setLoggingOut(true);
+    setLogoutError("");
+    try {
+      await apiRequest("/v1/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken: session.refreshToken }),
+      });
+      clearAuthSession();
+    } catch (error) {
+      setLogoutError(error.message);
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   return (
     <header className="header">
       <div className="container header__inner">
@@ -19,18 +57,57 @@ export default function Header() {
         </Link>
 
         <nav className="header__nav" aria-label="Điều hướng chính">
-          <AnchorLink id="gioi-thieu">Giới thiệu</AnchorLink>
-          <AnchorLink id="cach-hoat-dong">Cách thức hoạt động</AnchorLink>
-          <AnchorLink id="he-thong">Hệ thống</AnchorLink>
+          {session?.userProfile.role === "ADMIN" ? (
+            <>
+              <Link to="/admin#overview">Tổng quan</Link>
+              <Link to="/admin#parking-lots">Bãi đỗ</Link>
+              <Link to="/admin#active-sessions">Xe đang gửi</Link>
+              <Link to="/admin#finance">Tài chính</Link>
+            </>
+          ) : (
+            <>
+              <AnchorLink id="gioi-thieu">Giới thiệu</AnchorLink>
+              <AnchorLink id="cach-hoat-dong">Cách thức hoạt động</AnchorLink>
+              <AnchorLink id="he-thong">Hệ thống</AnchorLink>
+            </>
+          )}
         </nav>
 
         <div className="header__actions">
-          <NavLink to="/login" className="btn btn--outline">
-            Đăng nhập
-          </NavLink>
-          <NavLink to="/register" className="btn btn--primary">
-            Đăng ký
-          </NavLink>
+          {session ? (
+            <div className="header__session" key={pathname}>
+              <span>
+                {session.userProfile.fullName || session.userProfile.username} · {session.userProfile.role}
+              </span>
+              {session.userProfile.role === "USER" ? (
+                <>
+                  <NavLink to="/customer" className="btn btn--outline">
+                    Bãi đỗ
+                  </NavLink>
+                  <NavLink to="/customer/profile" className="btn btn--outline">
+                    Hồ sơ
+                  </NavLink>
+                </>
+              ) : dashboardPaths[session.userProfile.role] ? (
+                <NavLink to={dashboardPaths[session.userProfile.role]} className="btn btn--outline">
+                  Bảng điều khiển
+                </NavLink>
+              ) : null}
+              <button type="button" className="btn btn--outline" onClick={logout} disabled={loggingOut}>
+                {loggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
+              </button>
+              {logoutError && <span className="header__session-error" role="alert">{logoutError}</span>}
+            </div>
+          ) : (
+            <>
+              <NavLink to="/login" className="btn btn--outline">
+                Đăng nhập
+              </NavLink>
+              <NavLink to="/register" className="btn btn--primary">
+                Đăng ký
+              </NavLink>
+            </>
+          )}
         </div>
       </div>
     </header>

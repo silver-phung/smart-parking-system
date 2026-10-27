@@ -1,12 +1,19 @@
+import { getAuthSession } from "./authSession.js";
+
 export async function apiRequest(path, options = {}) {
   let response;
   try {
+    const accessToken = options.skipAuth
+      ? null
+      : getAuthSession()?.accessToken;
+    const { skipAuth, ...requestOptions } = options;
     response = await fetch(`/api${path}`, {
-      ...options,
+      ...requestOptions,
       credentials: "same-origin",
       headers: {
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...options.headers,
+        ...(requestOptions.body ? { "Content-Type": "application/json" } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...requestOptions.headers,
       },
     });
   } catch {
@@ -19,7 +26,7 @@ export async function apiRequest(path, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = data.error
+    const message = data.message || data.error
       || (response.status === 404
         ? "API này chưa được triển khai trong backend."
         : "Yêu cầu không thành công. Vui lòng thử lại.");
