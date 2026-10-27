@@ -161,27 +161,13 @@ public class BookingService : IBookingService
                     await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", lockKey, ct);
                 }
 
-                // Re-calculate authoritative capacity inside the lock
-                var physicalUsableSlots = await _context.ParkingSlots
-                    .CountAsync(s => s.Floor.LotId == lot.Id && s.IsActive && s.Floor.IsActive &&
-                                     s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
-                                     s.PhysicalStatus != SlotPhysicalStatuses.Unavailable, ct);
+                // Re-calculate authoritative capacity inside the lock with conservative IoT guard and strict slot fallback
+                var calc = await ParkingLotCapacityHelper.CalculateAsync(_context, lot.Id, lot, ct);
 
-                int totalCapacity = physicalUsableSlots > 0 ? physicalUsableSlots : lot.TotalCapacity;
-
-                var activeSessionsCount = await _context.ParkingSessions
-                    .CountAsync(s => s.LotId == lot.Id && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
-
-                var pendingBookingsCount = await _context.Bookings
-                    .CountAsync(b => b.LotId == lot.Id && b.Status == BookingStatuses.Pending, ct);
-
-                int totalOccupiedOrReserved = activeSessionsCount + pendingBookingsCount;
-                int availableForBooking = totalCapacity - totalOccupiedOrReserved;
-
-                if (availableForBooking <= 0)
+                if (calc.AvailableCapacity <= 0)
                 {
                     await transaction.RollbackAsync(ct);
-                    return (false, 409, $"Bãi đỗ xe '{lot.Name}' đã hết chỗ khả dụng để đặt trước (Sức chứa: {totalCapacity}, Đang đỗ: {activeSessionsCount}, Đang giữ chỗ: {pendingBookingsCount}).", null);
+                    return (false, 409, $"Bãi đỗ xe '{lot.Name}' đã hết chỗ khả dụng để đặt trước (Sức chứa: {calc.TotalCapacity}, Đang sử dụng hiệu dụng: {calc.EffectiveOccupied}, Đang giữ chỗ: {calc.PendingBookingsCount}).", null);
                 }
 
                 var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
@@ -374,60 +360,99 @@ public class BookingService : IBookingService
             }
         }
 
-        // State machine validation
-        if (booking.Status != BookingStatuses.Pending)
+        var lotLock = ParkingLotLockHelper.GetSemaphore(booking.LotId);
+        await lotLock.WaitAsync(ct);
+        try
         {
-            if (booking.Status == BookingStatuses.CheckedIn)
+            await using var transaction = await _context.BeginTransactionAsync(ct);
+            try
             {
-                return (false, 400, "Lượt đặt chỗ này đã được sử dụng (phương tiện đã check-in vào bãi), không thể hủy.", null);
+                if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    long lockKey = ParkingLotLockHelper.LotLockBase + booking.LotId;
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", lockKey, ct);
+                }
+
+                // Re-fetch booking inside transaction to guard against race with CheckIn
+                var lockedBooking = await _context.Bookings
+                    .Include(b => b.Lot)
+                    .Include(b => b.User)
+                    .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+
+                if (lockedBooking == null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, 404, $"Không tìm thấy lượt đặt chỗ với ID: {bookingId}.", null);
+                }
+
+                // State machine validation
+                if (lockedBooking.Status != BookingStatuses.Pending)
+                {
+                    await transaction.RollbackAsync(ct);
+                    if (lockedBooking.Status == BookingStatuses.CheckedIn)
+                    {
+                        return (false, 400, "Lượt đặt chỗ này đã được sử dụng (phương tiện đã check-in vào bãi), không thể hủy.", null);
+                    }
+                    if (lockedBooking.Status == BookingStatuses.Cancelled)
+                    {
+                        return (false, 400, "Lượt đặt chỗ này đã bị hủy trước đó.", null);
+                    }
+                    if (lockedBooking.Status == BookingStatuses.Expired)
+                    {
+                        return (false, 400, "Lượt đặt chỗ này đã hết hạn, không thể hủy.", null);
+                    }
+                    return (false, 400, $"Không thể hủy đặt chỗ ở trạng thái '{lockedBooking.Status}'.", null);
+                }
+
+                var reason = string.IsNullOrWhiteSpace(request.Reason)
+                    ? (currentUserRole == Roles.User ? "Người dùng yêu cầu hủy đặt chỗ." : "Nhân sự quản lý hủy đặt chỗ theo yêu cầu vận hành.")
+                    : request.Reason.Trim();
+
+                lockedBooking.Status = BookingStatuses.Cancelled;
+                lockedBooking.CancelledAt = DateTime.UtcNow;
+                lockedBooking.CancellationReason = reason;
+                lockedBooking.UpdatedAt = DateTime.UtcNow;
+
+                var audit = new AuditLog
+                {
+                    Action = "CANCEL_BOOKING",
+                    TargetEntity = "bookings",
+                    TargetId = lockedBooking.Id.ToString(),
+                    OldValues = JsonSerializer.Serialize(new { Status = BookingStatuses.Pending }, JsonOptions),
+                    NewValues = JsonSerializer.Serialize(new
+                    {
+                        Status = BookingStatuses.Cancelled,
+                        CancellationReason = reason,
+                        CancelledByUserId = currentUserId,
+                        CancelledByRole = currentUserRole,
+                        IpAddress = ipAddress
+                    }, JsonOptions),
+                    ActorId = currentUserId,
+                    IpAddress = ipAddress,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.AuditLogs.Add(audit);
+
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+
+                _logger.LogInformation("Booking {BookingId} for vehicle {PlateNumber} cancelled by user {UserId} ({UserRole})",
+                    lockedBooking.Id, lockedBooking.PlateNumber, currentUserId, currentUserRole);
+
+                var dto = MapToDto(lockedBooking, lockedBooking.Lot.Name, lockedBooking.Lot.Address, lockedBooking.User.Username);
+                return (true, 200, "Hủy lượt đặt chỗ thành công. Sức chứa giữ chỗ đã được giải phóng.", dto);
             }
-            if (booking.Status == BookingStatuses.Cancelled)
+            catch (Exception ex)
             {
-                return (false, 400, "Lượt đặt chỗ này đã bị hủy trước đó.", null);
+                await transaction.RollbackAsync(ct);
+                _logger.LogError(ex, "Lỗi khi hủy đặt chỗ ID {BookingId}", bookingId);
+                throw;
             }
-            if (booking.Status == BookingStatuses.Expired)
-            {
-                return (false, 400, "Lượt đặt chỗ này đã hết hạn, không thể hủy.", null);
-            }
-            return (false, 400, $"Không thể hủy đặt chỗ ở trạng thái '{booking.Status}'.", null);
         }
-
-        var reason = string.IsNullOrWhiteSpace(request.Reason)
-            ? (currentUserRole == Roles.User ? "Người dùng yêu cầu hủy đặt chỗ." : "Nhân sự quản lý hủy đặt chỗ theo yêu cầu vận hành.")
-            : request.Reason.Trim();
-
-        booking.Status = BookingStatuses.Cancelled;
-        booking.CancelledAt = DateTime.UtcNow;
-        booking.CancellationReason = reason;
-        booking.UpdatedAt = DateTime.UtcNow;
-
-        var audit = new AuditLog
+        finally
         {
-            Action = "CANCEL_BOOKING",
-            TargetEntity = "bookings",
-            TargetId = booking.Id.ToString(),
-            OldValues = JsonSerializer.Serialize(new { Status = BookingStatuses.Pending }, JsonOptions),
-            NewValues = JsonSerializer.Serialize(new
-            {
-                Status = BookingStatuses.Cancelled,
-                CancellationReason = reason,
-                CancelledByUserId = currentUserId,
-                CancelledByRole = currentUserRole,
-                IpAddress = ipAddress
-            }, JsonOptions),
-            ActorId = currentUserId,
-            IpAddress = ipAddress,
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.AuditLogs.Add(audit);
-
-        await _context.SaveChangesAsync(ct);
-
-        _logger.LogInformation("Booking {BookingId} for vehicle {PlateNumber} cancelled by user {UserId} ({UserRole})",
-            booking.Id, booking.PlateNumber, currentUserId, currentUserRole);
-
-        var dto = MapToDto(booking, booking.Lot.Name, booking.Lot.Address, booking.User.Username);
-        return (true, 200, "Hủy lượt đặt chỗ thành công. Sức chứa giữ chỗ đã được giải phóng.", dto);
+            lotLock.Release();
+        }
     }
 
     public async Task<PagedResult<BookingDto>> GetBookingsAsync(
@@ -508,7 +533,7 @@ public class BookingService : IBookingService
         return PagedResult<BookingDto>.Create(dtos, totalCount, page, pageSize);
     }
 
-    public async Task<LotCapacityDto?> GetLotCapacityAsync(int lotId, CancellationToken ct = default)
+    public async Task<LotCapacityDto?> GetLotCapacityAsync(int lotId, bool isStaffOrAdmin = false, CancellationToken ct = default)
     {
         var lot = await _context.ParkingLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct);
         if (lot == null)
@@ -516,54 +541,23 @@ public class BookingService : IBookingService
             return null;
         }
 
-        // 1. Authoritative physical usable capacity: eligible slots that are active and not under maintenance/unavailable
-        var physicalUsableSlots = await _context.ParkingSlots
-            .CountAsync(s => s.Floor.LotId == lotId && s.IsActive && s.Floor.IsActive &&
-                             s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
-                             s.PhysicalStatus != SlotPhysicalStatuses.Unavailable, ct);
-
-        int totalCapacity = physicalUsableSlots > 0 ? physicalUsableSlots : lot.TotalCapacity;
-
-        // 2. Active admitted vehicle sessions (vehicles checked in, inside or parking)
-        var activeSessionsCount = await _context.ParkingSessions
-            .CountAsync(s => s.LotId == lotId && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
-
-        // 3. Active unconsumed reservation holds (bookings awaiting check-in)
-        var activeReservationsCount = await _context.Bookings
-            .CountAsync(b => b.LotId == lotId && b.Status == BookingStatuses.Pending, ct);
-
-        // 4. Physical sensor stats from IoT
-        var physicalOccupiedSlots = await _context.ParkingSlots
-            .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Occupied, ct);
-
-        var physicalEmptySlots = await _context.ParkingSlots
-            .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Empty && s.IsActive, ct);
-
-        // 5. Total capacity occupied or reserved
-        int totalOccupiedOrReserved = activeSessionsCount + activeReservationsCount;
-        int availableCapacity = Math.Max(0, totalCapacity - totalOccupiedOrReserved);
-
-        string? discrepancyNotes = null;
-        if (physicalOccupiedSlots != activeSessionsCount && physicalUsableSlots > 0)
-        {
-            discrepancyNotes = $"Ghi nhận chênh lệch IoT: {physicalOccupiedSlots} ô vật lý báo có xe (OCCUPIED), hệ thống đang có {activeSessionsCount} phiên đỗ xe (ACTIVE/PAID).";
-        }
+        var calc = await ParkingLotCapacityHelper.CalculateAsync(_context, lotId, lot, ct);
 
         return new LotCapacityDto
         {
             LotId = lot.Id,
             LotName = lot.Name,
             LotAddress = lot.Address,
-            TotalCapacity = totalCapacity,
-            ActiveSessionsCount = activeSessionsCount,
-            ActiveReservationsCount = activeReservationsCount,
-            TotalOccupiedOrReserved = totalOccupiedOrReserved,
-            AvailableForWalkIn = availableCapacity,
-            AvailableForBooking = availableCapacity,
-            IsFull = availableCapacity <= 0,
-            PhysicalOccupiedSlotsCount = physicalOccupiedSlots,
-            PhysicalEmptySlotsCount = physicalEmptySlots,
-            DiscrepancyNotes = discrepancyNotes
+            TotalCapacity = calc.TotalCapacity,
+            AvailableForWalkIn = calc.AvailableCapacity,
+            AvailableForBooking = calc.AvailableCapacity,
+            IsFull = calc.AvailableCapacity <= 0,
+            ActiveSessionsCount = isStaffOrAdmin ? calc.ActiveSessionsCount : null,
+            ActiveReservationsCount = isStaffOrAdmin ? calc.PendingBookingsCount : null,
+            TotalOccupiedOrReserved = isStaffOrAdmin ? calc.TotalOccupiedOrReserved : null,
+            PhysicalOccupiedSlotsCount = isStaffOrAdmin ? calc.PhysicalOccupiedSlotsCount : null,
+            PhysicalEmptySlotsCount = isStaffOrAdmin ? calc.PhysicalEmptySlotsCount : null,
+            DiscrepancyNotes = isStaffOrAdmin ? calc.DiscrepancyNotes : null
         };
     }
 

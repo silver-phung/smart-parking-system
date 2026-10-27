@@ -93,24 +93,10 @@ public class ParkingSessionService : IParkingSessionService
 
                 if (booking == null)
                 {
-                    // Xe vãng lai: Kiểm tra sức chứa khả dụng theo thẩm quyền bãi xe (không tính các ô bảo trì/vô hiệu)
-                    var physicalUsableSlots = await _context.ParkingSlots
-                        .CountAsync(s => s.Floor.LotId == lot.Id && s.IsActive && s.Floor.IsActive &&
-                                         s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
-                                         s.PhysicalStatus != SlotPhysicalStatuses.Unavailable, ct);
+                    // Xe vãng lai: Kiểm tra sức chứa khả dụng theo thẩm quyền bãi xe (áp dụng Conservative IoT Guard & slot fallback)
+                    var calc = await ParkingLotCapacityHelper.CalculateAsync(_context, lot.Id, lot, ct);
 
-                    int totalCapacity = physicalUsableSlots > 0 ? physicalUsableSlots : lot.TotalCapacity;
-
-                    var activeSessionsCount = await _context.ParkingSessions
-                        .CountAsync(s => s.LotId == lot.Id && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
-
-                    var pendingBookingsCount = await _context.Bookings
-                        .CountAsync(b => b.LotId == lot.Id && b.Status == BookingStatuses.Pending, ct);
-
-                    int totalOccupiedOrReserved = activeSessionsCount + pendingBookingsCount;
-                    int availableCapacity = totalCapacity - totalOccupiedOrReserved;
-
-                    if (availableCapacity <= 0)
+                    if (calc.AvailableCapacity <= 0)
                     {
                         await transaction.RollbackAsync(ct);
                         return (false, $"Bãi đỗ xe '{lot.Name}' đã hết chỗ khả dụng cho khách vãng lai. Toàn bộ vị trí còn lại đã được đặt trước hoặc đã có xe đỗ.", null);
@@ -281,75 +267,90 @@ public class ParkingSessionService : IParkingSessionService
             return (false, "Bạn không có quyền thực hiện check-out tại bãi đỗ xe này.", null);
         }
 
-        await using var transaction = await _context.BeginTransactionAsync(ct);
+        var lotLock = ParkingLotLockHelper.GetSemaphore(session.LotId);
+        await lotLock.WaitAsync(ct);
         try
         {
-            var oldStatus = session.Status;
-            session.CheckOutTime = DateTime.UtcNow;
-            session.Status = SessionStatuses.Completed;
-            if (!string.IsNullOrWhiteSpace(request.CheckOutImageUrl))
+            await using var transaction = await _context.BeginTransactionAsync(ct);
+            try
             {
-                session.CheckOutImageUrl = request.CheckOutImageUrl.Trim();
-            }
-            session.UpdatedAt = DateTime.UtcNow;
-
-            // Không để dispatch PENDING/ASSIGNED tồn đọng sau khi session COMPLETED
-            var activeDispatches = await _context.ParkingDispatches
-                .Where(d => d.SessionId == session.Id && (d.Status == DispatchStatuses.Pending || d.Status == DispatchStatuses.Assigned))
-                .ToListAsync(ct);
-
-            foreach (var d in activeDispatches)
-            {
-                d.Status = DispatchStatuses.Cancelled;
-                d.Notes = string.IsNullOrWhiteSpace(d.Notes)
-                    ? "[CHECK-OUT] Tự động hủy lệnh điều phối do phiên gửi xe đã hoàn tất check-out."
-                    : $"{d.Notes} | [CHECK-OUT] Tự động hủy do phiên check-out.";
-                d.UpdatedAt = DateTime.UtcNow;
-            }
-
-            // Giải phóng đúng ô đỗ mà xe thực sự đỗ nếu trước đó ô đỗ đã được ghi nhận OCCUPIED
-            var slotToRelease = session.CurrentSlot;
-            if (slotToRelease == null && session.CurrentSlotId.HasValue)
-            {
-                slotToRelease = await _context.ParkingSlots.FirstOrDefaultAsync(s => s.Id == session.CurrentSlotId.Value, ct);
-            }
-
-            if (slotToRelease != null && slotToRelease.PhysicalStatus == SlotPhysicalStatuses.Occupied)
-            {
-                slotToRelease.PhysicalStatus = SlotPhysicalStatuses.Empty;
-                slotToRelease.UpdatedAt = DateTime.UtcNow;
-            }
-
-            await LogAuditAsync(
-                action: "CHECK_OUT_SESSION",
-                targetEntity: "parking_sessions",
-                targetId: session.Id.ToString(),
-                oldValues: new { session.Id, Status = oldStatus, session.CheckInTime },
-                newValues: new
+                if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
                 {
-                    session.Id,
-                    session.Status,
-                    session.CheckOutTime,
-                    ReleasedSlotId = session.CurrentSlotId,
-                    ActorRole = actorRole,
-                    IpAddress = ipAddress,
-                    ConfirmationType = "MANUAL_STAFF_VERIFIED"
-                },
-                actorId: actorId,
-                ct: ct
-            );
+                    long lockKey = ParkingLotLockHelper.LotLockBase + session.LotId;
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", lockKey, ct);
+                }
 
-            await _context.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
+                var oldStatus = session.Status;
+                session.CheckOutTime = DateTime.UtcNow;
+                session.Status = SessionStatuses.Completed;
+                if (!string.IsNullOrWhiteSpace(request.CheckOutImageUrl))
+                {
+                    session.CheckOutImageUrl = request.CheckOutImageUrl.Trim();
+                }
+                session.UpdatedAt = DateTime.UtcNow;
 
-            var dto = MapToDto(session, session.Lot?.Name ?? string.Empty, session.CurrentSlot?.SlotCode, session.CurrentSlot?.Floor?.FloorNumber);
-            return (true, "Xác nhận xe rời bãi thành công (thao tác thủ công của nhân viên/quản trị viên, chờ tích hợp cảm biến cổng ra).", dto);
+                // Không để dispatch PENDING/ASSIGNED tồn đọng sau khi session COMPLETED
+                var activeDispatches = await _context.ParkingDispatches
+                    .Where(d => d.SessionId == session.Id && (d.Status == DispatchStatuses.Pending || d.Status == DispatchStatuses.Assigned))
+                    .ToListAsync(ct);
+
+                foreach (var d in activeDispatches)
+                {
+                    d.Status = DispatchStatuses.Cancelled;
+                    d.Notes = string.IsNullOrWhiteSpace(d.Notes)
+                        ? "[CHECK-OUT] Tự động hủy lệnh điều phối do phiên gửi xe đã hoàn tất check-out."
+                        : $"{d.Notes} | [CHECK-OUT] Tự động hủy do phiên check-out.";
+                    d.UpdatedAt = DateTime.UtcNow;
+                }
+
+                // Giải phóng đúng ô đỗ mà xe thực sự đỗ nếu trước đó ô đỗ đã được ghi nhận OCCUPIED
+                var slotToRelease = session.CurrentSlot;
+                if (slotToRelease == null && session.CurrentSlotId.HasValue)
+                {
+                    slotToRelease = await _context.ParkingSlots.FirstOrDefaultAsync(s => s.Id == session.CurrentSlotId.Value, ct);
+                }
+
+                if (slotToRelease != null && slotToRelease.PhysicalStatus == SlotPhysicalStatuses.Occupied)
+                {
+                    slotToRelease.PhysicalStatus = SlotPhysicalStatuses.Empty;
+                    slotToRelease.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await LogAuditAsync(
+                    action: "CHECK_OUT_SESSION",
+                    targetEntity: "parking_sessions",
+                    targetId: session.Id.ToString(),
+                    oldValues: new { session.Id, Status = oldStatus, session.CheckInTime },
+                    newValues: new
+                    {
+                        session.Id,
+                        session.Status,
+                        session.CheckOutTime,
+                        ReleasedSlotId = session.CurrentSlotId,
+                        ActorRole = actorRole,
+                        IpAddress = ipAddress,
+                        ConfirmationType = "MANUAL_STAFF_VERIFIED"
+                    },
+                    actorId: actorId,
+                    ct: ct
+                );
+
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+
+                var dto = MapToDto(session, session.Lot?.Name ?? string.Empty, session.CurrentSlot?.SlotCode, session.CurrentSlot?.Floor?.FloorNumber);
+                return (true, "Xác nhận xe rời bãi thành công (thao tác thủ công của nhân viên/quản trị viên, chờ tích hợp cảm biến cổng ra).", dto);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(ct);
+                _logger.LogError(ex, "Lỗi giao dịch khi check-out phiên gửi xe {SessionId}", sessionId);
+                throw;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            await transaction.RollbackAsync(ct);
-            _logger.LogError(ex, "Lỗi giao dịch khi check-out phiên gửi xe {SessionId}", sessionId);
-            throw;
+            lotLock.Release();
         }
     }
 

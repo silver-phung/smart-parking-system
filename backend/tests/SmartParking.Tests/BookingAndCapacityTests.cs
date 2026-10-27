@@ -179,7 +179,7 @@ public class BookingAndCapacityTests
         Assert.Equal(BookingStatuses.Pending, bookingInDb.Status);
 
         // Verify capacity is reserved (1 hold out of 10)
-        var capacity = await bookingService.GetLotCapacityAsync(1);
+        var capacity = await bookingService.GetLotCapacityAsync(1, isStaffOrAdmin: true);
         Assert.NotNull(capacity);
         Assert.Equal(10, capacity.TotalCapacity);
         Assert.Equal(1, capacity.ActiveReservationsCount);
@@ -335,7 +335,7 @@ public class BookingAndCapacityTests
         Assert.True(createRes.Success);
 
         // Check hold was active
-        var cap1 = await bookingService.GetLotCapacityAsync(8);
+        var cap1 = await bookingService.GetLotCapacityAsync(8, isStaffOrAdmin: true);
         Assert.NotNull(cap1);
         Assert.Equal(1, cap1.ActiveReservationsCount);
         Assert.Equal(4, cap1.AvailableForBooking);
@@ -350,7 +350,7 @@ public class BookingAndCapacityTests
         Assert.Equal("Kế hoạch thay đổi", cancelRes.Data.CancellationReason);
 
         // Verify capacity is released
-        var cap2 = await bookingService.GetLotCapacityAsync(8);
+        var cap2 = await bookingService.GetLotCapacityAsync(8, isStaffOrAdmin: true);
         Assert.NotNull(cap2);
         Assert.Equal(0, cap2.ActiveReservationsCount);
         Assert.Equal(5, cap2.AvailableForBooking);
@@ -439,7 +439,7 @@ public class BookingAndCapacityTests
 
         // Before Check-in:
         // Total = 2, Admitted = 0, Reserved = 1, Available = 1
-        var capBefore = await bookingService.GetLotCapacityAsync(11);
+        var capBefore = await bookingService.GetLotCapacityAsync(11, isStaffOrAdmin: true);
         Assert.NotNull(capBefore);
         Assert.Equal(2, capBefore.TotalCapacity);
         Assert.Equal(0, capBefore.ActiveSessionsCount);
@@ -468,7 +468,7 @@ public class BookingAndCapacityTests
         // INVARIANT VERIFICATION:
         // Total = 2, Admitted = 1, Reserved = 0, Available = 1!
         // The reserved vehicle did NOT consume an additional unreserved space!
-        var capAfter = await bookingService.GetLotCapacityAsync(11);
+        var capAfter = await bookingService.GetLotCapacityAsync(11, isStaffOrAdmin: true);
         Assert.NotNull(capAfter);
         Assert.Equal(2, capAfter.TotalCapacity);
         Assert.Equal(1, capAfter.ActiveSessionsCount);
@@ -521,7 +521,7 @@ public class BookingAndCapacityTests
         Assert.True(checkInSuccess);
 
         // Capacity is full
-        var cap1 = await bookingService.GetLotCapacityAsync(13);
+        var cap1 = await bookingService.GetLotCapacityAsync(13, isStaffOrAdmin: true);
         Assert.NotNull(cap1);
         Assert.Equal(1, cap1.ActiveSessionsCount);
         Assert.Equal(0, cap1.AvailableForBooking);
@@ -531,7 +531,7 @@ public class BookingAndCapacityTests
         Assert.True(checkOutSuccess);
 
         // Capacity is released
-        var cap2 = await bookingService.GetLotCapacityAsync(13);
+        var cap2 = await bookingService.GetLotCapacityAsync(13, isStaffOrAdmin: true);
         Assert.NotNull(cap2);
         Assert.Equal(0, cap2.ActiveSessionsCount);
         Assert.Equal(1, cap2.AvailableForBooking);
@@ -561,7 +561,7 @@ public class BookingAndCapacityTests
         slots[1].PhysicalStatus = SlotPhysicalStatuses.Occupied;
         await context.SaveChangesAsync();
 
-        var capacity = await bookingService.GetLotCapacityAsync(15);
+        var capacity = await bookingService.GetLotCapacityAsync(15, isStaffOrAdmin: true);
         Assert.NotNull(capacity);
         Assert.Equal(4, capacity.TotalCapacity);
         Assert.Equal(0, capacity.ActiveSessionsCount);
@@ -569,8 +569,10 @@ public class BookingAndCapacityTests
         Assert.NotNull(capacity.DiscrepancyNotes);
         Assert.Contains("Ghi nhận chênh lệch IoT: 2 ô vật lý báo có xe", capacity.DiscrepancyNotes);
 
-        // Discrepancy does not unsafely distort authoritative total capacity
-        Assert.Equal(4, capacity.AvailableForBooking);
+        // Under M07-2 Conservative IoT Guard:
+        // Used = max(ActiveSessions: 0, PhysicalOccupied: 2) + Holds: 0 = 2
+        // Available = max(0, 4 - 2) = 2
+        Assert.Equal(2, capacity.AvailableForBooking);
     }
 
     #endregion
@@ -629,7 +631,7 @@ public class BookingAndCapacityTests
         {
             var verifyAuth = new ParkingAuthorizationService(verifyContext);
             var verifyService = new BookingService(verifyContext, verifyAuth, NullLogger<BookingService>.Instance);
-            var capacity = await verifyService.GetLotCapacityAsync(16);
+            var capacity = await verifyService.GetLotCapacityAsync(16, isStaffOrAdmin: true);
             Assert.NotNull(capacity);
             Assert.Equal(1, capacity.ActiveReservationsCount);
             Assert.Equal(0, capacity.AvailableForBooking);
@@ -707,6 +709,550 @@ public class BookingAndCapacityTests
         Assert.NotNull(method);
         var allowAnon = method.GetCustomAttribute<AllowAnonymousAttribute>();
         Assert.NotNull(allowAnon);
+    }
+
+    #endregion
+
+    #region Task 07 Milestone Review Fixes (M07-1 to M07-4)
+
+    [Fact]
+    public async Task M07_1_CapacityFallback_NoConfiguredSlots_FallsBackToTotalCapacity()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        // Seed Lot with NO ParkingFloor or ParkingSlot records configured
+        var lot = new ParkingLot
+        {
+            Id = 101,
+            Name = "Bãi Chưa Cấu Hình Ô",
+            Address = "101 Fallback St",
+            TotalCapacity = 20,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.ParkingLots.Add(lot);
+
+        // Seed 2 active sessions and 1 pending booking
+        var vehicle = new Vehicle { Id = 10101, UserId = 10, PlateNumber = "51A-10101", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.Vehicles.Add(vehicle);
+        context.ParkingSessions.Add(new ParkingSession
+        {
+            Id = 1011,
+            LotId = 101,
+            PlateNumber = "51A-10111",
+            Status = SessionStatuses.Active,
+            CheckInTime = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        context.ParkingSessions.Add(new ParkingSession
+        {
+            Id = 1012,
+            LotId = 101,
+            PlateNumber = "51A-10122",
+            Status = SessionStatuses.Paid,
+            CheckInTime = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        context.Bookings.Add(new Booking
+        {
+            Id = 1013,
+            LotId = 101,
+            UserId = 10,
+            VehicleId = 10101,
+            PlateNumber = "51A-10101",
+            Status = BookingStatuses.Pending,
+            StartTime = DateTime.UtcNow,
+            EndTime = DateTime.UtcNow.AddHours(2),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var capacity = await bookingService.GetLotCapacityAsync(101, isStaffOrAdmin: true);
+        Assert.NotNull(capacity);
+        // Fallback permitted when NO slots exist
+        Assert.Equal(20, capacity.TotalCapacity);
+        Assert.Equal(2, capacity.ActiveSessionsCount);
+        Assert.Equal(1, capacity.ActiveReservationsCount);
+        // Available = 20 - (2 + 1) = 17
+        Assert.Equal(17, capacity.AvailableForBooking);
+        Assert.Equal(17, capacity.AvailableForWalkIn);
+    }
+
+    [Fact]
+    public async Task M07_1_CapacityFallback_ConfiguredSlotsAllMaintenanceOrInactive_CapacityIsZeroNotFallback()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+        var lot = new ParkingLot
+        {
+            Id = 102,
+            Name = "Bãi Hỏng Toàn Bộ Ô",
+            Address = "102 Zero St",
+            TotalCapacity = 50, // configured lot.TotalCapacity is 50, but all slots are unavailable
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.ParkingLots.Add(lot);
+
+        var floor = new ParkingFloor
+        {
+            Id = 1020,
+            LotId = 102,
+            FloorNumber = 1,
+            Name = "Tầng Hỏng",
+            TotalSlots = 3,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.ParkingFloors.Add(floor);
+
+        // Slot 1: Maintenance
+        // Slot 2: Unavailable
+        // Slot 3: Inactive
+        context.ParkingSlots.AddRange(
+            new ParkingSlot { Id = 1021, FloorId = 1020, SlotCode = "M-1", PhysicalStatus = SlotPhysicalStatuses.Maintenance, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new ParkingSlot { Id = 1022, FloorId = 1020, SlotCode = "U-2", PhysicalStatus = SlotPhysicalStatuses.Unavailable, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new ParkingSlot { Id = 1023, FloorId = 1020, SlotCode = "I-3", PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = false, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
+        );
+        var v = new Vehicle { Id = 10201, UserId = 10, PlateNumber = "51A-10201", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.Vehicles.Add(v);
+        await context.SaveChangesAsync();
+
+        var capacity = await bookingService.GetLotCapacityAsync(102, isStaffOrAdmin: true);
+        Assert.NotNull(capacity);
+        // CRITICAL INVARIANT: Usable capacity must be ZERO, NOT 50!
+        Assert.Equal(0, capacity.TotalCapacity);
+        Assert.Equal(0, capacity.AvailableForBooking);
+        Assert.Equal(0, capacity.AvailableForWalkIn);
+        Assert.True(capacity.IsFull);
+
+        // Booking creation must be rejected with 409 Conflict
+        var bookRes = await bookingService.CreateBookingAsync(new CreateBookingRequestDto { LotId = 102, VehicleId = 10201 }, 10, Roles.User, "127.0.0.1");
+        Assert.False(bookRes.Success);
+        Assert.Equal(409, bookRes.StatusCode);
+        Assert.Contains("hết chỗ", bookRes.Message);
+
+        // Walk-in check-in must be rejected
+        var (checkInOk, checkInMsg, _) = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 102, PlateNumber = "51A-WALKIN102" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.False(checkInOk);
+        Assert.Contains("hết chỗ", checkInMsg);
+    }
+
+    [Fact]
+    public async Task M07_1_CapacityFallback_MixedActiveAndInactiveSlotsAndFloors_OnlyCountsUsableSlots()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        var lot = new ParkingLot
+        {
+            Id = 103,
+            Name = "Bãi Hỗn Hợp Tầng",
+            Address = "103 Mixed St",
+            TotalCapacity = 100,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.ParkingLots.Add(lot);
+
+        // Active Floor 1
+        var floor1 = new ParkingFloor
+        {
+            Id = 1031,
+            LotId = 103,
+            FloorNumber = 1,
+            Name = "Tầng 1 Hoạt Động",
+            TotalSlots = 4,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        // Inactive Floor 2 (e.g. undergoing renovation)
+        var floor2 = new ParkingFloor
+        {
+            Id = 1032,
+            LotId = 103,
+            FloorNumber = 2,
+            Name = "Tầng 2 Đóng Cửa",
+            TotalSlots = 5,
+            IsActive = false,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.ParkingFloors.AddRange(floor1, floor2);
+
+        // Floor 1 slots: 2 active empty, 1 maintenance, 1 inactive
+        context.ParkingSlots.AddRange(
+            new ParkingSlot { Id = 10311, FloorId = 1031, SlotCode = "F1-01", PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new ParkingSlot { Id = 10312, FloorId = 1031, SlotCode = "F1-02", PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new ParkingSlot { Id = 10313, FloorId = 1031, SlotCode = "F1-03", PhysicalStatus = SlotPhysicalStatuses.Maintenance, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new ParkingSlot { Id = 10314, FloorId = 1031, SlotCode = "F1-04", PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = false, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
+        );
+
+        // Floor 2 slots: all marked active empty, but whole floor is inactive
+        for (int i = 1; i <= 5; i++)
+        {
+            context.ParkingSlots.Add(new ParkingSlot
+            {
+                Id = 10320 + i,
+                FloorId = 1032,
+                SlotCode = $"F2-0{i}",
+                PhysicalStatus = SlotPhysicalStatuses.Empty,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        await context.SaveChangesAsync();
+
+        var capacity = await bookingService.GetLotCapacityAsync(103, isStaffOrAdmin: true);
+        Assert.NotNull(capacity);
+        // Only 2 slots on Floor 1 are eligible & usable!
+        Assert.Equal(2, capacity.TotalCapacity);
+        Assert.Equal(2, capacity.AvailableForBooking);
+    }
+
+    [Fact]
+    public async Task M07_1_Capacity_WhenReducedBelowCommittedSessions_RejectsNewAdmissionsAndPreservesHistorical()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLotWithSlots(context, 104, "Bãi Cắt Giảm Chỗ Đột Ngột", slotCount: 2, activeSlotsCount: 2);
+
+        var v1 = new Vehicle { Id = 10401, UserId = 10, PlateNumber = "51A-COMMITTED-1", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        var v2 = new Vehicle { Id = 10402, UserId = 20, PlateNumber = "51A-COMMITTED-2", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.Vehicles.AddRange(v1, v2);
+        await context.SaveChangesAsync();
+
+        // 1 pending booking hold + 1 active walk-in session
+        var bookRes = await bookingService.CreateBookingAsync(new CreateBookingRequestDto { LotId = 104, VehicleId = 10401 }, 10, Roles.User, "127.0.0.1");
+        Assert.True(bookRes.Success);
+
+        var (checkInOk, _, sessionDto) = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 104, PlateNumber = "51A-COMMITTED-2" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.True(checkInOk);
+
+        // Now both physical slots are unexpectedly closed / marked maintenance
+        foreach (var s in slots)
+        {
+            s.PhysicalStatus = SlotPhysicalStatuses.Maintenance;
+        }
+        await context.SaveChangesAsync();
+
+        // Verify capacity is 0 (overcommitted)
+        var capacity = await bookingService.GetLotCapacityAsync(104, isStaffOrAdmin: true);
+        Assert.NotNull(capacity);
+        Assert.Equal(0, capacity.TotalCapacity);
+        Assert.Equal(0, capacity.AvailableForBooking);
+        Assert.Equal(0, capacity.AvailableForWalkIn);
+
+        // Historical records are PRESERVED (not silently deleted or cancelled)
+        var bookingInDb = await context.Bookings.FindAsync(bookRes.Data!.Id);
+        Assert.NotNull(bookingInDb);
+        Assert.Equal(BookingStatuses.Pending, bookingInDb.Status);
+
+        var sessionInDb = await context.ParkingSessions.FindAsync(sessionDto!.Id);
+        Assert.NotNull(sessionInDb);
+        Assert.Equal(SessionStatuses.Active, sessionInDb.Status);
+
+        // New admissions are strictly rejected
+        var newWalkIn = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 104, PlateNumber = "51A-NEW-ATTEMPT" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.False(newWalkIn.Success);
+
+        var newBook = await bookingService.CreateBookingAsync(new CreateBookingRequestDto { LotId = 104, VehicleId = 10401 }, 10, Roles.User, "127.0.0.1");
+        Assert.False(newBook.Success);
+        Assert.Equal(409, newBook.StatusCode);
+    }
+
+    [Fact]
+    public async Task M07_2_ConservativeIoTGuard_OccupiedSensorsGreaterThanSessions()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLotWithSlots(context, 105, "Bãi IoT > Sessions", slotCount: 5, activeSlotsCount: 5);
+
+        // 1 active session
+        context.ParkingSessions.Add(new ParkingSession
+        {
+            Id = 1051,
+            LotId = 105,
+            PlateNumber = "51A-10511",
+            Status = SessionStatuses.Active,
+            CheckInTime = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        // 3 physical slots reported OCCUPIED by sensors
+        slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        slots[1].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        slots[2].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+
+        // 1 pending booking hold
+        var v = new Vehicle { Id = 10501, UserId = 10, PlateNumber = "51A-10501", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.Vehicles.Add(v);
+        context.Bookings.Add(new Booking
+        {
+            Id = 1052,
+            LotId = 105,
+            UserId = 10,
+            VehicleId = 10501,
+            PlateNumber = "51A-10501",
+            Status = BookingStatuses.Pending,
+            StartTime = DateTime.UtcNow,
+            EndTime = DateTime.UtcNow.AddHours(2),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        // Formula: Used = max(Sessions: 1, PhysicalOccupied: 3) + Holds: 1 = 4
+        // Available = max(0, 5 - 4) = 1
+        var cap = await bookingService.GetLotCapacityAsync(105, isStaffOrAdmin: true);
+        Assert.NotNull(cap);
+        Assert.Equal(5, cap.TotalCapacity);
+        Assert.Equal(1, cap.ActiveSessionsCount);
+        Assert.Equal(3, cap.PhysicalOccupiedSlotsCount);
+        Assert.Equal(1, cap.ActiveReservationsCount);
+        Assert.Equal(4, cap.TotalOccupiedOrReserved);
+        Assert.Equal(1, cap.AvailableForBooking);
+        Assert.Equal(1, cap.AvailableForWalkIn);
+        Assert.NotNull(cap.DiscrepancyNotes);
+        Assert.Contains("3 ô vật lý báo có xe", cap.DiscrepancyNotes);
+    }
+
+    [Fact]
+    public async Task M07_2_ConservativeIoTGuard_SessionsGreaterThanOccupiedSensors()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLotWithSlots(context, 106, "Bãi Sessions > IoT", slotCount: 5, activeSlotsCount: 5);
+
+        // 3 active sessions
+        for (int i = 1; i <= 3; i++)
+        {
+            context.ParkingSessions.Add(new ParkingSession
+            {
+                Id = 1060 + i,
+                LotId = 106,
+                PlateNumber = $"51A-1060{i}",
+                Status = SessionStatuses.Active,
+                CheckInTime = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+
+        // Only 1 sensor reports OCCUPIED (sensors delayed or unresponsive)
+        slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        await context.SaveChangesAsync();
+
+        // Formula: Used = max(Sessions: 3, PhysicalOccupied: 1) + Holds: 0 = 3
+        // Available = max(0, 5 - 3) = 2
+        var cap = await bookingService.GetLotCapacityAsync(106, isStaffOrAdmin: true);
+        Assert.NotNull(cap);
+        Assert.Equal(5, cap.TotalCapacity);
+        Assert.Equal(3, cap.ActiveSessionsCount);
+        Assert.Equal(1, cap.PhysicalOccupiedSlotsCount);
+        Assert.Equal(3, cap.TotalOccupiedOrReserved);
+        Assert.Equal(2, cap.AvailableForBooking);
+        Assert.NotNull(cap.DiscrepancyNotes);
+        Assert.Contains("1 ô vật lý báo có xe", cap.DiscrepancyNotes);
+        Assert.Contains("3 phiên đỗ xe", cap.DiscrepancyNotes);
+    }
+
+    [Fact]
+    public async Task M07_2_ConservativeIoTGuard_SessionsEqualOccupiedSensors_NoDiscrepancy()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLotWithSlots(context, 107, "Bãi Khớp IoT", slotCount: 5, activeSlotsCount: 5);
+
+        // 2 active sessions & 2 physical occupied slots
+        for (int i = 1; i <= 2; i++)
+        {
+            context.ParkingSessions.Add(new ParkingSession
+            {
+                Id = 1070 + i,
+                LotId = 107,
+                PlateNumber = $"51A-1070{i}",
+                Status = SessionStatuses.Active,
+                CheckInTime = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+            slots[i - 1].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        }
+        await context.SaveChangesAsync();
+
+        // Formula: Used = max(2, 2) + 0 = 2, Available = 5 - 2 = 3
+        var cap = await bookingService.GetLotCapacityAsync(107, isStaffOrAdmin: true);
+        Assert.NotNull(cap);
+        Assert.Equal(3, cap.AvailableForBooking);
+        Assert.Null(cap.DiscrepancyNotes); // No discrepancy when counts match!
+    }
+
+    [Fact]
+    public async Task M07_2_CheckIn_ReservedArrivalWithZeroUnreservedSpaces_SucceedsAtomically()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+        // Lot with capacity = 1
+        SeedLotWithSlots(context, 108, "Bãi Duy Nhất 1 Chỗ", slotCount: 1, activeSlotsCount: 1);
+
+        var v = new Vehicle { Id = 10801, UserId = 10, PlateNumber = "51A-RES-ONLY", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.Vehicles.Add(v);
+        await context.SaveChangesAsync();
+
+        // User reserves the only slot
+        var bookRes = await bookingService.CreateBookingAsync(new CreateBookingRequestDto { LotId = 108, VehicleId = 10801 }, 10, Roles.User, "127.0.0.1");
+        Assert.True(bookRes.Success);
+
+        // Public available capacity is now 0
+        var capBefore = await bookingService.GetLotCapacityAsync(108);
+        Assert.Equal(0, capBefore!.AvailableForBooking);
+        Assert.Equal(0, capBefore.AvailableForWalkIn);
+
+        // Walk-in vehicle is rejected
+        var walkInRes = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 108, PlateNumber = "51A-STRANGER" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.False(walkInRes.Success);
+        Assert.Contains("hết chỗ", walkInRes.Message);
+
+        // Reserved vehicle arrives: MUST succeed atomically by consuming its existing hold
+        var reservedCheckIn = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 108, PlateNumber = "51A-RES-ONLY" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.True(reservedCheckIn.Success, reservedCheckIn.Message);
+        Assert.NotNull(reservedCheckIn.Data);
+        Assert.Equal(bookRes.Data!.Id, reservedCheckIn.Data.BookingId);
+
+        // Booking status is CHECKED_IN
+        var bookingAfter = await context.Bookings.FindAsync(bookRes.Data!.Id);
+        Assert.Equal(BookingStatuses.CheckedIn, bookingAfter!.Status);
+
+        // After check-in: 1 session, 0 holds, available remains 0
+        var capAfter = await bookingService.GetLotCapacityAsync(108, isStaffOrAdmin: true);
+        Assert.Equal(1, capAfter!.ActiveSessionsCount);
+        Assert.Equal(0, capAfter.ActiveReservationsCount);
+        Assert.Equal(0, capAfter.AvailableForBooking);
+    }
+
+    [Fact]
+    public async Task M07_3_Concurrency_CancelBooking_UnderLotLock_IdempotentAfterCancellation()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        SeedLotWithSlots(context, 109, "Bãi Khóa Hủy", slotCount: 2, activeSlotsCount: 2);
+
+        var v = new Vehicle { Id = 10901, UserId = 10, PlateNumber = "51A-LOCK-CANCEL", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.Vehicles.Add(v);
+        await context.SaveChangesAsync();
+
+        var bookRes = await bookingService.CreateBookingAsync(new CreateBookingRequestDto { LotId = 109, VehicleId = 10901 }, 10, Roles.User, "127.0.0.1");
+        Assert.True(bookRes.Success);
+
+        // First cancel succeeds
+        var cancelRes1 = await bookingService.CancelBookingAsync(bookRes.Data!.Id, new CancelBookingRequestDto { Reason = "Đổi lịch" }, 10, Roles.User, "127.0.0.1");
+        Assert.True(cancelRes1.Success);
+        Assert.Equal(200, cancelRes1.StatusCode);
+
+        // Second cancel attempt under lock detects status != Pending and returns 400 Bad Request
+        var cancelRes2 = await bookingService.CancelBookingAsync(bookRes.Data!.Id, new CancelBookingRequestDto { Reason = "Thử lại" }, 10, Roles.User, "127.0.0.1");
+        Assert.False(cancelRes2.Success);
+        Assert.Equal(400, cancelRes2.StatusCode);
+        Assert.Contains("đã bị hủy", cancelRes2.Message);
+    }
+
+    [Fact]
+    public async Task M07_4_PublicCapacity_HidesOperationalDiagnosticsAnonymously()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLotWithSlots(context, 110, "Bãi Ẩn Chẩn Đoán", slotCount: 3, activeSlotsCount: 3);
+        slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        await context.SaveChangesAsync();
+
+        // 1. Anonymous / Public query (isStaffOrAdmin = false)
+        var publicCap = await bookingService.GetLotCapacityAsync(110, isStaffOrAdmin: false);
+        Assert.NotNull(publicCap);
+
+        // Operational fields MUST be null in the C# object
+        Assert.Null(publicCap.ActiveSessionsCount);
+        Assert.Null(publicCap.ActiveReservationsCount);
+        Assert.Null(publicCap.TotalOccupiedOrReserved);
+        Assert.Null(publicCap.PhysicalOccupiedSlotsCount);
+        Assert.Null(publicCap.PhysicalEmptySlotsCount);
+        Assert.Null(publicCap.DiscrepancyNotes);
+
+        // Public fields are present
+        Assert.Equal(110, publicCap.LotId);
+        Assert.Equal("Bãi Ẩn Chẩn Đoán", publicCap.LotName);
+        Assert.Equal(3, publicCap.TotalCapacity);
+        Assert.Equal(2, publicCap.AvailableForBooking); // 3 - max(0, 1) = 2
+
+        // System.Text.Json serialization MUST omit the null fields (WhenWritingNull)
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+        var json = System.Text.Json.JsonSerializer.Serialize(publicCap, jsonOptions);
+        Assert.DoesNotContain("activeSessionsCount", json);
+        Assert.DoesNotContain("activeReservationsCount", json);
+        Assert.DoesNotContain("totalOccupiedOrReserved", json);
+        Assert.DoesNotContain("physicalOccupiedSlotsCount", json);
+        Assert.DoesNotContain("physicalEmptySlotsCount", json);
+        Assert.DoesNotContain("discrepancyNotes", json);
+        Assert.Contains("availableForBooking", json);
+        Assert.Contains("totalCapacity", json);
+    }
+
+    [Fact]
+    public async Task M07_4_OperationalCapacity_ExposesDiagnosticsForStaffAndAdmin()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLotWithSlots(context, 111, "Bãi Hiện Chẩn Đoán", slotCount: 3, activeSlotsCount: 3);
+        slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        await context.SaveChangesAsync();
+
+        // 2. Staff / Admin query (isStaffOrAdmin = true)
+        var staffCap = await bookingService.GetLotCapacityAsync(111, isStaffOrAdmin: true);
+        Assert.NotNull(staffCap);
+
+        // Operational fields MUST be populated
+        Assert.NotNull(staffCap.ActiveSessionsCount);
+        Assert.Equal(0, staffCap.ActiveSessionsCount);
+        Assert.NotNull(staffCap.ActiveReservationsCount);
+        Assert.Equal(0, staffCap.ActiveReservationsCount);
+        Assert.NotNull(staffCap.PhysicalOccupiedSlotsCount);
+        Assert.Equal(1, staffCap.PhysicalOccupiedSlotsCount);
+        Assert.NotNull(staffCap.TotalOccupiedOrReserved);
+        Assert.Equal(1, staffCap.TotalOccupiedOrReserved);
+        Assert.NotNull(staffCap.DiscrepancyNotes);
+
+        // JSON serialization includes the diagnostic fields
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+        var json = System.Text.Json.JsonSerializer.Serialize(staffCap, jsonOptions);
+        Assert.Contains("activeSessionsCount", json);
+        Assert.Contains("physicalOccupiedSlotsCount", json);
+        Assert.Contains("discrepancyNotes", json);
+    }
+
+    [Fact]
+    public async Task M07_3_Concurrency_CheckOutReleasesCapacity_AllowingSubsequentWalkInUnderLock()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+        // Lot with exactly 1 slot
+        SeedLotWithSlots(context, 112, "Bãi Tuần Tự Khóa", slotCount: 1, activeSlotsCount: 1);
+
+        // Vehicle 1 checks in
+        var checkIn1 = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 112, PlateNumber = "51A-SEQ-01" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.True(checkIn1.Success);
+
+        // Capacity is 0; Vehicle 2 cannot check in
+        var checkIn2Fail = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 112, PlateNumber = "51A-SEQ-02" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.False(checkIn2Fail.Success);
+
+        // Vehicle 1 checks out (under per-lot lock)
+        var checkOut1 = await sessionService.CheckOutAsync(checkIn1.Data!.Id, new CheckOutRequestDto(), 1, Roles.Admin, "127.0.0.1");
+        Assert.True(checkOut1.Success);
+
+        // Capacity immediately visible as 1 available
+        var cap = await bookingService.GetLotCapacityAsync(112);
+        Assert.Equal(1, cap!.AvailableForWalkIn);
+
+        // Vehicle 2 checks in successfully
+        var checkIn2Success = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 112, PlateNumber = "51A-SEQ-02" }, 1, Roles.Admin, "127.0.0.1");
+        Assert.True(checkIn2Success.Success);
     }
 
     #endregion

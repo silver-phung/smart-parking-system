@@ -81,7 +81,10 @@ public class ParkingLotsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetLotCapacity(int id, CancellationToken ct)
     {
-        var capacity = await _bookingService.GetLotCapacityAsync(id, ct);
+        var isStaffOrAdmin = User.Identity?.IsAuthenticated == true &&
+            (User.IsInRole(Roles.Admin) || User.IsInRole(Roles.Manager) || User.IsInRole(Roles.Staff));
+
+        var capacity = await _bookingService.GetLotCapacityAsync(id, isStaffOrAdmin, ct);
         if (capacity == null)
         {
             return NotFound(new { message = $"Không tìm thấy bãi đỗ xe với ID: {id}." });

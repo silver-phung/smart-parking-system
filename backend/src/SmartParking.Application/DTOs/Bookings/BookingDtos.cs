@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace SmartParking.Application.DTOs.Bookings;
 
@@ -73,13 +74,26 @@ public class LotCapacityDto
     public string LotName { get; set; } = null!;
     public string? LotAddress { get; set; }
     public int TotalCapacity { get; set; }
-    public int ActiveSessionsCount { get; set; }
-    public int ActiveReservationsCount { get; set; }
-    public int TotalOccupiedOrReserved { get; set; }
     public int AvailableForWalkIn { get; set; }
     public int AvailableForBooking { get; set; }
     public bool IsFull { get; set; }
-    public int PhysicalOccupiedSlotsCount { get; set; }
-    public int PhysicalEmptySlotsCount { get; set; }
+
+    // Operational diagnostics (available to STAFF/MANAGER/ADMIN, omitted when null for anonymous public)
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ActiveSessionsCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ActiveReservationsCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? TotalOccupiedOrReserved { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? PhysicalOccupiedSlotsCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? PhysicalEmptySlotsCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DiscrepancyNotes { get; set; }
 }

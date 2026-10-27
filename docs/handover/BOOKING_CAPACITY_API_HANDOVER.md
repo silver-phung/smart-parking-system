@@ -21,13 +21,21 @@
    - Backend chuẩn hóa biển số và tự động đối soát lượt đặt chỗ `PENDING` hợp lệ.
    - Nếu có đặt chỗ: Chuyển đổi thành phiên đỗ `ACTIVE` và liên kết `BookingId`.
    - Nếu không có đặt chỗ: Kiểm tra sức chứa vãng lai, từ chối (409 Conflict) nếu bãi đã hết chỗ.
-4. **Rule 4 – Cảm biến IoT độc lập:**
-   - Cảm biến chỉ báo `EMPTY` hoặc `OCCUPIED`, không nhận diện biển số xe.
-   - Chênh lệch giữa số ô vật lý bị chiếm và số phiên đỗ được hiển thị cảnh báo an toàn qua `discrepancyNotes`, không làm sai lệch sức chứa tính toán.
+4. **Rule 4 – Tính toán sức chứa thực tế & Bộ lọc bảo vệ an toàn IoT (Conservative IoT Capacity Guard):**
+   - **Xác định sức chứa chuẩn (`totalCapacity`):**
+     - Nếu bãi xe **ĐÃ CẤU HÌNH** danh sách ô (`ParkingSlot`): Sức chứa chuẩn bắt buộc tính từ số ô đỗ vật lý khả dụng trên các tầng đang hoạt động (`IsActive = true`, `Floor.IsActive = true`, trạng thái khác `MAINTENANCE` và `UNAVAILABLE`). Nếu toàn bộ ô bị bảo trì hoặc đóng cửa, sức chứa là **0** (tuyệt đối **KHÔNG** fallback về `lot.TotalCapacity`).
+     - Nếu bãi xe **CHƯA CẤU HÌNH** ô đỗ: Cho phép fallback lấy giá trị thiết kế `lot.TotalCapacity`.
+     - Khi sức chứa giảm đột ngột (ví dụ cúp điện/sự cố phải đóng ô): Hệ thống từ chối nhận xe mới, bảo lưu toàn vẹn các phiên đỗ và đặt chỗ hiện hữu, không tự ý hủy.
+   - **Công thức bảo vệ an toàn IoT đồng nhất (Booking, Walk-in Check-in, Public Capacity):**
+     $$Used = \max(\text{ActiveOrPaidSessions}, \text{PhysicalOccupiedSlots}) + \text{PendingBookingHolds}$$
+     $$Available = \max(0, \text{UsableCapacity} - Used)$$
+   - Cảm biến IoT chỉ ghi nhận trạng thái vật lý (`EMPTY`/`OCCUPIED`), không suy đoán danh tính xe. Nếu cảm biến báo có xe vượt quá số phiên phần mềm (hoặc ngược lại), hệ thống luôn lấy cận trên ($\max$) để không bao giờ overbook.
+   - Thông tin chênh lệch cảm biến được lưu giữ và cảnh báo an toàn qua `discrepancyNotes` chỉ dành cho nội bộ (`STAFF`/`MANAGER`/`ADMIN`).
 5. **Rule 5 – Phân quyền theo bãi (Per-Lot RBAC):**
    - `USER`: Đặt chỗ, xem danh sách và chi tiết đặt chỗ của chính mình, hủy đặt chỗ của mình.
    - `STAFF` / `MANAGER`: Tra cứu danh sách và quản lý đặt chỗ trong phạm vi các bãi được phân công.
    - `ADMIN`: Toàn quyền trên tất cả các bãi.
+
 
 ---
 
@@ -250,16 +258,36 @@ API quản lý nội bộ dành cho nhân viên bãi và ban quản lý. Áp d�
 
 ### 3.6. GET `/api/v1/parking-lots/{id}/capacity` – Thông tin sức chứa thời gian thực
 
-Endpoint công khai cho phép Frontend hiển thị số chỗ trống trước khi người dùng đặt chỗ hoặc lái xe đến cổng bãi.
+Endpoint cho phép Frontend tra cứu tình trạng sức chứa theo thời gian thực.
+Hệ thống tự động phân tách thông tin hiển thị theo phân quyền (RBAC):
+- **Khách ẩn danh / Người dùng thông thường (Public):** Chỉ hiển thị các trường dữ liệu cần thiết phục vụ đặt chỗ và đỗ xe. Các trường giám sát chẩn đoán nội bộ bị ẩn hoàn toàn (omitted).
+- **Nhân viên / Quản lý / Quản trị viên (`STAFF`, `MANAGER`, `ADMIN`):** Nhận đầy đủ dữ liệu vận hành, số liệu cảm biến IoT và ghi chú chẩn đoán chênh lệch (`discrepancyNotes`).
 
-- **Quyền:** Không cần đăng nhập (`[AllowAnonymous]`)
-- **Response thành công (`200 OK`):**
+- **Quyền:** Mở công khai (`[AllowAnonymous]`)
+- **Public Response (Khách ẩn danh / Chưa đăng nhập):**
 ```json
 {
   "message": "Lấy thông tin sức chứa bãi đỗ xe thành công.",
   "data": {
     "lotId": 1,
     "lotName": "Bãi Đỗ Xe Quận 1",
+    "lotAddress": "123 Lê Lợi, Quận 1, TP.HCM",
+    "totalCapacity": 100,
+    "availableForWalkIn": 10,
+    "availableForBooking": 10,
+    "isFull": false
+  }
+}
+```
+
+- **Staff / Admin Response (Đã đăng nhập với vai trò nội bộ):**
+```json
+{
+  "message": "Lấy thông tin sức chứa bãi đỗ xe thành công.",
+  "data": {
+    "lotId": 1,
+    "lotName": "Bãi Đỗ Xe Quận 1",
+    "lotAddress": "123 Lê Lợi, Quận 1, TP.HCM",
     "totalCapacity": 100,
     "activeSessionsCount": 80,
     "activeReservationsCount": 10,
@@ -275,14 +303,14 @@ Endpoint công khai cho phép Frontend hiển thị số chỗ trống trước 
 ```
 
 *Ý nghĩa các trường công suất:*
-- `totalCapacity`: Tổng số ô đỗ hợp lệ đang hoạt động (không tính ô `MAINTENANCE` hoặc `UNAVAILABLE`).
-- `activeSessionsCount`: Số lượng xe đang có phiên đỗ thực tế trong bãi (`ACTIVE` hoặc `PAID`).
-- `activeReservationsCount`: Số lượng lượt đặt chỗ `PENDING` đang giữ công suất chờ xe đến.
-- `totalOccupiedOrReserved`: `activeSessionsCount + activeReservationsCount`.
-- `availableForWalkIn` / `availableForBooking`: `max(0, totalCapacity - totalOccupiedOrReserved)`.
+- `totalCapacity`: Tổng số ô đỗ hợp lệ đang hoạt động (không tính ô `MAINTENANCE` hoặc `UNAVAILABLE`). Nếu toàn bộ ô hỏng/bảo trì, giá trị là `0`.
+- `availableForWalkIn` / `availableForBooking`: `max(0, totalCapacity - (max(activeSessions, physicalOccupied) + pendingBookings))`.
 - `isFull`: `true` nếu không còn vị trí khả dụng (`<= 0`).
-- `physicalOccupiedSlotsCount`: Số ô cảm biến IoT thực tế báo có vật cản.
-- `discrepancyNotes`: Cảnh báo đối soát an toàn nếu cảm biến IoT và số phiên đỗ đang mở có độ lệch (ví dụ xe vừa qua barrier đang tìm chỗ đỗ).
+- `activeSessionsCount` *(Staff/Admin only)*: Số lượng xe đang có phiên đỗ thực tế trong bãi (`ACTIVE` hoặc `PAID`).
+- `activeReservationsCount` *(Staff/Admin only)*: Số lượng lượt đặt chỗ `PENDING` đang giữ công suất chờ xe đến.
+- `totalOccupiedOrReserved` *(Staff/Admin only)*: Tổng số chỗ đang sử dụng theo công thức bảo thủ: `max(activeSessions, physicalOccupied) + activeReservationsCount`.
+- `physicalOccupiedSlotsCount` *(Staff/Admin only)*: Số ô cảm biến IoT thực tế báo có xe.
+- `discrepancyNotes` *(Staff/Admin only)*: Cảnh báo đối soát an toàn nếu cảm biến IoT và số phiên đỗ đang mở có độ lệch (ví dụ xe vừa qua barrier đang tìm chỗ đỗ).
 
 ---
 
@@ -323,8 +351,10 @@ Khi xe đến cổng vào:
 
 ## 5. CƠ CHẾ BẢO VỆ CHỐNG OVERBOOKING ĐỒNG THỜI (CONCURRENCY STRATEGY)
 
-Hệ thống bảo vệ giao dịch đa tầng:
-1. **In-Memory Lock per Lot:** `SemaphoreSlim` theo từng `LotId` (`ParkingLotLockHelper`) đảm bảo các request trong cùng tiến trình ứng dụng xếp hàng tuần tự khi kiểm tra và trừ công suất.
+Hệ thống bảo vệ giao dịch đa tầng nghiêm ngặt trên toàn bộ các luồng thay đổi trạng thái và sức chứa (Tạo Booking, Hủy Booking, Check-in, Check-out):
+1. **In-Memory Lock per Lot (`ParkingLotLockHelper`):** `SemaphoreSlim` theo từng `LotId` đảm bảo các request trong cùng tiến trình ứng dụng xếp hàng tuần tự khi kiểm tra, trừ hoặc giải phóng công suất.
+   - **Thứ tự khóa nhất quán:** `SemaphoreSlim.WaitAsync` $\rightarrow$ `BeginTransactionAsync` $\rightarrow$ `pg_advisory_xact_lock(700000000 + lotId)` $\rightarrow$ Xử lý nghiệp vụ $\rightarrow$ `CommitAsync` $\rightarrow$ `SemaphoreSlim.Release`.
+   - **Chống Deadlock & Non-reentrant:** Không có thao tác lồng nhau (nested acquisitions) giữa các luồng. Việc giải phóng sức chứa từ Hủy Booking (`CancelBookingAsync`) hoặc Rời bãi (`CheckOutAsync`) cam kết vào cơ sở dữ liệu trước khi các request kiểm tra sức chứa xếp hàng phía sau được phép đọc.
 2. **PostgreSQL Authoritative Advisory Lock:** Gọi hàm `SELECT pg_advisory_xact_lock(700000000 + lotId);` trực tiếp trong Transaction. Khóa này tự động giải phóng khi transaction `COMMIT` hoặc `ROLLBACK`. Đảm bảo an toàn tuyệt đối ngay cả khi chạy trên nhiều container / cluster.
 3. **Unique Filtered Index:** `uq_bookings_pending_vehicle` trên bảng `bookings (vehicle_id)` với điều kiện `WHERE status = 'PENDING'` ngăn chặn hoàn toàn việc 1 phương tiện cố ý tạo 2 lượt đặt chỗ đồng thời.
 
@@ -338,7 +368,7 @@ Hệ thống bảo vệ giao dịch đa tầng:
 3. Gọi `POST /api/v1/bookings` với `lotId: 1`, `plateNumber: "51A-99999"`.
    - Kết quả mong đợi: `201 Created`, trả về thông tin booking với `status: "PENDING"`.
 4. Gọi lại `GET /api/v1/parking-lots/1/capacity`:
-   - Kết quả mong đợi: `activeReservationsCount` tăng 1, `availableForBooking` giảm 1.
+   - Kết quả mong đợi: `availableForBooking` giảm 1 (và `activeReservationsCount` tăng 1 nếu gọi với tài khoản Staff/Admin).
 
 ### Kịch bản 2: Ngăn chặn Đặt chỗ trùng (Duplicate Active Booking)
 1. Dùng tiếp tài khoản `user1`, gọi lại `POST /api/v1/bookings` với cùng biển số `51A-99999`.
@@ -348,7 +378,7 @@ Hệ thống bảo vệ giao dịch đa tầng:
 1. Gọi `POST /api/v1/bookings/{id}/cancel` với ID vừa tạo ở Kịch bản 1.
 2. Kết quả mong đợi: `200 OK`, `status: "CANCELLED"`.
 3. Kiểm tra lại `GET /api/v1/parking-lots/1/capacity`:
-   - Kết quả mong đợi: `activeReservationsCount` giảm 1, `availableForBooking` tăng 1 (sức chứa đã được giải phóng).
+   - Kết quả mong đợi: `availableForBooking` tăng 1 (sức chứa đã được giải phóng ngay lập tức).
 
 ### Kịch bản 4: Check-in xe có đặt chỗ (Chuyển đổi công suất)
 1. Đặt chỗ mới cho biển số `51B-12345`.
@@ -357,9 +387,7 @@ Hệ thống bảo vệ giao dịch đa tầng:
 4. Kết quả mong đợi: `201 Created`, phiên đỗ xe có trường `bookingId` khớp với ID booking.
 5. Gọi `GET /api/v1/bookings/{id}`: Trạng thái booking chuyển sang `CHECKED_IN`, có trường `checkedInAt`.
 6. Gọi `GET /api/v1/parking-lots/1/capacity`:
-   - `activeReservationsCount` giảm 1.
-   - `activeSessionsCount` tăng 1.
-   - `availableForBooking` không đổi.
+   - `availableForBooking` không đổi (không bị trừ thêm suất oan uổng).
 
 ### Kịch bản 5: Chặn xe vãng lai khi bãi hết chỗ (Capacity Conflict)
 1. Chọn bãi xe chỉ còn đúng số chỗ bằng số lượt đặt chỗ `PENDING`.
@@ -368,17 +396,27 @@ Hệ thống bảo vệ giao dịch đa tầng:
 
 ---
 
-## 7. LƯU Ý DÀNH CHO SONG (FRONTEND CONTRACT)
+## 7. LƯU Ý DÀNH CHO SONG (FRONTEND CONTRACT UPDATE)
 
-1. **Hiển thị tình trạng bãi xe:**
+1. **Hiển thị tình trạng bãi xe công khai (Public UI):**
    - Dùng endpoint `GET /api/v1/parking-lots/{id}/capacity`.
+   - **Lưu ý quan trọng về Payload DTO:**
+     - Khi gọi ẩn danh (chưa đăng nhập), Backend **CHỈ** trả về: `lotId`, `lotName`, `lotAddress`, `totalCapacity`, `availableForWalkIn`, `availableForBooking`, `isFull`.
+     - Các trường nội bộ như `activeSessionsCount`, `activeReservationsCount`, `physicalOccupiedSlotsCount`, `discrepancyNotes` sẽ là `undefined`/`null` và không xuất hiện trong JSON.
+     - **Công thức hiển thị thanh tiến trình công khai:**
+       $$\% \text{ Đã sử dụng} = \frac{\text{totalCapacity} - \text{availableForBooking}}{\text{totalCapacity}} \times 100\%$$
    - Nếu `isFull === true` hoặc `availableForBooking === 0`: Disable nút "Đặt chỗ ngay", hiển thị badge "Hết chỗ".
-   - Hiển thị thanh tiến trình trực quan: `totalOccupiedOrReserved / totalCapacity * 100%`.
-2. **Form đặt chỗ:**
+2. **Màn hình Dashboard Giám sát Dành cho Nhân viên / Ban Quản Lý (Internal Staff Dashboard):**
+   - Khi gọi `GET /api/v1/parking-lots/{id}/capacity` có kèm Bearer Token của `STAFF`, `MANAGER` hoặc `ADMIN`, Backend sẽ trả về đầy đủ các trường chẩn đoán:
+     - `activeSessionsCount`: Số xe đang có phiên đỗ thực tế trong bãi.
+     - `activeReservationsCount`: Số lượt giữ chỗ PENDING.
+     - `physicalOccupiedSlotsCount`: Số ô cảm biến IoT đang báo có vật cản.
+     - `discrepancyNotes`: Cảnh báo đối soát lệch giữa cảm biến và phiên xe.
+3. **Form đặt chỗ:**
    - Người dùng có thể chọn nhanh từ danh sách xe đã lưu trong profile (`GET /api/v1/vehicles/my`) hoặc nhập trực tiếp biển số xe mới.
    - Không cần bắt buộc chọn giờ kết thúc (`endTime` là tùy chọn).
    - Không cho người dùng chọn trước ô đỗ vật lý (đúng tinh thần Locked Rule 1 & 2).
-3. **Tab "Đặt chỗ của tôi":**
+4. **Tab "Đặt chỗ của tôi":**
    - Gọi `GET /api/v1/bookings/my`.
    - Đối với các booking có `status === "PENDING"`: Hiển thị nút "Hủy đặt chỗ" mở popup nhập lý do.
    - Đối với các booking có `status === "CHECKED_IN"`: Ẩn nút hủy, hiển thị badge "Đã vào bãi" kèm link xem phiên đỗ hiện tại.
