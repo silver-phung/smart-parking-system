@@ -238,7 +238,104 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
 
         Assert.False(result.Success);
         Assert.Equal(400, result.StatusCode);
-        Assert.Contains("không hợp lệ", result.Message);
+        Assert.Contains("Không hỗ trợ tạo tài khoản", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithAdminRole_Returns400BadRequest()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "attempted_admin",
+            Email = "attempted_admin@smartparking.test",
+            Password = "Password123@",
+            FullName = "Attempted Admin",
+            Role = Roles.Admin
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("Chỉ cho phép quản trị viên tạo tài khoản nội bộ với vai trò 'STAFF' hoặc 'MANAGER'", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithUserRole_Returns400BadRequest()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "attempted_user",
+            Email = "attempted_user@smartparking.test",
+            Password = "Password123@",
+            FullName = "Attempted User",
+            Role = Roles.User
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("Chỉ cho phép quản trị viên tạo tài khoản nội bộ với vai trò 'STAFF' hoặc 'MANAGER'", result.Message);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_WithManagerRole_Succeeds()
+    {
+        var (service, _, admin1, _, _, _, _, _) = await SetupServiceAsync();
+
+        var request = new AdminCreateUserRequestDto
+        {
+            Username = "new_manager_01",
+            Email = "new_manager_01@smartparking.test",
+            Password = "Password123@",
+            FullName = "New Parking Manager",
+            Role = Roles.Manager,
+            IsActive = true
+        };
+
+        var result = await service.CreateUserAsync(request, admin1.Id, "127.0.0.1");
+
+        Assert.True(result.Success);
+        Assert.Equal(201, result.StatusCode);
+        Assert.Equal(Roles.Manager, result.Data!.Role);
+    }
+
+    [Fact]
+    public async Task UpdateUserStatusAsync_ConcurrentLastAdminDeactivation_PreventsZeroActiveAdmins()
+    {
+        var (service, context, admin1, admin2, _, _, _, _) = await SetupServiceAsync();
+
+        // Both admin1 and admin2 are active.
+        // Two concurrent requests attempt to deactivate admin1 and admin2 at the same time.
+        var task1 = service.UpdateUserStatusAsync(
+            admin1.Id,
+            new AdminUpdateStatusRequestDto { IsActive = false },
+            999,
+            "127.0.0.1");
+
+        var task2 = service.UpdateUserStatusAsync(
+            admin2.Id,
+            new AdminUpdateStatusRequestDto { IsActive = false },
+            999,
+            "127.0.0.1");
+
+        var results = await Task.WhenAll(task1, task2);
+
+        // Exactly one must succeed, and one must be rejected to prevent 0 active admins
+        var successCount = results.Count(r => r.Success);
+        var failureCount = results.Count(r => !r.Success && r.StatusCode == 400);
+
+        Assert.Equal(1, successCount);
+        Assert.Equal(1, failureCount);
+
+        // Verify in database that at least one admin remains active
+        var activeAdmins = context.Users.Count(u => u.Role.Code == Roles.Admin && u.IsActive);
+        Assert.Equal(1, activeAdmins);
     }
 
     [Fact]

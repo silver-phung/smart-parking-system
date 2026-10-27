@@ -23,6 +23,8 @@ public class AdminUserService : IAdminUserService
         WriteIndented = false
     };
 
+    private static readonly SemaphoreSlim AdminMutationLock = new(1, 1);
+
     public AdminUserService(
         IApplicationDbContext context,
         IPasswordHasherService passwordHasher,
@@ -140,9 +142,9 @@ public class AdminUserService : IAdminUserService
         CancellationToken ct = default)
     {
         var targetRoleCode = request.Role.Trim().ToUpperInvariant();
-        if (!Roles.All.Contains(targetRoleCode))
+        if (targetRoleCode != Roles.Staff && targetRoleCode != Roles.Manager)
         {
-            return (false, 400, $"Vai trò '{request.Role}' không hợp lệ. Các vai trò được hỗ trợ: {string.Join(", ", Roles.All)}.", null);
+            return (false, 400, $"Chỉ cho phép quản trị viên tạo tài khoản nội bộ với vai trò '{Roles.Staff}' hoặc '{Roles.Manager}'. Không hỗ trợ tạo tài khoản '{request.Role}' qua giao diện này.", null);
         }
 
         var role = await _context.Roles.FirstOrDefaultAsync(r => r.Code == targetRoleCode, ct);
@@ -241,124 +243,141 @@ public class AdminUserService : IAdminUserService
         string? ipAddress,
         CancellationToken ct = default)
     {
-        var targetUser = await _context.Users
-            .Include(u => u.Role)
-            .Include(u => u.ApprovedByUser)
-            .FirstOrDefaultAsync(u => u.Id == id, ct);
-
-        if (targetUser == null)
-        {
-            return (false, 404, $"Không tìm thấy người dùng với ID: {id}.", null);
-        }
-
-        // Prevent admin from disabling themselves
-        if (targetUser.Id == actorId && !request.IsActive)
-        {
-            return (false, 400, "Quản trị viên không thể tự vô hiệu hóa tài khoản của chính mình.", null);
-        }
-
-        // Prevent disabling the last active admin
-        if (targetUser.Role.Code == Roles.Admin && !request.IsActive)
-        {
-            if (await IsLastActiveAdminAsync(targetUser.Id, ct))
-            {
-                return (false, 400, "Không thể vô hiệu hóa quản trị viên (ADMIN) đang hoạt động cuối cùng của hệ thống.", null);
-            }
-        }
-
-        if (targetUser.IsActive == request.IsActive)
-        {
-            var currentDetail = await GetUserByIdAsync(id, ct);
-            return (true, 200, $"Trạng thái tài khoản '{targetUser.Username}' đã là {(request.IsActive ? "kích hoạt" : "vô hiệu hóa")}.", currentDetail);
-        }
-
-        var oldStatus = targetUser.IsActive;
-        targetUser.IsActive = request.IsActive;
-        targetUser.UpdatedAt = DateTime.UtcNow;
-
-        await using var transaction = await _context.BeginTransactionAsync(ct);
+        await AdminMutationLock.WaitAsync(ct);
         try
         {
-            int revokedAssignmentsCount = 0;
-            if (!request.IsActive)
+            await using var transaction = await _context.BeginTransactionAsync(ct);
+            try
             {
-                // Soft-revoke active staff lot assignments when account is disabled
-                var activeAssignments = await _context.StaffLotAssignments
-                    .Include(a => a.Lot)
-                    .Where(a => a.UserId == targetUser.Id && a.IsActive)
-                    .ToListAsync(ct);
-
-                var reason = string.IsNullOrWhiteSpace(request.Reason)
-                    ? "Tự động thu hồi do tài khoản nhân sự bị vô hiệu hóa."
-                    : $"Tự động thu hồi do tài khoản bị vô hiệu hóa: {request.Reason.Trim()}";
-
-                foreach (var a in activeAssignments)
+                if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
                 {
-                    a.IsActive = false;
-                    a.RevokedBy = actorId;
-                    a.RevokedAt = DateTime.UtcNow;
-                    a.RevocationReason = reason;
-                    a.UpdatedAt = DateTime.UtcNow;
-                    revokedAssignmentsCount++;
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(990099);", ct);
+                }
 
-                    _context.AuditLogs.Add(new AuditLog
+                var targetUser = await _context.Users
+                    .Include(u => u.Role)
+                    .Include(u => u.ApprovedByUser)
+                    .FirstOrDefaultAsync(u => u.Id == id, ct);
+
+                if (targetUser == null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, 404, $"Không tìm thấy người dùng với ID: {id}.", null);
+                }
+
+                // Prevent admin from disabling themselves
+                if (targetUser.Id == actorId && !request.IsActive)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, 400, "Quản trị viên không thể tự vô hiệu hóa tài khoản của chính mình.", null);
+                }
+
+                // Prevent disabling the last active admin
+                if (targetUser.Role.Code == Roles.Admin && !request.IsActive)
+                {
+                    if (await IsLastActiveAdminAsync(targetUser.Id, ct))
                     {
-                        Action = "REVOKE_STAFF_LOT",
-                        TargetEntity = "staff_lot_assignments",
-                        TargetId = a.Id.ToString(),
-                        OldValues = JsonSerializer.Serialize(new { a.Id, a.LotId, Status = "ACTIVE" }, JsonOptions),
-                        NewValues = JsonSerializer.Serialize(new { Status = "REVOKED", RevocationReason = reason, RevokedBy = actorId }, JsonOptions),
-                        ActorId = actorId,
-                        IpAddress = ipAddress,
-                        CreatedAt = DateTime.UtcNow
-                    });
+                        await transaction.RollbackAsync(ct);
+                        return (false, 400, "Không thể vô hiệu hóa quản trị viên (ADMIN) đang hoạt động cuối cùng của hệ thống.", null);
+                    }
                 }
 
-                // Revoke all active refresh tokens so user cannot obtain new access tokens
-                var activeTokens = await _context.RefreshTokens
-                    .Where(rt => rt.UserId == targetUser.Id && !rt.IsRevoked)
-                    .ToListAsync(ct);
-
-                foreach (var rt in activeTokens)
+                if (targetUser.IsActive == request.IsActive)
                 {
-                    rt.IsRevoked = true;
-                    rt.RevokedAt = DateTime.UtcNow;
+                    await transaction.RollbackAsync(ct);
+                    var currentDetail = await GetUserByIdAsync(id, ct);
+                    return (true, 200, $"Trạng thái tài khoản '{targetUser.Username}' đã là {(request.IsActive ? "kích hoạt" : "vô hiệu hóa")}.", currentDetail);
                 }
+
+                var oldStatus = targetUser.IsActive;
+                targetUser.IsActive = request.IsActive;
+                targetUser.UpdatedAt = DateTime.UtcNow;
+
+                int revokedAssignmentsCount = 0;
+                if (!request.IsActive)
+                {
+                    // Soft-revoke active staff lot assignments when account is disabled
+                    var activeAssignments = await _context.StaffLotAssignments
+                        .Include(a => a.Lot)
+                        .Where(a => a.UserId == targetUser.Id && a.IsActive)
+                        .ToListAsync(ct);
+
+                    var reason = string.IsNullOrWhiteSpace(request.Reason)
+                        ? "Tự động thu hồi do tài khoản nhân sự bị vô hiệu hóa."
+                        : $"Tự động thu hồi do tài khoản bị vô hiệu hóa: {request.Reason.Trim()}";
+
+                    foreach (var a in activeAssignments)
+                    {
+                        a.IsActive = false;
+                        a.RevokedBy = actorId;
+                        a.RevokedAt = DateTime.UtcNow;
+                        a.RevocationReason = reason;
+                        a.UpdatedAt = DateTime.UtcNow;
+                        revokedAssignmentsCount++;
+
+                        _context.AuditLogs.Add(new AuditLog
+                        {
+                            Action = "REVOKE_STAFF_LOT",
+                            TargetEntity = "staff_lot_assignments",
+                            TargetId = a.Id.ToString(),
+                            OldValues = JsonSerializer.Serialize(new { a.Id, a.LotId, Status = "ACTIVE" }, JsonOptions),
+                            NewValues = JsonSerializer.Serialize(new { Status = "REVOKED", RevocationReason = reason, RevokedBy = actorId }, JsonOptions),
+                            ActorId = actorId,
+                            IpAddress = ipAddress,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+
+                    // Revoke all active refresh tokens so user cannot obtain new access tokens
+                    var activeTokens = await _context.RefreshTokens
+                        .Where(rt => rt.UserId == targetUser.Id && !rt.IsRevoked)
+                        .ToListAsync(ct);
+
+                    foreach (var rt in activeTokens)
+                    {
+                        rt.IsRevoked = true;
+                        rt.RevokedAt = DateTime.UtcNow;
+                    }
+                }
+
+                var audit = new AuditLog
+                {
+                    Action = "UPDATE_USER_STATUS",
+                    TargetEntity = "users",
+                    TargetId = targetUser.Id.ToString(),
+                    OldValues = JsonSerializer.Serialize(new { IsActive = oldStatus }, JsonOptions),
+                    NewValues = JsonSerializer.Serialize(new
+                    {
+                        IsActive = targetUser.IsActive,
+                        request.Reason,
+                        RevokedAssignmentsCount = revokedAssignmentsCount,
+                        IpAddress = ipAddress
+                    }, JsonOptions),
+                    ActorId = actorId,
+                    IpAddress = ipAddress,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.AuditLogs.Add(audit);
+
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+
+                _logger.LogInformation("Admin ID {AdminId} updated status of User ID {UserId} ({Username}) to {IsActive}", actorId, targetUser.Id, targetUser.Username, targetUser.IsActive);
+
+                var updatedDetail = await GetUserByIdAsync(id, ct);
+                var statusText = targetUser.IsActive ? "kích hoạt" : "vô hiệu hóa";
+                return (true, 200, $"Cập nhật trạng thái tài khoản '{targetUser.Username}' thành {statusText} thành công.", updatedDetail);
             }
-
-            var audit = new AuditLog
+            catch (Exception ex)
             {
-                Action = "UPDATE_USER_STATUS",
-                TargetEntity = "users",
-                TargetId = targetUser.Id.ToString(),
-                OldValues = JsonSerializer.Serialize(new { IsActive = oldStatus }, JsonOptions),
-                NewValues = JsonSerializer.Serialize(new
-                {
-                    IsActive = targetUser.IsActive,
-                    request.Reason,
-                    RevokedAssignmentsCount = revokedAssignmentsCount,
-                    IpAddress = ipAddress
-                }, JsonOptions),
-                ActorId = actorId,
-                IpAddress = ipAddress,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.AuditLogs.Add(audit);
-
-            await _context.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
-
-            _logger.LogInformation("Admin ID {AdminId} updated status of User ID {UserId} ({Username}) to {IsActive}", actorId, targetUser.Id, targetUser.Username, targetUser.IsActive);
-
-            var updatedDetail = await GetUserByIdAsync(id, ct);
-            var statusText = targetUser.IsActive ? "kích hoạt" : "vô hiệu hóa";
-            return (true, 200, $"Cập nhật trạng thái tài khoản '{targetUser.Username}' thành {statusText} thành công.", updatedDetail);
+                await transaction.RollbackAsync(ct);
+                _logger.LogError(ex, "Lỗi khi cập nhật trạng thái người dùng ID {UserId}", id);
+                throw;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            await transaction.RollbackAsync(ct);
-            _logger.LogError(ex, "Lỗi khi cập nhật trạng thái người dùng ID {UserId}", id);
-            throw;
+            AdminMutationLock.Release();
         }
     }
 
@@ -369,143 +388,160 @@ public class AdminUserService : IAdminUserService
         string? ipAddress,
         CancellationToken ct = default)
     {
-        var targetUser = await _context.Users
-            .Include(u => u.Role)
-            .Include(u => u.ApprovedByUser)
-            .FirstOrDefaultAsync(u => u.Id == id, ct);
-
-        if (targetUser == null)
-        {
-            return (false, 404, $"Không tìm thấy người dùng với ID: {id}.", null);
-        }
-
         var targetRoleCode = request.Role.Trim().ToUpperInvariant();
         if (!Roles.All.Contains(targetRoleCode))
         {
             return (false, 400, $"Vai trò '{request.Role}' không hợp lệ. Các vai trò được hỗ trợ: {string.Join(", ", Roles.All)}.", null);
         }
 
-        // Prevent admin from demoting themselves
-        if (targetUser.Id == actorId && targetRoleCode != Roles.Admin)
-        {
-            return (false, 400, "Quản trị viên không thể tự hạ quyền tài khoản của chính mình.", null);
-        }
-
-        // Prevent demoting the last active admin
-        if (targetUser.Role.Code == Roles.Admin && targetRoleCode != Roles.Admin)
-        {
-            if (await IsLastActiveAdminAsync(targetUser.Id, ct))
-            {
-                return (false, 400, "Không thể hạ quyền quản trị viên (ADMIN) đang hoạt động cuối cùng của hệ thống.", null);
-            }
-        }
-
-        if (targetUser.Role.Code == targetRoleCode)
-        {
-            var currentDetail = await GetUserByIdAsync(id, ct);
-            return (true, 200, $"Tài khoản '{targetUser.Username}' hiện đã có vai trò '{targetRoleCode}'.", currentDetail);
-        }
-
-        var newRole = await _context.Roles.FirstOrDefaultAsync(r => r.Code == targetRoleCode, ct);
-        if (newRole == null)
-        {
-            return (false, 400, $"Không tìm thấy vai trò '{targetRoleCode}' trong cơ sở dữ liệu.", null);
-        }
-
-        var oldRoleCode = targetUser.Role.Code;
-        targetUser.RoleId = newRole.Id;
-        targetUser.Role = newRole;
-        targetUser.UpdatedAt = DateTime.UtcNow;
-
-        await using var transaction = await _context.BeginTransactionAsync(ct);
+        await AdminMutationLock.WaitAsync(ct);
         try
         {
-            int revokedAssignmentsCount = 0;
-            // If user demoted/changed to a role that cannot hold lot assignments (e.g. USER or ADMIN)
-            if (targetRoleCode != Roles.Manager && targetRoleCode != Roles.Staff)
+            await using var transaction = await _context.BeginTransactionAsync(ct);
+            try
             {
-                var activeAssignments = await _context.StaffLotAssignments
-                    .Include(a => a.Lot)
-                    .Where(a => a.UserId == targetUser.Id && a.IsActive)
+                if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(990099);", ct);
+                }
+
+                var targetUser = await _context.Users
+                    .Include(u => u.Role)
+                    .Include(u => u.ApprovedByUser)
+                    .FirstOrDefaultAsync(u => u.Id == id, ct);
+
+                if (targetUser == null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, 404, $"Không tìm thấy người dùng với ID: {id}.", null);
+                }
+
+                // Prevent admin from demoting themselves
+                if (targetUser.Id == actorId && targetRoleCode != Roles.Admin)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, 400, "Quản trị viên không thể tự hạ quyền tài khoản của chính mình.", null);
+                }
+
+                // Prevent demoting the last active admin
+                if (targetUser.Role.Code == Roles.Admin && targetRoleCode != Roles.Admin)
+                {
+                    if (await IsLastActiveAdminAsync(targetUser.Id, ct))
+                    {
+                        await transaction.RollbackAsync(ct);
+                        return (false, 400, "Không thể hạ quyền quản trị viên (ADMIN) đang hoạt động cuối cùng của hệ thống.", null);
+                    }
+                }
+
+                if (targetUser.Role.Code == targetRoleCode)
+                {
+                    await transaction.RollbackAsync(ct);
+                    var currentDetail = await GetUserByIdAsync(id, ct);
+                    return (true, 200, $"Tài khoản '{targetUser.Username}' hiện đã có vai trò '{targetRoleCode}'.", currentDetail);
+                }
+
+                var newRole = await _context.Roles.FirstOrDefaultAsync(r => r.Code == targetRoleCode, ct);
+                if (newRole == null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, 400, $"Không tìm thấy vai trò '{targetRoleCode}' trong cơ sở dữ liệu.", null);
+                }
+
+                var oldRoleCode = targetUser.Role.Code;
+                targetUser.RoleId = newRole.Id;
+                targetUser.Role = newRole;
+                targetUser.UpdatedAt = DateTime.UtcNow;
+
+                int revokedAssignmentsCount = 0;
+                // If user demoted/changed to a role that cannot hold lot assignments (e.g. USER or ADMIN)
+                if (targetRoleCode != Roles.Manager && targetRoleCode != Roles.Staff)
+                {
+                    var activeAssignments = await _context.StaffLotAssignments
+                        .Include(a => a.Lot)
+                        .Where(a => a.UserId == targetUser.Id && a.IsActive)
+                        .ToListAsync(ct);
+
+                    var reason = string.IsNullOrWhiteSpace(request.Reason)
+                        ? $"Tự động thu hồi do vai trò thay đổi từ {oldRoleCode} sang {targetRoleCode}."
+                        : $"Tự động thu hồi do vai trò thay đổi sang {targetRoleCode}: {request.Reason.Trim()}";
+
+                    foreach (var a in activeAssignments)
+                    {
+                        a.IsActive = false;
+                        a.RevokedBy = actorId;
+                        a.RevokedAt = DateTime.UtcNow;
+                        a.RevocationReason = reason;
+                        a.UpdatedAt = DateTime.UtcNow;
+                        revokedAssignmentsCount++;
+
+                        _context.AuditLogs.Add(new AuditLog
+                        {
+                            Action = "REVOKE_STAFF_LOT",
+                            TargetEntity = "staff_lot_assignments",
+                            TargetId = a.Id.ToString(),
+                            OldValues = JsonSerializer.Serialize(new { a.Id, a.LotId, Status = "ACTIVE" }, JsonOptions),
+                            NewValues = JsonSerializer.Serialize(new { Status = "REVOKED", RevocationReason = reason, RevokedBy = actorId }, JsonOptions),
+                            ActorId = actorId,
+                            IpAddress = ipAddress,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+
+                // Revoke active refresh tokens so stale tokens cannot issue old claims
+                var activeTokens = await _context.RefreshTokens
+                    .Where(rt => rt.UserId == targetUser.Id && !rt.IsRevoked)
                     .ToListAsync(ct);
 
-                var reason = string.IsNullOrWhiteSpace(request.Reason)
-                    ? $"Tự động thu hồi do vai trò thay đổi từ {oldRoleCode} sang {targetRoleCode}."
-                    : $"Tự động thu hồi do vai trò thay đổi sang {targetRoleCode}: {request.Reason.Trim()}";
-
-                foreach (var a in activeAssignments)
+                foreach (var rt in activeTokens)
                 {
-                    a.IsActive = false;
-                    a.RevokedBy = actorId;
-                    a.RevokedAt = DateTime.UtcNow;
-                    a.RevocationReason = reason;
-                    a.UpdatedAt = DateTime.UtcNow;
-                    revokedAssignmentsCount++;
-
-                    _context.AuditLogs.Add(new AuditLog
-                    {
-                        Action = "REVOKE_STAFF_LOT",
-                        TargetEntity = "staff_lot_assignments",
-                        TargetId = a.Id.ToString(),
-                        OldValues = JsonSerializer.Serialize(new { a.Id, a.LotId, Status = "ACTIVE" }, JsonOptions),
-                        NewValues = JsonSerializer.Serialize(new { Status = "REVOKED", RevocationReason = reason, RevokedBy = actorId }, JsonOptions),
-                        ActorId = actorId,
-                        IpAddress = ipAddress,
-                        CreatedAt = DateTime.UtcNow
-                    });
+                    rt.IsRevoked = true;
+                    rt.RevokedAt = DateTime.UtcNow;
                 }
-            }
 
-            // Revoke active refresh tokens so stale tokens cannot issue old claims
-            var activeTokens = await _context.RefreshTokens
-                .Where(rt => rt.UserId == targetUser.Id && !rt.IsRevoked)
-                .ToListAsync(ct);
-
-            foreach (var rt in activeTokens)
-            {
-                rt.IsRevoked = true;
-                rt.RevokedAt = DateTime.UtcNow;
-            }
-
-            var audit = new AuditLog
-            {
-                Action = "UPDATE_USER_ROLE",
-                TargetEntity = "users",
-                TargetId = targetUser.Id.ToString(),
-                OldValues = JsonSerializer.Serialize(new { Role = oldRoleCode }, JsonOptions),
-                NewValues = JsonSerializer.Serialize(new
+                var audit = new AuditLog
                 {
-                    Role = targetRoleCode,
-                    request.Reason,
-                    RevokedAssignmentsCount = revokedAssignmentsCount,
-                    IpAddress = ipAddress
-                }, JsonOptions),
-                ActorId = actorId,
-                IpAddress = ipAddress,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.AuditLogs.Add(audit);
+                    Action = "UPDATE_USER_ROLE",
+                    TargetEntity = "users",
+                    TargetId = targetUser.Id.ToString(),
+                    OldValues = JsonSerializer.Serialize(new { Role = oldRoleCode }, JsonOptions),
+                    NewValues = JsonSerializer.Serialize(new
+                    {
+                        Role = targetRoleCode,
+                        request.Reason,
+                        RevokedAssignmentsCount = revokedAssignmentsCount,
+                        IpAddress = ipAddress
+                    }, JsonOptions),
+                    ActorId = actorId,
+                    IpAddress = ipAddress,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.AuditLogs.Add(audit);
 
-            await _context.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
 
-            _logger.LogInformation("Admin ID {AdminId} updated role of User ID {UserId} ({Username}) from {OldRole} to {NewRole}", actorId, targetUser.Id, targetUser.Username, oldRoleCode, targetRoleCode);
+                _logger.LogInformation("Admin ID {AdminId} updated role of User ID {UserId} ({Username}) from {OldRole} to {NewRole}", actorId, targetUser.Id, targetUser.Username, oldRoleCode, targetRoleCode);
 
-            var updatedDetail = await GetUserByIdAsync(id, ct);
-            return (true, 200, $"Cập nhật vai trò tài khoản '{targetUser.Username}' thành '{targetRoleCode}' thành công.", updatedDetail);
+                var updatedDetail = await GetUserByIdAsync(id, ct);
+                return (true, 200, $"Cập nhật vai trò tài khoản '{targetUser.Username}' thành '{targetRoleCode}' thành công.", updatedDetail);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(ct);
+                _logger.LogError(ex, "Lỗi khi cập nhật vai trò người dùng ID {UserId}", id);
+                throw;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            await transaction.RollbackAsync(ct);
-            _logger.LogError(ex, "Lỗi khi cập nhật vai trò người dùng ID {UserId}", id);
-            throw;
+            AdminMutationLock.Release();
         }
     }
 
     private async Task<bool> IsLastActiveAdminAsync(long userId, CancellationToken ct)
     {
         var otherActiveAdminsCount = await _context.Users
-            .AsNoTracking()
             .CountAsync(u => u.Role.Code == Roles.Admin && u.IsActive && u.Id != userId, ct);
 
         return otherActiveAdminsCount == 0;

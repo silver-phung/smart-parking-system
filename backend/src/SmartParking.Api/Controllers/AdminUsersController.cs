@@ -64,7 +64,7 @@ public class AdminUsersController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo tài khoản người dùng mới trực tiếp bởi ADMIN (Hỗ trợ STAFF, MANAGER, USER, ADMIN).
+    /// Tạo tài khoản người dùng nội bộ trực tiếp bởi ADMIN (Chỉ hỗ trợ vai trò STAFF hoặc MANAGER).
     /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(AdminUserDetailDto), StatusCodes.Status201Created)]

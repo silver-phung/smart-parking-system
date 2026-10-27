@@ -144,10 +144,14 @@
 **Quy tắc Validate:**
 - `username`: Bắt buộc, 3–50 ký tự (`^[a-zA-Z0-9_.]{3,50}$`).
 - `email`: Bắt buộc, đúng chuẩn email RFC.
-- `password`: Bắt buộc, tối thiểu 8 ký tự.
+- `password`: Bắt buộc, tối thiểu 8 ký tự (Mật khẩu khởi tạo ban đầu do Admin cấp trực tiếp cho nhân sự qua kênh nội bộ).
 - `fullName`: Bắt buộc, tối đa 100 ký tự.
-- `role`: Bắt buộc, một trong 4 vai trò: `ADMIN`, `MANAGER`, `STAFF`, `USER`.
+- `role`: Bắt buộc, **chỉ cho phép `'STAFF'` hoặc `'MANAGER'`** (Phạm vi tạo tài khoản nội bộ; không cho phép tự tạo ADMIN hoặc USER qua API này).
 - `phoneNumber`: Không bắt buộc, định dạng số điện thoại hợp lệ.
+
+> **Ghi chú về xác minh & mật khẩu ban đầu:**
+> - Tài khoản do ADMIN tạo được kích hoạt trực tiếp với `isEmailVerified = true` và `approvalStatus = "APPROVED"` để nhân viên có thể đăng nhập ngay mà không qua luồng OTP tự đăng ký của khách hàng (USER).
+> - Mật khẩu khởi tạo được quản trị viên cấp phát ban đầu cho nhân sự; nhân sự sử dụng mật khẩu này để đăng nhập vào hệ thống.
 
 **Response thành công (`201 Created`):**
 ```json
@@ -179,7 +183,7 @@
 ```
 
 **Mã lỗi thường gặp:**
-- `400 Bad Request`: Thiếu trường bắt buộc, mật khẩu quá ngắn, hoặc role không tồn tại.
+- `400 Bad Request`: Thiếu trường bắt buộc, mật khẩu < 8 ký tự, hoặc vai trò không phải `STAFF`/`MANAGER`.
 - `409 Conflict`: Tên đăng nhập hoặc Email đã tồn tại trong hệ thống.
 
 ---
