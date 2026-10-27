@@ -110,6 +110,19 @@ public class ParkingDispatchTests
         };
         context.ParkingSessions.Add(session);
 
+        var adminUser = new User
+        {
+            Id = 1,
+            Username = "admin_dispatcher",
+            Email = "admin_disp@test.com",
+            FullName = "Admin Dispatcher",
+            PasswordHash = "dummy",
+            RoleId = 1,
+            IsActive = true,
+            ApprovalStatus = "APPROVED"
+        };
+        context.Users.Add(adminUser);
+
         await context.SaveChangesAsync();
 
         return (dispatchService, context, lot, floor1, slots, session);

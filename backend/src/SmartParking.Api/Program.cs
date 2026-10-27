@@ -95,31 +95,43 @@ builder.Services.AddAuthentication(options =>
             var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? context.Principal?.FindFirst("sub")?.Value;
 
-            if (long.TryParse(userIdClaim, out var userId))
+            if (string.IsNullOrWhiteSpace(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
             {
-                var user = await db.Users
-                    .AsNoTracking()
-                    .Include(u => u.Role)
-                    .FirstOrDefaultAsync(u => u.Id == userId, context.HttpContext.RequestAborted);
+                context.Fail("Mã định danh người dùng (UserId claim) không hợp lệ hoặc bị thiếu trong token.");
+                return;
+            }
 
-                if (user != null)
+            var user = await db.Users
+                .AsNoTracking()
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId, context.HttpContext.RequestAborted);
+
+            if (user == null)
+            {
+                context.Fail("Tài khoản người dùng không tồn tại trong cơ sở dữ liệu.");
+                return;
+            }
+
+            if (!user.IsActive)
+            {
+                context.Fail("Tài khoản người dùng đã bị vô hiệu hóa.");
+                return;
+            }
+
+            if (user.Role == null || string.IsNullOrWhiteSpace(user.Role.Code))
+            {
+                context.Fail("Không thể xác định vai trò hợp lệ của người dùng.");
+                return;
+            }
+
+            if (context.Principal?.Identity is ClaimsIdentity identity)
+            {
+                var roleClaims = identity.FindAll(ClaimTypes.Role).ToList();
+                foreach (var rc in roleClaims)
                 {
-                    if (!user.IsActive)
-                    {
-                        context.Fail("Tài khoản người dùng đã bị vô hiệu hóa.");
-                        return;
-                    }
-
-                    if (user.Role != null && context.Principal?.Identity is ClaimsIdentity identity)
-                    {
-                        var roleClaims = identity.FindAll(ClaimTypes.Role).ToList();
-                        foreach (var rc in roleClaims)
-                        {
-                            identity.RemoveClaim(rc);
-                        }
-                        identity.AddClaim(new Claim(ClaimTypes.Role, user.Role.Code));
-                    }
+                    identity.RemoveClaim(rc);
                 }
+                identity.AddClaim(new Claim(ClaimTypes.Role, user.Role.Code));
             }
         }
     };

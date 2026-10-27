@@ -13,7 +13,7 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         _context = context;
     }
 
-    private async Task<string?> ResolveEffectiveRoleAsync(long userId, string claimRole, CancellationToken ct)
+    private async Task<string?> ResolveEffectiveRoleAsync(long userId, CancellationToken ct)
     {
         var user = await _context.Users
             .AsNoTracking()
@@ -27,15 +27,15 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
                 return null;
             }
 
-            return user.Role?.Code ?? claimRole;
+            return user.Role?.Code;
         }
 
-        return claimRole;
+        return null;
     }
 
     public async Task<bool> HasLotAccessAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
         if (effectiveRole == null)
         {
             return false;
@@ -57,7 +57,7 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<List<int>> GetAssignedLotIdsAsync(long userId, string userRole, CancellationToken ct = default)
     {
-        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
         if (effectiveRole == null)
         {
             return [];
@@ -84,7 +84,7 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<bool> CanManageLotStatusAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
         if (effectiveRole == null)
         {
             return false;
@@ -106,7 +106,7 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<bool> CanManageSlotStatusAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
         if (effectiveRole == null)
         {
             return false;
@@ -128,7 +128,7 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
 
     public async Task<bool> CanOperateSessionOrDispatchAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
-        var effectiveRole = await ResolveEffectiveRoleAsync(userId, userRole, ct);
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
         if (effectiveRole == null)
         {
             return false;

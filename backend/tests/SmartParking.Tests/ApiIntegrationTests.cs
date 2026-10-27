@@ -1,9 +1,14 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using SmartParking.Application.Common.Interfaces;
+using SmartParking.Application.Common.Options;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
 using SmartParking.Infrastructure.Data;
@@ -27,14 +32,41 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var client = _factory.CreateClient();
         using var scope = _factory.Services.CreateScope();
         var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
-        var user = new User
+        var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
+
+        var roleId = role switch
         {
-            Id = 9999,
-            Username = $"test_{role.ToLower()}",
-            Email = $"{role.ToLower()}@smartparking.test",
-            FullName = $"Test {role}",
-            PasswordHash = "dummy_hash"
+            Roles.Admin => 1,
+            Roles.Manager => 2,
+            Roles.Staff => 3,
+            _ => 4
         };
+
+        var userId = 9000L + roleId;
+        var user = db.Users.Find(userId);
+        if (user == null)
+        {
+            user = new User
+            {
+                Id = userId,
+                Username = $"test_{role.ToLower()}",
+                Email = $"{role.ToLower()}@smartparking.test",
+                FullName = $"Test {role}",
+                PasswordHash = "dummy_hash",
+                RoleId = roleId,
+                IsActive = true,
+                ApprovalStatus = "APPROVED"
+            };
+            db.Users.Add(user);
+            db.SaveChanges();
+        }
+        else
+        {
+            user.RoleId = roleId;
+            user.IsActive = true;
+            db.SaveChanges();
+        }
+
         var token = tokenService.GenerateAccessToken(user, role);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
@@ -675,6 +707,62 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var response = await client.PostAsync("/api/v1/parking-lots", body);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Auth_ValidSignatureToken_NonExistentUserIdInDb_Returns401Unauthorized()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+
+        // Generate token for non-existent user Id = 888888
+        var ghostUser = new User
+        {
+            Id = 888888,
+            Username = "ghost_user",
+            Email = "ghost@smartparking.test",
+            FullName = "Ghost User",
+            PasswordHash = "dummy"
+        };
+        var token = tokenService.GenerateAccessToken(ghostUser, Roles.Admin);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/api/v1/staff-assignments");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Auth_MissingOrInvalidUserIdClaimInToken_Returns401Unauthorized()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var jwtOptions = scope.ServiceProvider.GetRequiredService<IOptions<JwtOptions>>().Value;
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SecretKey));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        // Token with valid signature and role, but with non-numeric UserId claim
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, "invalid_non_numeric_id"),
+            new(JwtRegisteredClaimNames.Sub, "invalid_non_numeric_id"),
+            new(ClaimTypes.Role, Roles.Admin)
+        };
+
+        var jwtToken = new JwtSecurityToken(
+            issuer: jwtOptions.Issuer,
+            audience: jwtOptions.Audience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(15),
+            signingCredentials: creds
+        );
+        var token = new JwtSecurityTokenHandler().WriteToken(jwtToken);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/api/v1/staff-assignments");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     #endregion

@@ -17,6 +17,20 @@ public class VehicleAndSessionTests
     private async Task<(VehicleService VehicleService, ParkingSessionService SessionService, TestSmartParkingDbContext Context)> CreateServicesAsync()
     {
         var context = await TestDbHelper.CreateInMemoryDbContextAsync();
+        var adminUser = new User
+        {
+            Id = 1,
+            Username = "admin_session_test",
+            Email = "admin_session@test.com",
+            FullName = "Admin Session",
+            PasswordHash = "dummy",
+            RoleId = 1,
+            IsActive = true,
+            ApprovalStatus = "APPROVED"
+        };
+        context.Users.Add(adminUser);
+        await context.SaveChangesAsync();
+
         var vehicleService = new VehicleService(context, NullLogger<VehicleService>.Instance);
         var authService = new ParkingAuthorizationService(context);
         var sessionService = new ParkingSessionService(context, authService, NullLogger<ParkingSessionService>.Instance);

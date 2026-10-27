@@ -118,6 +118,15 @@ public class CustomWebApplicationFactory : Microsoft.AspNetCore.Mvc.Testing.WebA
                 new Role { Id = 4, Code = Roles.User, Name = "Người dùng" }
             );
 
+            // Seed Base Test Users
+            db.Users.AddRange(
+                new User { Id = 9001, Username = "test_admin", Email = "admin@smartparking.test", FullName = "Test Admin", PasswordHash = "dummy", RoleId = 1, IsActive = true, ApprovalStatus = "APPROVED" },
+                new User { Id = 9002, Username = "test_manager", Email = "manager@smartparking.test", FullName = "Test Manager", PasswordHash = "dummy", RoleId = 2, IsActive = true, ApprovalStatus = "APPROVED" },
+                new User { Id = 9003, Username = "test_staff", Email = "staff@smartparking.test", FullName = "Test Staff", PasswordHash = "dummy", RoleId = 3, IsActive = true, ApprovalStatus = "APPROVED" },
+                new User { Id = 9004, Username = "test_user", Email = "user@smartparking.test", FullName = "Test User", PasswordHash = "dummy", RoleId = 4, IsActive = true, ApprovalStatus = "APPROVED" },
+                new User { Id = 9999, Username = "test_fallback", Email = "fallback@smartparking.test", FullName = "Test Fallback", PasswordHash = "dummy", RoleId = 1, IsActive = true, ApprovalStatus = "APPROVED" }
+            );
+
             // Seed Lot 1
             var lot = new ParkingLot
             {
