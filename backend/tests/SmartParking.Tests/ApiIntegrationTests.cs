@@ -240,4 +240,15 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Contains("51F-999.88", content);
         Assert.Contains("OCCUPIED", content);
     }
+
+    [Fact]
+    public async Task GetParkingLotsMetadata_ReturnsAllThreeLotsWithFloorConfigurations()
+    {
+        var response = await _client.GetAsync("/api/ParkingSlots/lots");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Bãi 1", content);
+        Assert.Contains("Bãi 2", content);
+        Assert.Contains("Bãi 3", content);
+    }
 }
