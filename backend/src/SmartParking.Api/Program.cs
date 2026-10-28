@@ -22,6 +22,8 @@ builder.Services.AddEndpointsApiExplorer();
 
 // 1. Configure Options & Security Secret Validation
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+var securityOptions = builder.Configuration.GetSection(SecurityOptions.SectionName).Get<SecurityOptions>() ?? new SecurityOptions();
+var recaptchaOptions = builder.Configuration.GetSection(RecaptchaOptions.SectionName).Get<RecaptchaOptions>() ?? new RecaptchaOptions();
 
 // In Production, FAIL STARTUP immediately if secrets are missing or weak
 if (builder.Environment.IsProduction())
@@ -29,6 +31,16 @@ if (builder.Environment.IsProduction())
     if (string.IsNullOrWhiteSpace(jwtOptions.SecretKey) || Encoding.UTF8.GetByteCount(jwtOptions.SecretKey) < 32)
     {
         throw new InvalidOperationException("FATAL: Jwt:SecretKey must be configured in Production with at least 32 bytes (256 bits).");
+    }
+
+    if (string.IsNullOrWhiteSpace(securityOptions.OtpSecretKey) || Encoding.UTF8.GetByteCount(securityOptions.OtpSecretKey) < 32)
+    {
+        throw new InvalidOperationException("FATAL: Security:OtpSecretKey must be configured in Production with at least 32 bytes (256 bits).");
+    }
+
+    if (!recaptchaOptions.Enabled || string.IsNullOrWhiteSpace(recaptchaOptions.SecretKey))
+    {
+        throw new InvalidOperationException("FATAL: reCAPTCHA must be enabled with a valid SecretKey in Production.");
     }
 }
 else
@@ -41,6 +53,14 @@ else
         RandomNumberGenerator.Fill(randomBytes);
         jwtOptions.SecretKey = Convert.ToBase64String(randomBytes);
         builder.Configuration["Jwt:SecretKey"] = jwtOptions.SecretKey;
+    }
+
+    if (string.IsNullOrWhiteSpace(securityOptions.OtpSecretKey) || Encoding.UTF8.GetByteCount(securityOptions.OtpSecretKey) < 32)
+    {
+        var randomBytes = new byte[32];
+        RandomNumberGenerator.Fill(randomBytes);
+        securityOptions.OtpSecretKey = Convert.ToBase64String(randomBytes);
+        builder.Configuration["Security:OtpSecretKey"] = securityOptions.OtpSecretKey;
     }
 }
 
@@ -159,6 +179,17 @@ builder.Services.AddRateLimiter(options =>
             cancellationToken);
     };
 
+    // Register policy: 5 requests / 5 minutes per IP
+    options.AddPolicy("register-rate-limit", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0
+            }));
+
     // Login policy: 10 requests / 1 minute per IP
     options.AddPolicy("login-rate-limit", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -167,6 +198,28 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    // Verify Email policy: 10 requests / 1 minute per IP
+    options.AddPolicy("verify-rate-limit", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+
+    // Resend Verification policy: 3 requests / 5 minutes per IP
+    options.AddPolicy("resend-rate-limit", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromMinutes(5),
                 QueueLimit = 0
             }));
 });

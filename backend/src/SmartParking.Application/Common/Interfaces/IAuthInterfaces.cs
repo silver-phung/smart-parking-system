@@ -18,8 +18,28 @@ public interface ITokenService
     string HashToken(string rawToken);
 }
 
+public interface IOtpService
+{
+    string GenerateOtpCode();
+    string ComputeOtpHash(long userId, string tokenType, string otpCode);
+    bool VerifyOtpHash(long userId, string tokenType, string otpCode, string storedHash);
+}
+
+public interface IEmailService
+{
+    Task<bool> SendVerificationOtpAsync(string toEmail, string otpCode, CancellationToken cancellationToken = default);
+}
+
+public interface IRecaptchaService
+{
+    Task<bool> VerifyAsync(string? token, string? remoteIp = null, CancellationToken cancellationToken = default);
+}
+
 public interface IAuthService
 {
+    Task<AuthResult<UserProfileDto>> RegisterAsync(RegisterRequestDto request, string? clientIp, CancellationToken cancellationToken = default);
+    Task<AuthResult<bool>> VerifyEmailAsync(VerifyEmailRequestDto request, CancellationToken cancellationToken = default);
+    Task<AuthResult<bool>> ResendVerificationAsync(ResendVerificationRequestDto request, CancellationToken cancellationToken = default);
     Task<AuthResult<AuthResponseDto>> LoginAsync(LoginRequestDto request, string? userAgent, string? clientIp, CancellationToken cancellationToken = default);
     Task<AuthResult<AuthResponseDto>> RefreshTokenAsync(RefreshTokenRequestDto request, string? userAgent, string? clientIp, CancellationToken cancellationToken = default);
     Task<AuthResult<bool>> LogoutAsync(LogoutRequestDto request, CancellationToken cancellationToken = default);

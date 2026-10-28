@@ -20,6 +20,102 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Đăng ký tài khoản người dùng mới (vai trò mặc định: USER).
+    /// </summary>
+    [HttpPost("register")]
+    [EnableRateLimiting("register-rate-limit")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Register([FromBody] RegisterRequestDto request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var result = await _authService.RegisterAsync(request, clientIp, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return StatusCode(result.StatusCode, new
+            {
+                message = result.Message
+            });
+        }
+
+        return StatusCode(StatusCodes.Status201Created, new
+        {
+            message = result.Message,
+            data = result.Data
+        });
+    }
+
+    /// <summary>
+    /// Xác minh địa chỉ email bằng mã OTP 6 số.
+    /// </summary>
+    [HttpPost("verify-email")]
+    [EnableRateLimiting("verify-rate-limit")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequestDto request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var result = await _authService.VerifyEmailAsync(request, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return StatusCode(result.StatusCode, new
+            {
+                message = result.Message
+            });
+        }
+
+        return Ok(new
+        {
+            message = "Xác minh email thành công. Tài khoản của bạn đã được kích hoạt."
+        });
+    }
+
+    /// <summary>
+    /// Gửi lại mã OTP xác minh qua email (có áp dụng cooldown 60 giây và rate limiting).
+    /// </summary>
+    [HttpPost("resend-verification")]
+    [EnableRateLimiting("resend-rate-limit")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequestDto request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var result = await _authService.ResendVerificationAsync(request, cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            return StatusCode(result.StatusCode, new
+            {
+                message = result.Message
+            });
+        }
+
+        return Ok(new
+        {
+            message = result.Message
+        });
+    }
+
+    /// <summary>
     /// Đăng nhập bằng Username và Mật khẩu.
     /// </summary>
     [HttpPost("login")]
