@@ -167,13 +167,6 @@ section[id] { scroll-margin-top: 16px; }
   font-size: 13px;
 }
 .auth-form__message--error { background: #fff1f0; color: #9b2721; }
-.auth-form__message--success { background: #eaf7ef; color: #166534; }
-.auth-resend {
-  min-height: 44px; margin-top: 12px; border: 1px solid #d6deea; border-radius: 10px;
-  background: #fff; color: var(--blue-dark); font: inherit; font-size: 14px;
-  font-weight: 700; cursor: pointer;
-}
-.auth-resend:disabled { opacity: .6; cursor: default; }
 .auth-submit:disabled { opacity: .7; cursor: wait; transform: none; }
 
 /* ----- CTA ----- */

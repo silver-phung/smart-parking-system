@@ -15,17 +15,14 @@ public class AuthApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         _client = factory.CreateClient();
     }
 
-    [Fact]
-    public async Task Register_WithEmptyBody_ReturnsBadRequest()
+    [Theory]
+    [InlineData("/api/v1/auth/register")]
+    [InlineData("/api/v1/auth/verify-email")]
+    [InlineData("/api/v1/auth/resend-verification")]
+    public async Task RemovedAccountCreationEndpoint_ReturnsNotFound(string path)
     {
-        // Arrange
-        var request = new RegisterRequestDto();
-
-        // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", request);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var response = await _client.PostAsJsonAsync(path, new { });
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -74,10 +71,10 @@ public class AuthApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
 
-        Assert.Contains("/api/v1/auth/register", content);
+        Assert.DoesNotContain("/api/v1/auth/register", content);
         Assert.Contains("/api/v1/auth/login", content);
-        Assert.Contains("/api/v1/auth/verify-email", content);
-        Assert.Contains("/api/v1/auth/resend-verification", content);
+        Assert.DoesNotContain("/api/v1/auth/verify-email", content);
+        Assert.DoesNotContain("/api/v1/auth/resend-verification", content);
         Assert.Contains("/api/v1/auth/refresh", content);
         Assert.Contains("/api/v1/auth/logout", content);
         Assert.Contains("/api/v1/users/me", content);

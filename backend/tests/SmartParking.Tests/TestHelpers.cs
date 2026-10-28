@@ -29,29 +29,6 @@ public class TestSmartParkingDbContext : SmartParkingDbContext
     }
 }
 
-public class FakeEmailService : IEmailService
-{
-    public List<(string ToEmail, string OtpCode)> SentEmails { get; } = new();
-    public bool ShouldFail { get; set; } = false;
-
-    public Task<bool> SendVerificationOtpAsync(string toEmail, string otpCode, CancellationToken cancellationToken = default)
-    {
-        if (ShouldFail) return Task.FromResult(false);
-        SentEmails.Add((toEmail, otpCode));
-        return Task.FromResult(true);
-    }
-}
-
-public class FakeRecaptchaService : IRecaptchaService
-{
-    public bool ReturnValid { get; set; } = true;
-
-    public Task<bool> VerifyAsync(string? token, string? remoteIp = null, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(ReturnValid);
-    }
-}
-
 public static class TestDbHelper
 {
     public static async Task<TestSmartParkingDbContext> CreateInMemoryDbContextAsync()

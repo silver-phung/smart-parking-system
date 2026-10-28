@@ -1,10 +1,8 @@
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
-import Register from "./pages/Register.jsx";
-import VerifyEmail from "./pages/VerifyEmail.jsx";
 import CustomerDashboard from "./pages/CustomerDashboard.jsx";
 import CustomerProfile from "./pages/CustomerProfile.jsx";
 import RoleDashboard from "./pages/RoleDashboard.jsx";
@@ -20,13 +18,12 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/customer" element={<CustomerDashboard />} />
           <Route path="/customer/profile" element={<CustomerProfile />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/manager" element={<RoleDashboard role="MANAGER" />} />
           <Route path="/staff" element={<RoleDashboard role="STAFF" />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </main>
       {pathname !== "/admin" && <Footer />}

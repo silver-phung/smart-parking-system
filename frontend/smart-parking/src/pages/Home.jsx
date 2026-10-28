@@ -378,14 +378,11 @@ export default function Home() {
           <div className="cta">
             <div>
               <h2>Sẵn sàng đậu xe thông minh hơn?</h2>
-              <p>Tạo tài khoản để đặt chỗ từ app và xem lịch sử gửi xe của bạn.</p>
+              <p>Đăng nhập bằng tài khoản được cấp để đặt chỗ và xem lịch sử gửi xe.</p>
             </div>
             <div className="cta__actions">
               <Link to="/login" className="btn btn--white-outline btn--lg">
                 Đăng nhập
-              </Link>
-              <Link to="/register" className="btn btn--yellow btn--lg">
-                Đăng ký
               </Link>
             </div>
           </div>

@@ -14,14 +14,14 @@ test("shows ASP.NET field validation errors to the user", async () => {
     title: "One or more validation errors occurred.",
     errors: {
       Username: ["Tên đăng nhập không được để trống"],
-      Password: ["Mật khẩu phải có tối thiểu 8 ký tự"],
+      Password: ["Mật khẩu không được để trống"],
     },
   }, { status: 400 });
 
-  await assert.rejects(apiRequest("/v1/auth/register"), (error) => {
+  await assert.rejects(apiRequest("/v1/auth/login"), (error) => {
     assert.equal(error.status, 400);
     assert.match(error.message, /Tên đăng nhập không được để trống/);
-    assert.match(error.message, /Mật khẩu phải có tối thiểu 8 ký tự/);
+    assert.match(error.message, /Mật khẩu không được để trống/);
     return true;
   });
 });
@@ -29,26 +29,26 @@ test("shows ASP.NET field validation errors to the user", async () => {
 test("does not attach an existing account token to public auth requests", async () => {
   setAuthSession({ accessToken: "existing-session" });
   globalThis.fetch = async (url, options) => {
-    assert.equal(url, "/api/v1/auth/register");
+    assert.equal(url, "/api/v1/auth/login");
     assert.equal(options.headers.Authorization, undefined);
     assert.equal(options.headers["Content-Type"], "application/json");
     assert.equal(options.skipAuth, undefined);
-    return Response.json({ data: { username: "new_user" } }, { status: 201 });
+    return Response.json({ data: { username: "existing_user" } }, { status: 200 });
   };
 
-  const response = await apiRequest("/v1/auth/register", {
+  const response = await apiRequest("/v1/auth/login", {
     method: "POST", body: "{}", skipAuth: true,
   });
-  assert.equal(response.data.username, "new_user");
+  assert.equal(response.data.username, "existing_user");
 });
 
-test("keeps the server's account-state error for an unverified login", async () => {
+test("keeps the server's account-state error for an inactive login", async () => {
   globalThis.fetch = async () => Response.json({
-    message: "Tài khoản chưa hoàn tất xác minh email.",
+    message: "Tài khoản chưa được kích hoạt. Vui lòng liên hệ quản trị viên.",
   }, { status: 403 });
 
   await assert.rejects(apiRequest("/v1/auth/login"), {
-    message: "Tài khoản chưa hoàn tất xác minh email.", status: 403,
+    message: "Tài khoản chưa được kích hoạt. Vui lòng liên hệ quản trị viên.", status: 403,
   });
 });
 

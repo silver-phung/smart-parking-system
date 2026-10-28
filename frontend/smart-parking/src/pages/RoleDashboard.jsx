@@ -272,19 +272,14 @@ function DashboardContent({ role }) {
             <div>
               <h2>Tài khoản nhân viên STAFF</h2>
               <p className="muted">
-                Tài khoản nhân viên cần được gắn với bãi thuộc phạm vi quản lý và xác minh email.
+                Tài khoản nhân viên cần được Admin cấp và gắn với bãi thuộc phạm vi quản lý.
               </p>
             </div>
             <span className="role-dashboard__feature-status">Chưa có API</span>
           </div>
           <p className="customer-message customer-message--notice">
-            Backend hiện chưa hỗ trợ Manager tạo tài khoản STAFF. API đăng ký công khai chỉ tạo tài khoản USER,
-            còn API phân công nhân sự hiện chỉ cho ADMIN. Vì vậy, chức năng cấp tài khoản chưa thể thực hiện an toàn
-            ở giao diện này.
+            Tài khoản nhân viên và phân công bãi do Admin quản lý. Vui lòng liên hệ Admin khi cần cấp hoặc thay đổi tài khoản.
           </p>
-          <button type="button" className="btn btn--outline manager-staff__action" disabled>
-            Cấp tài khoản STAFF · Chờ API xác minh email
-          </button>
         </div>
       )}
 

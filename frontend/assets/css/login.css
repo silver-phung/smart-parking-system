@@ -29,8 +29,6 @@ body { min-height: 100%; overflow-x: hidden; }
 .login { padding: 26px; box-shadow: 0 20px 60px rgba(0, 0, 0, .35); border-radius: 18px; }
 .login h2 { font-size: 26px; }
 #form { display: grid; gap: 14px; }
-.register-fields { display: grid; gap: 14px; }
-.register-fields[hidden] { display: none; }
 .pw { position: relative; }
 .pw input { padding-right: 70px; }
 .pw button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: 13px; padding: 6px 10px; border-radius: 6px; }

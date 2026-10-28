@@ -96,7 +96,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [Theory]
     [InlineData("/app/")]
     [InlineData("/app/login")]
-    [InlineData("/app/register")]
+    [InlineData("/app/customer")]
     public async Task GetFrontendRoutes_ReturnsSinglePageApp(string path)
     {
         var response = await _client.GetAsync(path);
@@ -157,7 +157,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     public async Task OptionsPreflight_WithAllowedOrigin_ReturnsCorsHeaders(string allowedOrigin)
     {
         // Arrange
-        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/auth/register");
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/auth/login");
         request.Headers.Add("Origin", allowedOrigin);
         request.Headers.Add("Access-Control-Request-Method", "POST");
         request.Headers.Add("Access-Control-Request-Headers", "authorization,content-type");
@@ -178,7 +178,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     public async Task OptionsPreflight_WithDisallowedOrigin_DoesNotReturnCorsHeaders()
     {
         // Arrange
-        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/auth/register");
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/auth/login");
         request.Headers.Add("Origin", "http://unauthorized-malicious-origin.com");
         request.Headers.Add("Access-Control-Request-Method", "POST");
         request.Headers.Add("Access-Control-Request-Headers", "authorization,content-type");

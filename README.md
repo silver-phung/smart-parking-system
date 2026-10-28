@@ -21,7 +21,7 @@ Dự án Hệ thống Quản lý Bãi đỗ xe thông minh (Smart Parking System
 
 Xem [hướng dẫn Windows/macOS](docs/database/KET-NOI-DB-CHUNG.md). Chạy script một lần để nhập thông tin DB, kiểm tra query thực tế và lưu cấu hình trên máy; mật khẩu không nằm trong repo. Backend sử dụng `ConnectionStrings:DefaultConnection` cho EF Core/PostgreSQL.
 
-## 5. Chạy web và đăng ký tài khoản trong bản Sprint3.demo
+## 5. Chạy web trong bản Sprint3.demo
 
 Chạy tại thư mục repository bằng PowerShell. Lần đầu cấu hình Neon, nhập username/password **database** khi script yêu cầu:
 
@@ -37,9 +37,7 @@ dotnet run --project .\backend\src\SmartParking.Api --launch-profile http
 
 Mở <http://localhost:5295/app/>. `/health` chỉ kiểm tra tiến trình API, không xác nhận đã kết nối được database. Database cần có schema/migration Accounts và các vai trò của nhóm.
 
-Đăng ký bằng **tên đăng nhập** (3–50 ký tự chữ, số, dấu chấm hoặc gạch dưới), họ tên, email và mật khẩu ít nhất 8 ký tự. Sau khi đăng ký, nhập OTP tại `/app/verify-email`, rồi đăng nhập bằng tên đăng nhập và mật khẩu. Mỗi tài khoản mới có vai trò `USER`; các tài khoản nội bộ do quản trị viên cấp.
-
-Trong môi trường `Development`, `Email:Provider` mặc định là `Mock`: OTP được in tại terminal backend ở dòng `[DEV EMAIL SIMULATION]`, không gửi email thật. Dùng mã đó để kiểm tra luồng đăng ký trên máy. Muốn gửi email thật, cấu hình `Email:Provider=Smtp` và thông tin SMTP trong User Secrets. Cấu hình Production vẫn yêu cầu dịch vụ gửi email thật.
+Bản Sprint3.demo chỉ đăng nhập bằng tài khoản đã được cấp. Chức năng tự đăng ký và xác minh email/OTP đã được gỡ. Tài khoản nội bộ và phân công bãi do Admin quản lý.
 
 Sau khi thay đổi frontend, tạo lại bundle được backend phục vụ:
 

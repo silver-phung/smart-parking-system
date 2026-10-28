@@ -21,9 +21,9 @@ Mở dự án sẽ vào trang đăng nhập (`index.html` ở thư mục gốc).
 - Khách mở trang `admin/` sẽ bị chuyển về `client/`, và ngược lại.
 - Phiên đăng nhập lưu theo từng tab (sessionStorage): mở hai tab, một tab đăng nhập Khách và một tab đăng nhập Ban quản lý để xem đồng bộ cùng lúc. Đóng tab là phải đăng nhập lại.
 - Nút đăng xuất: góc phải thanh trên của Client, góc dưới thanh bên của Admin (trên điện thoại ở thanh trên).
-- Tài khoản demo được khai báo trong `SP.DEMO_ACCOUNTS` tại `assets/js/core.js`. Khách có thể đăng ký từ trang đăng nhập; tài khoản mới được lưu trong `localStorage` của trình duyệt và chỉ có quyền Client.
+- Tài khoản demo được khai báo trong `SP.DEMO_ACCOUNTS` tại `assets/js/core.js`. Trang đăng nhập chỉ sử dụng tài khoản đã có; chức năng tự đăng ký đã được gỡ.
 
-**Quan trọng:** đăng nhập/đăng ký hiện chạy hoàn toàn trong trình duyệt; mật khẩu demo nằm trong mã nguồn, mật khẩu tài khoản đăng ký được lưu dạng văn bản trong `localStorage`. Chỉ dùng để demo, không dùng với dữ liệu thật. Khi có backend, chuyển cả `SP.auth.login` và `SP.auth.register` sang API, lưu mật khẩu dạng băm ở máy chủ và kiểm tra quyền tại máy chủ.
+**Quan trọng:** đăng nhập ở bản HTML này chạy trong trình duyệt; mật khẩu demo nằm trong mã nguồn. Chỉ dùng để demo, không dùng với dữ liệu thật. Khi nối backend, chuyển `SP.auth.login` sang API và kiểm tra quyền tại máy chủ.
 
 ---
 

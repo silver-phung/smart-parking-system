@@ -9,14 +9,14 @@ Dữ liệu hiện là **dữ liệu mẫu** lưu trong `localStorage`, dùng ch
 
 ## Đăng nhập (trang mở đầu)
 
-Mở dự án sẽ vào trang đăng nhập. Nhập tài khoản để hệ thống tự chuyển đến đúng giao diện. Khách mới có thể chọn **Đăng ký**, nhập họ tên, email và mật khẩu (ít nhất 8 ký tự); tài khoản mới chỉ có quyền dùng Web Client. Tài khoản đăng ký được lưu trên trình duyệt hiện tại.
+Mở dự án sẽ vào trang đăng nhập. Nhập tài khoản đã có để hệ thống chuyển đến đúng giao diện. Chức năng tự đăng ký đã được gỡ.
 
 | Cổng | Email | Mật khẩu |
 | --- | --- | --- |
 | Khách đỗ xe (vào Web Client) | `khach@smartpark.vn` | `khach123` |
 | Ban quản lý (vào Web Admin) | `admin@smartpark.vn` | `admin123` |
 
-Đăng nhập và đăng ký hiện chỉ lưu trong trình duyệt để demo (mật khẩu lưu dạng văn bản, không an toàn, không dùng cho môi trường thật). Không có chức năng tự đăng ký tài khoản Admin. Xem `HUONG-DAN-TUY-CHINH.md`.
+Đăng nhập ở bản HTML này chạy trong trình duyệt để demo; mật khẩu tài khoản mẫu nằm trong mã nguồn, không dùng cho môi trường thật. Xem `HUONG-DAN-TUY-CHINH.md`.
 
 **Muốn thêm animation hoặc ảnh nền?** Đọc `HUONG-DAN-TUY-CHINH.md`. Trong code, bấm `Ctrl + Shift + F` và tìm `[ANIM]` hoặc `[HINH-NEN]` để thấy mọi chỗ đã đánh dấu. Ảnh đặt trong `assets/img/`.
 

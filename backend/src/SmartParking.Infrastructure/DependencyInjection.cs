@@ -31,17 +31,11 @@ public static class DependencyInjection
         // 2. Strongly Typed Options
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.SectionName));
-        services.Configure<RecaptchaOptions>(configuration.GetSection(RecaptchaOptions.SectionName));
-        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AdminBootstrapOptions>(configuration.GetSection(AdminBootstrapOptions.SectionName));
 
         // 3. Infrastructure & Auth Services
-        services.AddHttpClient();
         services.AddScoped<IPasswordHasherService, PasswordHasherService>();
         services.AddScoped<ITokenService, TokenService>();
-        services.AddScoped<IOtpService, OtpService>();
-        services.AddScoped<IEmailService, EmailService>();
-        services.AddScoped<IRecaptchaService, RecaptchaService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();

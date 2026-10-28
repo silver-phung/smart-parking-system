@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 
-// Cuộn mượt tới một mục trên trang chủ. Nếu đang ở trang khác (login/register)
+// Cuộn mượt tới một mục trên trang chủ. Nếu đang ở trang khác
 // thì quay về trang chủ rồi mới cuộn.
 export default function AnchorLink({ id, className, children }) {
   const navigate = useNavigate();

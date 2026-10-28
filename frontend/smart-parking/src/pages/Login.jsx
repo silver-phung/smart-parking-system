@@ -1,12 +1,12 @@
 import { Component } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout.jsx";
 import { apiRequest } from "../services/api.js";
 import { setAuthSession } from "../services/authSession.js";
 
 class LoginForm extends Component {
   state = {
-    username: this.props.initialUsername || "",
+    username: "",
     password: "",
     error: "",
     loading: false,
@@ -61,11 +61,6 @@ class LoginForm extends Component {
           </p>
 
           <form className="auth-form" onSubmit={this.onSubmit}>
-            {this.props.notice && (
-              <p className="auth-form__message auth-form__message--success" role="status">
-                {this.props.notice}
-              </p>
-            )}
             <label htmlFor="login-username">Tên đăng nhập</label>
             <input
               id="login-username"
@@ -103,13 +98,7 @@ class LoginForm extends Component {
             </button>
           </form>
 
-          <p className="auth-switch">Dùng tên đăng nhập và mật khẩu bạn đã đăng ký.</p>
-          <p className="auth-switch">
-            Chưa xác minh email? <Link to="/verify-email">Nhập mã xác minh</Link>
-          </p>
-          <p className="auth-switch">
-            Đăng ký tài khoản mới? <Link to="/register">Tạo tài khoản</Link>
-          </p>
+          <p className="auth-switch">Dùng tài khoản đã được cấp để đăng nhập.</p>
           <p className="auth-terms">
             Bằng việc tiếp tục, bạn đồng ý với các điều khoản sử dụng của chúng tôi.
           </p>
@@ -121,13 +110,5 @@ class LoginForm extends Component {
 
 export default function Login() {
   const navigate = useNavigate();
-  const location = useLocation();
-  return (
-    <LoginForm
-      key={location.key}
-      navigate={navigate}
-      initialUsername={location.state?.username}
-      notice={location.state?.message}
-    />
-  );
+  return <LoginForm navigate={navigate} />;
 }

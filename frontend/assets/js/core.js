@@ -287,7 +287,7 @@
     { email: 'khach@smartpark.vn', pass: 'khach123', role: 'user', name: 'Nguyễn Minh Khách' },
     { email: 'admin@smartpark.vn', pass: 'admin123', role: 'admin', name: 'Quản trị viên' }
   ];
-  function readRegisteredAccounts() {
+  function readStoredAccounts() {
     var raw;
     try { raw = localStorage.getItem(USERS_KEY); } catch (e) { return { error: 'Không thể truy cập bộ nhớ tài khoản trên trình duyệt.' }; }
     if (!raw) return { accounts: [] };
@@ -301,8 +301,8 @@
       return { error: 'Không đọc được dữ liệu tài khoản đã lưu. Hãy xóa dữ liệu trang web rồi thử lại.' };
     }
   }
-  var registered = readRegisteredAccounts();
-  SP.ACCOUNTS = SP.DEMO_ACCOUNTS.slice().concat(registered.accounts || []);
+  var stored = readStoredAccounts();
+  SP.ACCOUNTS = SP.DEMO_ACCOUNTS.slice().concat(stored.accounts || []);
   SP.auth = {
     ROLE_LABEL: { user: 'Khách đỗ xe', admin: 'Ban quản lý' },
     HOME: { user: 'client/index.html', admin: 'admin/index.html' },
@@ -314,22 +314,6 @@
       var s = { email: a.email, name: a.name, role: a.role, at: Date.now() };
       try { sessionStorage.setItem(SESS_KEY, JSON.stringify(s)); } catch (err) { }
       return s;
-    },
-    register: function (name, email, pass) {
-      var n = String(name || '').trim(), e = String(email || '').trim().toLowerCase();
-      if (!n) return { error: 'Nhập họ và tên.' };
-      if (n.length > 60) return { error: 'Họ và tên không được vượt quá 60 ký tự.' };
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)) return { error: 'Email chưa đúng định dạng.' };
-      if (typeof pass !== 'string' || pass.length < 8) return { error: 'Mật khẩu phải có ít nhất 8 ký tự.' };
-      var saved = readRegisteredAccounts();
-      if (saved.error) return { error: saved.error };
-      if (SP.ACCOUNTS.some(function (a) { return a.email.toLowerCase() === e; })) return { error: 'Email này đã được đăng ký.' };
-      var account = { email: e, pass: pass, role: 'user', name: n };
-      saved.accounts.push(account);
-      try { localStorage.setItem(USERS_KEY, JSON.stringify(saved.accounts)); }
-      catch (err) { return { error: 'Không lưu được tài khoản. Hãy kiểm tra dung lượng hoặc quyền lưu trữ của trình duyệt.' }; }
-      SP.ACCOUNTS.push(account);
-      return { account: account };
     },
     logout: function () { try { sessionStorage.removeItem(SESS_KEY); } catch (e) { } },
     /* Gọi ở đầu trang Client/Admin. root là đường dẫn về thư mục gốc, ví dụ '../'. */

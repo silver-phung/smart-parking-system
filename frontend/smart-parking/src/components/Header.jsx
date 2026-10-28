@@ -100,11 +100,8 @@ export default function Header() {
             </div>
           ) : (
             <>
-              <NavLink to="/login" className="btn btn--outline">
+              <NavLink to="/login" className="btn btn--primary">
                 Đăng nhập
-              </NavLink>
-              <NavLink to="/register" className="btn btn--primary">
-                Đăng ký
               </NavLink>
             </>
           )}
