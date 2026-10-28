@@ -1,10 +1,10 @@
 # SMART PARKING – BOOKING & CAPACITY MANAGEMENT API HANDOVER
 
-**Mục tiêu:** Tài liệu bàn giao kỹ thuật toàn diện về Booking & Quản lý Sức chứa (Task 07) dành cho **Song (Frontend Web/Mobile)** và **Danh (QA/Swagger Testing)**.  
-**Workspace:** `E:\smartparking`  
-**Branch:** `feature/phung-database`  
-**Base URL:** `http://localhost:5295/api/v1`  
-**Authentication:** `Bearer {jwt_access_token}`  
+**Mục tiêu:** Tài liệu bàn giao kỹ thuật toàn diện về Booking & Quản lý Sức chứa (Task 07) dành cho **Song (Frontend Web/Mobile)** và **Danh (QA/Swagger Testing)**.
+**Workspace:** `E:\smartparking`
+**Branch:** `feature/phung-database`
+**Base URL:** `http://localhost:5295/api/v1`
+**Authentication:** `Bearer {jwt_access_token}`
 
 ---
 

@@ -1,10 +1,10 @@
 # TÀI LIỆU BÀN GIAO QA: PARKING DISPATCH APIs (TASK 04 - PHASE 3)
 
-**Người thực hiện:** Phụng  
-**Người nhận bàn giao:** Danh (QA), Song (Frontend / 3D Visualization)  
-**Nhánh Git:** `feature/phung-database`  
-**Commit:** `2dff73f`  
-**Automated Tests:** 206/206 PASS  
+**Người thực hiện:** Phụng
+**Người nhận bàn giao:** Danh (QA), Song (Frontend / 3D Visualization)
+**Nhánh Git:** `feature/phung-database`
+**Commit:** `2dff73f`
+**Automated Tests:** 206/206 PASS
 
 ---
 

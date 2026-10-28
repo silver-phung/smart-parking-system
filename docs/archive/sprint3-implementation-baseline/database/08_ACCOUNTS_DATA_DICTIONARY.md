@@ -194,7 +194,7 @@
 *(Chỉ yêu cầu Refresh Token hợp lệ để thu hồi phiên trong CSDL, **kể cả khi Access Token JWT đã hết hạn** người dùng vẫn đăng xuất thành công).*
 
 ### 6.7. Contract Xem Hồ sơ: `GET /api/v1/users/me`
-**Headers:** `Authorization: Bearer <accessToken>`  
+**Headers:** `Authorization: Bearer <accessToken>`
 **Response DTO (`UserProfileDto`):**
 ```json
 {
@@ -213,7 +213,7 @@
 *(Tuyệt đối không trả `password_hash`, `token_hash`, `failed_login_attempts`, `lockout_end_at`).*
 
 ### 6.8. Contract Cập nhật Hồ sơ: `PUT /api/v1/users/me`
-**Headers:** `Authorization: Bearer <accessToken>`  
+**Headers:** `Authorization: Bearer <accessToken>`
 **Request DTO (`UpdateProfileRequestDto`):**
 ```json
 {

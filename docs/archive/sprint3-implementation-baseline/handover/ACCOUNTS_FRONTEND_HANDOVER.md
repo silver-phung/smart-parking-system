@@ -1,11 +1,11 @@
 # SMART PARKING – ACCOUNTS & AUTHENTICATION API HANDOVER
 ## TÀI LIỆU BÀN GIAO CHO FRONTEND (SONG) VÀ BÁO CÁO OWNER (PHỤNG)
 
-**Dự án:** Smart Parking System – FPT Software OJT  
-**Phiên bản:** Task 02G Security Remediation  
-**Tác giả:** Antigravity (Backend Engineer)  
-**Người nhận:** Song (Frontend Lead) & Phụng (Product Owner)  
-**Workspace:** `E:\smartparking`  
+**Dự án:** Smart Parking System – FPT Software OJT
+**Phiên bản:** Task 02G Security Remediation
+**Tác giả:** Antigravity (Backend Engineer)
+**Người nhận:** Song (Frontend Lead) & Phụng (Product Owner)
+**Workspace:** `E:\smartparking`
 **Branch:** `feature/phung-database`
 
 ---

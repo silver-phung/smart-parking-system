@@ -1,5 +1,8 @@
 # Hướng Dẫn Tích Hợp Component Parking3DViewer (Sprint 3: Ngày 6–9)
 
+**Trạng thái:** Hướng dẫn triển khai lịch sử của module 3D tại nhánh feature; không phải nguồn quy tắc nghiệp vụ.
+**Ưu tiên:** Dùng [business rules](../product/business-rules.md), [state machines](../product/state-machines.md) và [ADR](../decisions/README.md) khi tài liệu này còn mô tả `RESERVED` như physical status, dữ liệu mẫu hoặc biển số trong projection public.
+
 Tài liệu bàn giao cho **Song (Frontend React)** và các thành viên nhóm phát triển Smart Parking System.
 
 ---
@@ -9,10 +12,23 @@ Tài liệu bàn giao cho **Song (Frontend React)** và các thành viên nhóm 
 Component `Parking3DViewer` là giải pháp trực quan hóa không gian bãi đỗ xe 3D tương tác, được xây dựng trên nền tảng **Three.js** và **OrbitControls**, đáp ứng đầy đủ yêu cầu nghiệp vụ Sprint 3 (Ngày 6–9):
 
 - **Scene 3D hoàn chỉnh:**
-  - Mặt sàn bãi đỗ bê tông/asphalt phân chia các tầng/khu vực.
-  - Làn đường xe chạy với vạch kẻ tim đường vàng, mũi tên dẫn hướng, biển báo Cổng Vào/Ra.
-  - Cột kết cấu chịu lực phân khu (A1, A2, B1, B2) có dải phản quang và nhãn 3D.
-  - Các ô đỗ xe với vạch chữ U chuẩn, stencil mã ô trên mặt sàn.
+  - **Mô phỏng kiến trúc hầm đỗ xe ngầm (Underground Parking Lot - Sketchfab):**
+    - Tường bê tông bao quanh 4 phía với dải phân cách sơn phản quang an toàn.
+    - Hệ thống kỹ thuật trần hầm xe ngầm: Dầm bê tông ngang chịu lực, hệ thống đường ống thông gió HVAC mạ kẽm, mạng lưới đường ống PCCC màu đỏ rực, máng đèn tuýp LED trần công nghiệp.
+    - Cột kết cấu chịu lực phân khu (A1, A2, A3, B1, B2, B3) có dải phản quang vàng đen và nhãn 3D.
+    - Thanh chặn bánh xe cao su (Tire Curbs / Rubber Wheel Stoppers) tại mỗi ô đỗ xe.
+    - Gờ giảm tốc (Speed Bumps) và biển báo hầm xe ngầm (2.2M, 5 KM/H, EXIT).
+- **Hỗ trợ 3 Bãi mẫu:**
+  - **Bãi 1:** Mô hình hầm ngầm 2 tầng (`B1`, `B2`) - Tổng số lượng slot theo DB (B1: 32 ô, B2: 32 ô = 64 ô).
+  - **Bãi 2:** 3 tầng (`B1`, `B2`, `B3`) - Số lượng slot đậu random (82 ô).
+  - **Bãi 3:** 4 tầng (`B1`, `B2`, `B3`, `B4`) - Số lượng slot đậu random (112 ô).
+- **Khối Cầu thang bộ & Buồng Thang máy (Elevator & Staircase Core):**
+  - Buồng thang máy kính cường lực & khung thép, cửa trượt inox, đèn LED hiển thị tầng hiện tại.
+  - Cầu thang bộ bê tông có tay vịn inox và cửa thoát hiểm chống cháy.
+  - **Nút di chuyển lên xuống các tầng tại điểm cầu thang / thang máy:**
+    - Nút 3D tương tác trực tiếp tại buồng thang máy (`▲ Lên`, `▼ Xuống`).
+    - Bảng điều khiển nổi gắn neo 3D (Floating Elevator Call Widget) ngay tại thang máy.
+    - Hiệu ứng camera chuyển tầng mượt mà (Elevator ride animation) khi người dùng bấm nút lên/xuống.
 - **Điều khiển tương tác (OrbitControls):**
   - **PC:** Chuột trái để xoay (rotate), cuộn chuột để phóng to/thu nhỏ (zoom), chuột phải để dịch chuyển mặt sàn (pan).
   - **Mobile:** Cảm ứng 1 ngón tay xoay góc nhìn, 2 ngón tay chụm/mở để zoom (pinch-to-zoom), 2 ngón tay vuốt để dời sàn.
@@ -103,7 +119,7 @@ export default function ParkingDashboard() {
 | `lotId` | `number` | `1` | ID của bãi xe |
 | `lotName` | `string` | `'Bãi xe SmartPark'` | Tên bãi hiển thị trên thanh tiêu đề HUD |
 | `floorId` | `string` | `'B1'` | Mã tầng ('B1', 'B2', 'G', 'T1') |
-| `apiEndpoint` | `string` | `'/api/ParkingSlots'` | URL API lấy danh sách ô đỗ (hoặc `'/api/v1/parking-viewer/slots'`) |
+| `apiEndpoint` | `string` | `'/api/ParkingSlots'` | URL API lấy danh sách ô đỗ (hoặc `'/api/v1/parking-slots'`) |
 | `height` | `string` | `'560px'` | Chiều cao vùng hiển thị 3D |
 | `onSlotClick` | `function` | `null` | Callback khi người dùng nhấp vào một ô: `(slotData) => void` |
 
@@ -164,8 +180,6 @@ Endpoint hỗ trợ:
 - `GET /api/ParkingSlots?lotId=1&floorId=B1`
 - `GET /api/ParkingSlots/floor/{floorId}`
 - `PATCH /api/ParkingSlots/{slotCode}/status`
-
-Trong bản merge `Sprint3.demo`, alias của viewer nằm dưới `/api/v1/parking-viewer/slots` và `/api/v1/parking-viewer/floors/{floorId}/slots`. API quản lý dữ liệu thật vẫn dùng `/api/v1/parking-slots` và `/api/v1/parking-floors/{floorId:int}/slots`.
 
 Cấu trúc JSON trả về mẫu:
 ```json

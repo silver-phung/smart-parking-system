@@ -42,7 +42,7 @@ sequenceDiagram
     participant Mail as Real Email Service (SMTP/MailKit)
 
     Client->>API: POST /api/v1/auth/register (username, email, password, fullName, phoneNumber, recaptchaToken)
-    
+
     Note over API: 1. Xác thực reCAPTCHA với Server Google:
     API->>reCAPTCHA: POST verify (secretKey, recaptchaToken)
     reCAPTCHA-->>API: Response { success: true, score: 0.9 }
@@ -53,7 +53,7 @@ sequenceDiagram
         API->>API: Hash password: passwordHash = PasswordHasher.HashPassword(password)
         API->>API: Sinh mã OTP 6 số: otpCode = CSPRNG(100000..999999) (ví dụ: "849201")
         API->>API: Tính HMAC-SHA256: tokenHash = HMAC_SHA256(secretKey, $"{userId}:EMAIL_VERIFICATION:{otpCode}")
-        
+
         API->>DB: BEGIN TRANSACTION
         API->>DB: INSERT INTO users (username, email, password_hash, role_id, full_name, phone_number, is_active, is_email_verified, approval_status)<br/>VALUES (:username, :email, :passwordHash, (SELECT id FROM roles WHERE code = 'USER'), :fullName, :phoneNumber, TRUE, FALSE, 'PENDING')<br/>RETURNING id;
         alt Trùng username hoặc email (PostgreSQL Unique Violation 23505)
@@ -63,7 +63,7 @@ sequenceDiagram
         else Thành công
             API->>DB: INSERT INTO user_tokens (user_id, token_type, token_hash, attempts_count, expires_at)<br/>VALUES (:userId, 'EMAIL_VERIFICATION', :tokenHash, 0, NOW() + INTERVAL '15 MINUTES');
             API->>DB: COMMIT TRANSACTION
-            
+
             API->>Mail: Gửi email thật chứa mã OTP 6 số tới hộp thư người dùng
             alt Gửi Email THÀNH CÔNG
                 API-->>Client: 201 Created ("Đăng ký thành công. Vui lòng nhập mã OTP 6 số đã được gửi tới email của bạn.")
@@ -100,7 +100,7 @@ sequenceDiagram
         API-->>Client: 400 Bad Request ("Yêu cầu xác minh không hợp lệ")
     else Tìm thấy user
         API->>DB: SELECT id, token_hash, attempts_count, expires_at<br/>FROM user_tokens WHERE user_id = :userId AND token_type = 'EMAIL_VERIFICATION' AND is_used = FALSE<br/>ORDER BY created_at DESC LIMIT 1;
-        
+
         alt Không có mã active hoặc NOW() > expires_at
             API-->>Client: 400 Bad Request ("Mã xác minh không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu mã mới.")
         else attempts_count >= 5
@@ -170,13 +170,13 @@ sequenceDiagram
     Client->>API: POST /api/v1/auth/login (username, password)
     Note over API: username = username.Trim().ToLowerInvariant()
     API->>DB: SELECT id, password_hash, role_id, is_active, is_email_verified, approval_status,<br/>failed_login_attempts, lockout_end_at<br/>FROM users WHERE username = :username;
-    
+
     alt User KHÔNG tồn tại
         API->>API: Chạy Dummy Password Verify (giả lập BCrypt/PBKDF2 cùng thời gian)
         API-->>Client: 401 Unauthorized ("Tên đăng nhập hoặc mật khẩu không chính xác")
     else User TỒN TẠI
         API->>API: PasswordHasher.VerifyHashedPassword(password, password_hash)
-        
+
         alt Mật khẩu SAI
             API->>DB: UPDATE users SET failed_login_attempts = failed_login_attempts + 1,<br/>lockout_end_at = CASE WHEN failed_login_attempts + 1 >= 5 THEN NOW() + INTERVAL '15 MINUTES' ELSE NULL END<br/>WHERE id = :userId;
             API-->>Client: 401 Unauthorized ("Tên đăng nhập hoặc mật khẩu không chính xác")
@@ -226,8 +226,8 @@ Thực hiện cơ chế không xoay vòng (No-rotation) cho Sprint 3 theo quyế
 - **Quy tắc quan trọng đã được Owner duyệt:** API Logout **chỉ yêu cầu Refresh Token hợp lệ** để thu hồi phiên. **Kể cả khi JWT Access Token đã hết hạn**, người dùng vẫn đăng xuất thành công.
 - Xử lý CSDL:
   ```sql
-  UPDATE refresh_tokens 
-  SET is_revoked = TRUE, revoked_at = NOW() 
+  UPDATE refresh_tokens
+  SET is_revoked = TRUE, revoked_at = NOW()
   WHERE token_hash = SHA256(:refreshToken) AND is_revoked = FALSE;
   ```
 - Trả về `200 OK` ("Đăng xuất thành công.").
@@ -235,8 +235,8 @@ Thực hiện cơ chế không xoay vòng (No-rotation) cho Sprint 3 theo quyế
 ### 7.2. Đăng xuất tất cả thiết bị (Logout-All)
 - Áp dụng khi đổi mật khẩu hoặc phát hiện tài khoản bị xâm nhập:
   ```sql
-  UPDATE refresh_tokens 
-  SET is_revoked = TRUE, revoked_at = NOW() 
+  UPDATE refresh_tokens
+  SET is_revoked = TRUE, revoked_at = NOW()
   WHERE user_id = :userId AND is_revoked = FALSE;
   ```
 

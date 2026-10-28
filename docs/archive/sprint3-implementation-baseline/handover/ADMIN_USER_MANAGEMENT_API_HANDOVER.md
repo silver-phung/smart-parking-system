@@ -1,9 +1,9 @@
 # SMART PARKING – ADMIN USER MANAGEMENT API HANDOVER
 
-**Mục tiêu:** Tài liệu bàn giao 5 API Quản lý Người dùng dành cho Song (Frontend ADMIN).  
-**Workspace:** `E:\smartparking`  
-**Base URL:** `http://localhost:5295/api/v1/admin/users`  
-**Authentication:** `Bearer {jwt_access_token}`  
+**Mục tiêu:** Tài liệu bàn giao 5 API Quản lý Người dùng dành cho Song (Frontend ADMIN).
+**Workspace:** `E:\smartparking`
+**Base URL:** `http://localhost:5295/api/v1/admin/users`
+**Authentication:** `Bearer {jwt_access_token}`
 **Role yêu cầu:** `ADMIN` (Người dùng không phải ADMIN sẽ nhận `403 Forbidden`).
 
 ---

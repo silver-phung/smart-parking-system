@@ -1,5 +1,8 @@
 # Hướng dẫn Tích hợp & Vận hành Sprint 3 (Days 6–9 - Minh Thức)
 
+**Trạng thái:** Hướng dẫn tích hợp lịch sử của module event/3D. Một số bước đã được quyết định lại.
+**Thay đổi quan trọng:** Luồng hiện hành không yêu cầu Staff cổng xác nhận OCR trước khi tạo session; xem [ADR-002](../decisions/ADR-002-entry-verification.md). Cổng ra bắt đầu bằng quẹt vé/thẻ và tính phí; xem [ADR-003](../decisions/ADR-003-exit-payment-flow.md).
+
 ## 1. Tổng quan kiến trúc & Luồng vận hành thực tế tại Việt Nam
 Hệ thống kết hợp mô hình linh hoạt (semi-automated free parking model), phù hợp với chi phí đầu tư tại các bãi xe Việt Nam:
 1. **Xe vào cổng**:

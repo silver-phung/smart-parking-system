@@ -267,4 +267,4 @@ Toàn hệ thống thống nhất chuẩn hóa **19 bảng** (14 CORE, 3 CONDITI
 ---
 
 ## 5. TỔNG KẾT
-Sơ đồ ERD tổng thể cung cấp cái nhìn toàn cảnh về kiến trúc liên kết giữa các bảng. Tài liệu tiếp theo [07_ACCOUNTS_ERD.md](file:///e:/smartparking/docs/database/07_ACCOUNTS_ERD.md) sẽ đi sâu vào thiết kế chi tiết cấp thuộc tính cho Phân hệ Accounts & Authentication theo yêu cầu bàn giao cho Song.
+Sơ đồ ERD tổng thể cung cấp cái nhìn toàn cảnh về kiến trúc liên kết giữa các bảng. Tài liệu tiếp theo [07_ACCOUNTS_ERD.md](07_ACCOUNTS_ERD.md) sẽ đi sâu vào thiết kế chi tiết cấp thuộc tính cho Phân hệ Accounts & Authentication theo yêu cầu bàn giao cho Song.

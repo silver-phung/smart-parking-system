@@ -7,6 +7,8 @@ Dự án Hệ thống Quản lý Bãi đỗ xe thông minh (Smart Parking System
 - **Database:** PostgreSQL hosted on Neon Cloud.
 - **Frontend / Client:** Web & Dashboard.
 
+Tài liệu nghiệp vụ, kiến trúc, API và hướng dẫn vận hành bắt đầu tại [Documentation](docs/README.md).
+
 ## 2. Quy ước nhánh (Branching Strategy)
 - `main`: Nhánh production/release chính thức, luôn ở trạng thái ổn định.
 - `develop`: Nhánh tích hợp chính cho toàn bộ tính năng của nhóm.
@@ -96,10 +98,10 @@ Invoke-RestMethod -Uri http://localhost:5070/api/v1/users/me `
 
 ## 6. Kết nối Neon dùng chung
 
-Xem [hướng dẫn Windows/macOS](docs/database/KET-NOI-DB-CHUNG.md). Chạy script một lần để nhập thông tin DB, kiểm tra query thực tế và lưu cấu hình trên máy; mật khẩu không nằm trong repo. Bộ script chuẩn bị `ConnectionStrings:DefaultConnection`; việc đăng ký DbContext/repository PostgreSQL trong backend là phần triển khai riêng.
+Xem [hướng dẫn Windows/macOS](docs/operations/shared-database.md). Chạy script một lần để nhập thông tin DB, kiểm tra query thực tế và lưu cấu hình trên máy; mật khẩu không nằm trong repo. Bộ script chuẩn bị `ConnectionStrings:DefaultConnection`; việc đăng ký DbContext/repository PostgreSQL trong backend là phần triển khai riêng.
 ## 7. Kết nối Neon dùng chung
 
-Xem [hướng dẫn Windows/macOS](docs/database/KET-NOI-DB-CHUNG.md). Chạy script một lần để nhập thông tin DB, kiểm tra query thực tế và lưu cấu hình trên máy; mật khẩu không nằm trong repo. Backend sử dụng `ConnectionStrings:DefaultConnection` cho EF Core/PostgreSQL.
+Xem [hướng dẫn Windows/macOS](docs/operations/shared-database.md). Chạy script một lần để nhập thông tin DB, kiểm tra query thực tế và lưu cấu hình trên máy; mật khẩu không nằm trong repo. Backend sử dụng `ConnectionStrings:DefaultConnection` cho EF Core/PostgreSQL.
 
 ## 8. Chạy web trong bản Sprint3.demo
 
@@ -133,4 +135,4 @@ Sau khi chạy backend, mở <http://localhost:5295/3d-viewer.html>. Trang và a
 
 API viewer dùng `/api/ParkingSlots` (alias `/api/v1/parking-viewer/slots`). Dữ liệu sơ đồ mẫu được lưu trong bộ nhớ, có nhận trạng thái từ event pipeline. API quản lý ô đỗ thật vẫn nằm dưới `/api/v1/parking-slots`.
 
-Gemini chạy chế độ NoOp khi chưa có `Gemini:ApiKey`. Các adapter EF và live event bridge từ nhánh tích hợp vẫn là phần tùy chọn, chưa bật trong bản demo. Xem thêm [hướng dẫn viewer](docs/3D-VIEWER-INTEGRATION.md).
+Gemini chạy chế độ NoOp khi chưa có `Gemini:ApiKey`. Các adapter EF và live event bridge từ nhánh tích hợp vẫn là phần tùy chọn, chưa bật trong bản demo. Xem thêm [hướng dẫn viewer](docs/operations/3d-viewer-integration.md).
