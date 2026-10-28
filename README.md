@@ -93,3 +93,7 @@ Invoke-RestMethod -Uri http://localhost:5070/api/v1/users/me `
 `/gateway/health` kiểm tra gateway; `/health` kiểm tra API downstream qua proxy. Request mẫu cho các endpoint nằm trong `backend/src/ApiGateway/SmartParking.YarpApiGateway/SmartParking.YarpApiGateway.http`.
 
 Địa chỉ development được cấu hình tại `DownstreamServices:SmartParkingApi:Destinations:instance1`. Có thể ghi đè bằng biến môi trường `DownstreamServices__SmartParkingApi__Destinations__instance1`. Cluster hỗ trợ Round Robin; hiện chỉ có một instance thật được cấu hình. Để thêm replica đang chạy, thêm destination như `DownstreamServices__SmartParkingApi__Destinations__instance2=http://localhost:5296/`. Trong Docker, dùng DNS/tên container thay cho `localhost`. Repository hiện không có source frontend nên chưa có API client để chuyển base URL sang gateway.
+
+## 6. Kết nối Neon dùng chung
+
+Xem [hướng dẫn Windows/macOS](docs/database/KET-NOI-DB-CHUNG.md). Chạy script một lần để nhập thông tin DB, kiểm tra query thực tế và lưu cấu hình trên máy; mật khẩu không nằm trong repo. Bộ script chuẩn bị `ConnectionStrings:DefaultConnection`; việc đăng ký DbContext/repository PostgreSQL trong backend là phần triển khai riêng.

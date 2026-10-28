@@ -1,0 +1,6 @@
+{
+  "Host": "ep-wispy-bread-aoyxxn50-pooler.c-2.ap-southeast-1.aws.neon.tech",
+  "Database": "smartparking",
+  "Branch": "production",
+  "ConnectionStringName": "DefaultConnection"
+}
