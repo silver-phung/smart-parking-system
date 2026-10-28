@@ -23,18 +23,21 @@ namespace SmartParking.Application.Events;
 /// </summary>
 public class ParkingEventService
 {
-    private readonly IParkingEventLogRepository  _eventLogRepo;
-    private readonly IParkingSessionRepository   _sessionRepo;
+    private readonly IParkingEventLogRepository   _eventLogRepo;
+    private readonly IParkingSessionRepository    _sessionRepo;
     private readonly IVehicleCompatibilityChecker _compatibilityChecker;
+    private readonly IParkingEventBridge          _bridge;
 
     public ParkingEventService(
         IParkingEventLogRepository   eventLogRepo,
         IParkingSessionRepository    sessionRepo,
-        IVehicleCompatibilityChecker compatibilityChecker)
+        IVehicleCompatibilityChecker compatibilityChecker,
+        IParkingEventBridge          bridge)
     {
         _eventLogRepo         = eventLogRepo;
         _sessionRepo          = sessionRepo;
         _compatibilityChecker = compatibilityChecker;
+        _bridge               = bridge;
     }
 
     public async Task<IngestEventResponse> IngestAsync(
@@ -108,6 +111,9 @@ public class ParkingEventService
 
         await _sessionRepo.AddAsync(session, ct);
         await WriteLogAsync(request, sessionId, EventProcessingStatus.Accepted, null, ct);
+
+        // Day 8: Thông báo bridge đồng bộ sang module của Phụng (NoOp cho đến khi merge)
+        await _bridge.OnVehicleEnteredAsync(request, sessionId, ct);
 
         return new IngestEventResponse
         {
@@ -183,6 +189,9 @@ public class ParkingEventService
         await _sessionRepo.UpdateAsync(session, ct);
         await WriteLogAsync(request, request.SessionId, EventProcessingStatus.Accepted, null, ct);
 
+        // Day 8: Đồng bộ sang module điều phối / đỗ xe
+        await _bridge.OnSlotParkedAsync(request, request.SessionId, ct);
+
         return new IngestEventResponse
         {
             Success          = true,
@@ -221,6 +230,9 @@ public class ParkingEventService
 
         await _sessionRepo.UpdateAsync(session, ct);
         await WriteLogAsync(request, request.SessionId, EventProcessingStatus.Accepted, null, ct);
+
+        // Day 8: Đồng bộ sang module tính phí / giải phóng slot của Phụng
+        await _bridge.OnVehicleExitedAsync(request, request.SessionId, ct);
 
         return new IngestEventResponse
         {

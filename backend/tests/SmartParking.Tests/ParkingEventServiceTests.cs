@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.Application.Events;
 using SmartParking.Application.Events.Dtos;
 using SmartParking.Domain.Entities;
@@ -15,7 +16,11 @@ public class ParkingEventServiceTests
 
     public ParkingEventServiceTests()
     {
-        _service = new ParkingEventService(_eventLogRepo, _sessionRepo, new AlwaysCompatibleVehicleChecker());
+        _service = new ParkingEventService(
+            _eventLogRepo,
+            _sessionRepo,
+            new AlwaysCompatibleVehicleChecker(),
+            new NoOpParkingEventBridge(NullLogger<NoOpParkingEventBridge>.Instance));
     }
 
     [Fact]

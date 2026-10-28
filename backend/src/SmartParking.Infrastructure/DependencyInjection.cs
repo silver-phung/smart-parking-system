@@ -62,6 +62,23 @@ public static class DependencyInjection
         // Sprint 3 Day 3 – Thức: Vehicle compatibility stub (TODO: replace with EF when Phụng's branch merged)
         services.AddSingleton<IVehicleCompatibilityChecker, AlwaysCompatibleVehicleChecker>();
 
+        // Sprint 3 Day 6 – Thức: Gemini AI Integration
+        services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
+        services.AddHttpClient<GeminiVehicleAnalyzerService>();
+
+        var geminiApiKey = configuration["Gemini:ApiKey"];
+        if (string.IsNullOrWhiteSpace(geminiApiKey))
+        {
+            services.AddSingleton<IGeminiVehicleAnalyzer, NoOpGeminiVehicleAnalyzer>();
+        }
+        else
+        {
+            services.AddScoped<IGeminiVehicleAnalyzer, GeminiVehicleAnalyzerService>();
+        }
+
+        // Sprint 3 Day 8 – Thức: Bridge to Phung's DB/Service
+        services.AddScoped<IParkingEventBridge, NoOpParkingEventBridge>();
+
         return services;
     }
 }

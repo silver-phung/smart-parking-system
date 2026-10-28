@@ -948,4 +948,64 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.False(result.Success);
         Assert.Equal(EventProcessingStatus.PendingVerification, result.ProcessingStatus);
     }
+
+    // ─── Sprint 3 Day 6-9: 3D Visualization / ParkingSlots API smoke tests ───
+
+    [Theory]
+    [InlineData("/3d-viewer.html", "text/html", "Parking3DViewer")]
+    [InlineData("/assets/js/parking-3d-viewer.js", "text/javascript", "Parking3DViewer")]
+    [InlineData("/assets/css/parking-3d-viewer.css", "text/css", ".p3d-wrapper")]
+    public async Task GetViewerAssets_AreServedByBackend(string path, string mediaType, string expectedContent)
+    {
+        var response = await _client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(mediaType, response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains(expectedContent, await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("/api/v1/parking-viewer/slots?lotId=1&floorId=B1")]
+    [InlineData("/api/v1/parking-viewer/floors/B1/slots?lotId=1")]
+    public async Task GetViewerAliases_ReturnViewerSlots(string path)
+    {
+        var response = await _client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("B1-A01", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task GetManagedFloorSlots_KeepsDatabaseContract()
+    {
+        var response = await _client.GetAsync("/api/v1/parking-floors/1/slots");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("A-01", content);
+        Assert.DoesNotContain("B1-A01", content);
+    }
+
+    [Fact]
+    public async Task GetParkingSlots_Returns200WithSlotsList()
+    {
+        var response = await _client.GetAsync("/api/ParkingSlots?lotId=1&floorId=B1");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("slots", content);
+        Assert.Contains("B1-A01", content);
+    }
+
+    [Fact]
+    public async Task PatchParkingSlotStatus_UpdatesPhysicalStatus()
+    {
+        var updateRequest = new
+        {
+            physicalStatus = "OCCUPIED",
+            carPlate = "51F-999.88"
+        };
+
+        var response = await _client.PatchAsJsonAsync("/api/ParkingSlots/B1-A02/status", updateRequest);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("51F-999.88", content);
+        Assert.Contains("OCCUPIED", content);
+    }
 }

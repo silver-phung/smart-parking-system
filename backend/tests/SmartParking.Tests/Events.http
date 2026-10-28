@@ -1,9 +1,13 @@
-### Smart Parking System – Event Ingestion API
+### Smart Parking System – Event Ingestion & Gemini AI API
 ### Sprint 3 Demo Flow – Thức
 ### Chạy với: VSCode REST Client / JetBrains HTTP Client / dotnet-httprepl
 
 @baseUrl = https://localhost:7001
 @contentType = application/json
+
+### ─── BƯỚC 0: (Mới - Day 6) Gọi Gemini 2.5 Pro phân tích ảnh xe trước khi vào cổng ───
+POST {{baseUrl}}/api/gemini/analyze?imageUrl=https://storage.googleapis.com/smartparking-mock/vios-white.jpg
+Accept: {{contentType}}
 
 ### ─── BƯỚC 1: Xe vào cổng (Camera AI + Staff cổng xác nhận) ───────────────
 # EventId mới mỗi lần gửi; nếu retry thì dùng lại cùng EventId

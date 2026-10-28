@@ -13,12 +13,13 @@ public static class DependencyInjection
         services.AddScoped<IoTService>();
 
         // Sprint 3 – Thức: Event Ingestion Pipeline
-        // Use factory so DI resolves IVehicleCompatibilityChecker (registered in Infrastructure)
+        // Use factory so DI resolves IVehicleCompatibilityChecker and IParkingEventBridge
         services.AddScoped<ParkingEventService>(sp =>
             new ParkingEventService(
                 sp.GetRequiredService<IParkingEventLogRepository>(),
                 sp.GetRequiredService<IParkingSessionRepository>(),
-                sp.GetRequiredService<IVehicleCompatibilityChecker>()));
+                sp.GetRequiredService<IVehicleCompatibilityChecker>(),
+                sp.GetRequiredService<IParkingEventBridge>()));
 
         return services;
     }

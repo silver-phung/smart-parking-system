@@ -46,3 +46,11 @@ npm --prefix .\frontend\smart-parking run build
 ```
 
 Kiểm tra phần xử lý API frontend bằng `npm --prefix .\frontend\smart-parking test`.
+
+## 6. Viewer bãi đỗ 3D
+
+Sau khi chạy backend, mở <http://localhost:5295/3d-viewer.html>. Trang và assets được đưa vào output khi build/publish API. Three.js và OrbitControls được tải từ CDN nên trình duyệt cần kết nối Internet.
+
+API viewer dùng `/api/ParkingSlots` (alias `/api/v1/parking-viewer/slots`). Dữ liệu sơ đồ mẫu được lưu trong bộ nhớ, có nhận trạng thái từ event pipeline. API quản lý ô đỗ thật vẫn nằm dưới `/api/v1/parking-slots`.
+
+Gemini chạy chế độ NoOp khi chưa có `Gemini:ApiKey`. Các adapter EF và live event bridge từ nhánh tích hợp vẫn là phần tùy chọn, chưa bật trong bản demo. Xem thêm [hướng dẫn viewer](docs/3D-VIEWER-INTEGRATION.md).
