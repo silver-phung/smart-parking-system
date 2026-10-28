@@ -41,3 +41,55 @@ dotnet ef database update --project backend\src\SmartParking.Infrastructure --st
 ```
 
 Request mẫu có trong `backend/src/SmartParking.Api/SmartParking.Api.http`.
+
+## 5. YARP API Gateway
+
+Gateway chạy tại `http://localhost:5070`, proxy tới SmartParking API tại `http://localhost:5295/`. Đây là một API monolith trong repository hiện tại, chưa có User/Parking/Booking/Image microservice tách riêng.
+
+Route và cluster được định nghĩa bằng C# trong `backend/src/ApiGateway/SmartParking.YarpApiGateway/Configurations/ReverseProxyConfig.cs`; gateway nạp chúng với YARP `LoadFromMemory`. Địa chỉ các instance downstream vẫn lấy từ cấu hình môi trường, tách khỏi code.
+
+Route `/api/{**catch-all}` chuyển tiếp mọi HTTP method và toàn bộ endpoint hiện có dưới `/api`, giữ nguyên path, query string, body và headers (bao gồm JWT `Authorization`). Các nhóm route:
+
+| Prefix | Chức năng |
+|---|---|
+| `/api/v1/auth`, `/api/v1/users`, `/api/v1/admin/users` | Xác thực, hồ sơ, quản trị người dùng |
+| `/api/v1/vehicles` | Phương tiện |
+| `/api/v1/parking-lots`, `/api/v1/parking-floors`, `/api/v1/parking-slots` | Bãi đỗ, tầng, chỗ đỗ |
+| `/api/v1/parking-sessions`, `/api/v1/parking-dispatches`, `/api/v1/staff-assignments` | Phiên đỗ, điều phối, phân công nhân viên |
+| `/api/v1/bookings`, `/api/v1/images` | Đặt chỗ, ảnh (bao gồm multipart upload) |
+| `/api/system`, `/health`, `/swagger/*` | System, health, Swagger |
+
+JWT vẫn được xác thực và phân quyền tại SmartParking API; gateway chỉ chuyển tiếp request. `/gateway/health` kiểm tra tiến trình gateway, còn `/health` proxy tới API. YARP kiểm tra destination qua `/health` mỗi 10 giây.
+
+### Cách chạy và truy cập gateway
+
+Mở hai terminal ở thư mục gốc repository. Chạy API trước ở terminal thứ nhất:
+
+```powershell
+dotnet run --project backend\src\SmartParking.Api --launch-profile http
+```
+
+Sau đó chạy YARP ở terminal thứ hai:
+
+```powershell
+dotnet run --project backend\src\ApiGateway\SmartParking.YarpApiGateway --launch-profile http
+```
+
+Frontend/API client gửi request tới **`http://localhost:5070`** thay vì gọi trực tiếp cổng `5295`. Ví dụ:
+
+```powershell
+Invoke-RestMethod http://localhost:5070/gateway/health
+Invoke-RestMethod http://localhost:5070/health
+Invoke-RestMethod http://localhost:5070/api/system/info
+```
+
+API có yêu cầu đăng nhập vẫn cần JWT access token trong header:
+
+```powershell
+Invoke-RestMethod -Uri http://localhost:5070/api/v1/users/me `
+  -Headers @{ Authorization = "Bearer <access-token>" }
+```
+
+`/gateway/health` kiểm tra gateway; `/health` kiểm tra API downstream qua proxy. Request mẫu cho các endpoint nằm trong `backend/src/ApiGateway/SmartParking.YarpApiGateway/SmartParking.YarpApiGateway.http`.
+
+Địa chỉ development được cấu hình tại `DownstreamServices:SmartParkingApi:Destinations:instance1`. Có thể ghi đè bằng biến môi trường `DownstreamServices__SmartParkingApi__Destinations__instance1`. Cluster hỗ trợ Round Robin; hiện chỉ có một instance thật được cấu hình. Để thêm replica đang chạy, thêm destination như `DownstreamServices__SmartParkingApi__Destinations__instance2=http://localhost:5296/`. Trong Docker, dùng DNS/tên container thay cho `localhost`. Repository hiện không có source frontend nên chưa có API client để chuyển base URL sang gateway.
