@@ -5,13 +5,20 @@
 .env.*
 !.env.example
 secrets.json
+appsettings.local.json
 appsettings.*.local.json
+appsettings.Development.local.json
+appsettings.Secrets.json
 appsettings.Production.json
+!appsettings.example.json
+!appsettings.json
+!appsettings.Development.json
 *.pem
 *.key
 *.pfx
 *.cert
 *.crt
+
 
 ## =====================================
 ## 2. .NET Build & Visual Studio Artifacts
