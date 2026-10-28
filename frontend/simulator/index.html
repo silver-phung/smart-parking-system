@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartPark - IoT Hardware Simulator (Sprint 2 - Thức)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card-bg: #131b2a;
+      --card-border: #1e293b;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --terminal-bg: #05080e;
+      --terminal-border: #1e293b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Be Vietnam Pro', sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(19, 27, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 16px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      color: #fff;
+      font-weight: 700;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .config-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      gap: 8px;
+    }
+
+    .input-group label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .input-group input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-main);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      width: 200px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #1e293b;
+      color: var(--text-muted);
+    }
+    .status-badge.online {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-badge.offline {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    main {
+      flex: 1;
+      padding: 24px;
+      max-width: 1300px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Metrics Strip */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .metric-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .metric-val {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-main);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Auto Control Panel */
+    .control-panel {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9));
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .control-desc h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .control-desc p { font-size: 13px; color: var(--text-muted); }
+    .control-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-primary { background: #0284c7; color: #fff; }
+    .btn-primary:hover { background: #0369a1; }
+    .btn-success { background: #059669; color: #fff; }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-outline {
+      background: transparent;
+      border-color: var(--card-border);
+      color: var(--text-main);
+    }
+    .btn-outline:hover { background: #1e293b; }
+    .btn-warning { background: #d97706; color: #fff; }
+
+    /* Lots Grid */
+    .lots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+    }
+
+    .lot-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+    .lot-card:hover {
+      border-color: #38bdf8;
+    }
+    .lot-card.full {
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+    .lot-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .lot-title {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .lot-id {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .lot-rate {
+      font-size: 13px;
+      color: #38bdf8;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .slot-display {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      background: #0f172a;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid #1e293b;
+    }
+    .slot-num {
+      font-size: 32px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--success);
+      line-height: 1;
+    }
+    .slot-num.zero {
+      color: var(--danger);
+    }
+    .slot-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .lot-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .btn-fault {
+      grid-column: span 2;
+      background: rgba(245, 158, 11, 0.1);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.3);
+      justify-content: center;
+    }
+    .btn-fault:hover { background: rgba(245, 158, 11, 0.2); }
+
+    /* Terminal Console */
+    .terminal-section {
+      background: var(--terminal-bg);
+      border: 1px solid var(--terminal-border);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .terminal-header {
+      background: #090e17;
+      padding: 12px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--terminal-border);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .terminal-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .terminal-controls {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-term {
+      background: transparent;
+      border: 1px solid #334155;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .btn-term:hover { color: #fff; border-color: #64748b; }
+
+    .terminal-body {
+      height: 280px;
+      overflow-y: auto;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .log-line {
+      display: flex;
+      gap: 12px;
+      word-break: break-all;
+    }
+    .log-time { color: #64748b; flex-shrink: 0; }
+    .log-tag { font-weight: 600; flex-shrink: 0; }
+    .log-tag.in { color: #34d399; }
+    .log-tag.out { color: #38bdf8; }
+    .log-tag.fault { color: #fbbf24; }
+    .log-tag.sys { color: #c084fc; }
+    .log-tag.err { color: #f87171; }
+    .log-msg { color: #e2e8f0; }
+
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 16px 24px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="logo-badge">IoT SIMULATOR</div>
+      <div>
+        <div class="brand-title">Smart Parking - Hardware IoT Sensor Simulator</div>
+        <div class="brand-subtitle">Sprint 2 Hardware Event Simulation (Thức) • Tuân thủ US-FR-IOT-001 & FR-IOT-007</div>
+      </div>
+    </div>
+
+    <div class="config-bar">
+      <div class="input-group">
+        <label for="apiUrl">API BASE:</label>
+        <input type="text" id="apiUrl" value="http://localhost:5242">
+      </div>
+      <button class="btn btn-outline" id="btnTestConn" onclick="checkApiHealth()">Kiểm tra kết nối</button>
+      <div class="status-badge offline" id="connStatus">
+        <span class="status-dot"></span>
+        <span id="connStatusText">Offline</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Metric Strip -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <span class="metric-label">Tổng bãi đỗ xe</span>
+        <span class="metric-val" id="metricTotalLots">3</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Tổng chỗ trống hiện có</span>
+        <span class="metric-val" id="metricTotalSlots" style="color:#10b981;">--</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Sự kiện IoT đã gửi</span>
+        <span class="metric-val" id="metricEventsSent">0</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Chế độ mô phỏng</span>
+        <span class="metric-val" id="metricMode" style="font-size:18px; color:#38bdf8;">Thủ công</span>
+      </div>
+    </div>
+
+    <!-- Automation Toolbar -->
+    <div class="control-panel">
+      <div class="control-desc">
+        <h3>⚡ Chế độ Auto Traffic Simulation (Mô phỏng ngẫu nhiên)</h3>
+        <p>Tự động gửi sự kiện xe ra / vào mỗi 3 giây để demo số chỗ trống nhảy theo thời gian thực trên Web.</p>
+      </div>
+      <div class="control-actions">
+        <button class="btn btn-success" id="btnAutoToggle" onclick="toggleAutoSim()">▶ Bật Auto Traffic</button>
+        <button class="btn btn-outline" onclick="fetchAllLots()">🔄 Làm mới dữ liệu</button>
+        <button class="btn btn-danger" onclick="resetToDefault()">↺ Reset về mặc định (24, 0, 8)</button>
+      </div>
+    </div>
+
+    <!-- Parking Lots Grid -->
+    <div class="lots-grid" id="lotsContainer">
+      <!-- Dynamic cards will be rendered here -->
+    </div>
+
+    <!-- Live Parked Cars Section -->
+    <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; padding:18px 20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+        <div style="font-weight:600; font-size:15px; display:flex; align-items:center; gap:8px;">
+          <span>🚘</span>
+          <span>DANH SÁCH XE ĐANG ĐỖ TRONG BÃI (LIVE IOT TRACKING)</span>
+          <span id="parkedCarsBadge" style="background:#0284c7; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; font-family:'JetBrains Mono',monospace;">0 xe</span>
+        </div>
+        <small style="color:var(--text-muted);">Theo dõi biển số xe thực tế, chống check-in trùng và hỗ trợ check-out đúng bãi</small>
+      </div>
+      <div id="parkedCarsList" style="display:flex; flex-wrap:wrap; gap:10px; min-height:42px; align-items:center;">
+        <span style="color:var(--text-muted); font-size:13px; font-style:italic;">Chưa có xe nào đang đỗ trong hệ thống.</span>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Terminal -->
+    <div class="terminal-section">
+      <div class="terminal-header">
+        <div class="terminal-title">
+          <span>📟</span>
+          <span>LIVE SENSOR TELEMETRY & EVENT INGESTION STREAM (POST /api/iot/events)</span>
+        </div>
+        <div class="terminal-controls">
+          <button class="btn-term" onclick="clearLogs()">Xoá Log</button>
+          <button class="btn-term" onclick="copyLogs()">Copy Log</button>
+        </div>
+      </div>
+      <div class="terminal-body" id="termBody">
+        <div class="log-line">
+          <span class="log-time">[Ready]</span>
+          <span class="log-tag sys">[SYSTEM]</span>
+          <span class="log-msg">Hardware IoT Simulator khởi tạo thành công. Sẵn sàng gửi dữ liệu cảm biến tới Backend.</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Smart Parking System © 2026 • Sprint 2 Delivery • Module: IoT Ingestion & Hardware Event Simulator (Phụ trách: Thức)
+  </footer>
+
+  <script>
+    let lots = [
+      { id: 1, name: "Bãi xe FPT Software Quận 9", availableSlots: 24, hourlyRate: 15000 },
+      { id: 2, name: "Bãi xe Vincom Landmark 81", availableSlots: 0, hourlyRate: 25000 },
+      { id: 3, name: "Bãi xe Aeon Mall Tân Phú", availableSlots: 8, hourlyRate: 18000 }
+    ];
+
+    let eventsCount = 0;
+    let autoSimInterval = null;
+
+    function getBaseUrl() {
+      let url = document.getElementById('apiUrl').value.trim();
+      return url.endsWith('/') ? url.slice(0, -1) : url;
+    }
+
+    function log(tag, type, message) {
+      const term = document.getElementById('termBody');
+      const now = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.innerHTML = `<span class="log-time">[${now}]</span><span class="log-tag ${type}">[${tag}]</span><span class="log-msg">${message}</span>`;
+      term.appendChild(line);
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function clearLogs() {
+      document.getElementById('termBody').innerHTML = '';
+      log('SYSTEM', 'sys', 'Đã xoá log terminal.');
+    }
+
+    function copyLogs() {
+      const text = document.getElementById('termBody').innerText;
+      navigator.clipboard.writeText(text);
+      alert('Đã copy toàn bộ log telemetry vào clipboard!');
+    }
+
+    function renderLots() {
+      const container = document.getElementById('lotsContainer');
+      container.innerHTML = '';
+
+      let totalAvailable = 0;
+
+      lots.forEach(lot => {
+        totalAvailable += lot.availableSlots;
+        const isFull = lot.availableSlots <= 0;
+        const card = document.createElement('div');
+        card.className = `lot-card ${isFull ? 'full' : ''}`;
+        card.innerHTML = `
+          <div class="lot-header">
+            <div>
+              <div class="lot-id">IOT-GATEWAY-LOT#0${lot.id}</div>
+              <div class="lot-title">${lot.name}</div>
+            </div>
+            <div class="lot-rate">${(lot.hourlyRate || 0).toLocaleString('vi-VN')} đ/h</div>
+          </div>
+
+          <div class="slot-display">
+            <div class="slot-num ${isFull ? 'zero' : ''}">${lot.availableSlots}</div>
+            <div class="slot-label">
+              ${isFull ? '<strong style="color:#ef4444;">ĐÃ HẾT CHỖ (FULL)</strong>' : 'Chỗ trống khả dụng'}<br>
+              <small style="color:#64748b;">Cảm biến: Hoạt động bình thường</small>
+            </div>
+          </div>
+
+          <div class="lot-actions">
+            <button class="btn btn-primary" onclick="sendIoTEvent(${lot.id}, 'CarParked')" ${isFull ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+              🚗 Xe Vào (Check-in)
+            </button>
+            <button class="btn btn-success" onclick="sendIoTEvent(${lot.id}, 'CarDeparted')">
+              🚙 Xe Ra (Check-out)
+            </button>
+            <button class="btn btn-fault" onclick="sendIoTEvent(${lot.id}, 'Fault')">
+              ⚠️ Giả lập Lỗi Cảm biến (Sensor Fault)
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      document.getElementById('metricTotalSlots').innerText = totalAvailable;
+      document.getElementById('metricTotalLots').innerText = lots.length;
+    }
+
+    async function checkApiHealth() {
+      const base = getBaseUrl();
+      const statusEl = document.getElementById('connStatus');
+      const textEl = document.getElementById('connStatusText');
+
+      try {
+        log('HEALTH_CHECK', 'sys', `Đang kiểm tra kết nối tới ${base}/parking-lots...`);
+        const res = await fetch(`${base}/parking-lots`);
+        if (res.ok) {
+          const data = await res.json();
+          lots = data;
+          renderLots();
+          statusEl.className = 'status-badge online';
+          textEl.innerText = 'Online (Connected)';
+          log('HEALTH_CHECK', 'sys', `Kết nối thành công! Đã tải ${data.length} bãi xe từ live API.`);
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (err) {
+        statusEl.className = 'status-badge offline';
+        textEl.innerText = 'Offline (Mất kết nối)';
+        log('HEALTH_CHECK', 'err', `Không thể kết nối Backend (${err.message}). Vui lòng đảm bảo WebAPI đang chạy.`);
+      }
+    }
+
+    let parkedCars = [];
+
+    async function fetchParkedCars() {
+      const base = getBaseUrl();
+      try {
+        const res = await fetch(`${base}/api/iot/parked-cars`);
+        if (res.ok) {
+          parkedCars = await res.json();
+          renderParkedCars();
+        }
+      } catch (err) {
+        // silent fail
+      }
+    }
+
+    function renderParkedCars() {
+      const listEl = document.getElementById('parkedCarsList');
+      const badgeEl = document.getElementById('parkedCarsBadge');
+      badgeEl.innerText = `${parkedCars.length} xe`;
+
+      if (!parkedCars || parkedCars.length === 0) {
+        listEl.innerHTML = '<span style="color:var(--text-muted); font-size:13px; font-style:italic;">Chưa có xe nào đang đỗ trong hệ thống. Bấm [Xe vào] để đưa xe vào bãi!</span>';
+        return;
+      }
+
+      listEl.innerHTML = parkedCars.map(car => `
+        <div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:6px 12px; display:flex; align-items:center; gap:8px; font-size:13px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:700; color:#38bdf8;">${car.carId}</span>
+          <span style="color:#64748b; font-size:11px;">(${car.parkingLotName || 'Bãi #' + car.parkingLotId})</span>
+          <button onclick="sendIoTEvent(${car.parkingLotId}, 'CarDeparted', '${car.carId}')" style="background:#dc2626; color:#fff; border:none; border-radius:4px; padding:2px 8px; font-size:11px; cursor:pointer; font-weight:600;">Check-out ✕</button>
+        </div>
+      `).join('');
+    }
+
+    async function fetchAllLots() {
+      const base = getBaseUrl();
+      try {
+        const res = await fetch(`${base}/parking-lots`);
+        if (res.ok) {
+          lots = await res.json();
+          renderLots();
+          log('API_GET', 'sys', `Đã cập nhật danh sách bãi xe từ ${base}/parking-lots.`);
+        }
+      } catch (err) {
+        log('API_GET', 'err', `Lỗi tải bãi xe: ${err.message}`);
+      }
+      await fetchParkedCars();
+    }
+
+    // Danh sách biển số xe mẫu Việt Nam
+    const samplePlates = [
+      '51B1-12345', '51F-67890', '30A-11111', '92C-22222', '43B-33333',
+      '51G-44444', '29H-55555', '36K-66666', '51D-77777', '60A-88888',
+      '72E-99999', '51B2-00001', '37A-10203', '48C-30405', '59D-50607'
+    ];
+
+    function getAvailablePlate() {
+      // Tìm biển số trong danh sách mẫu chưa đỗ ở bất kỳ bãi nào
+      const parkedSet = new Set(parkedCars.map(c => (c.carId || '').toUpperCase()));
+      const available = samplePlates.filter(p => !parkedSet.has(p.toUpperCase()));
+      if (available.length > 0) {
+        return available[Math.floor(Math.random() * available.length)];
+      }
+      // Nếu tất cả đã đỗ, sinh biển số ngẫu nhiên mới
+      const randomNum = Math.floor(10000 + Math.random() * 90000);
+      return `51K-${randomNum}`;
+    }
+
+    async function sendIoTEvent(lotId, eventType, specificCarId) {
+      const base = getBaseUrl();
+      const slotNum = `SLOT-${String(Math.floor(Math.random() * 20) + 1).padStart(2, '0')}`;
+
+      let carId = specificCarId;
+      if (!carId) {
+        if (eventType === 'CarParked') {
+          carId = getAvailablePlate();
+        } else if (eventType === 'CarDeparted') {
+          // Tìm xe đang đỗ trong đúng bãi này để check-out
+          const carsInLot = parkedCars.filter(c => c.parkingLotId === lotId);
+          if (carsInLot.length > 0) {
+            carId = carsInLot[0].carId;
+          } else {
+            // Không có xe nào đang đỗ trong bãi này
+            log('WARNING', 'fault', `Bãi #${lotId} hiện không có xe nào đang đỗ để check-out.`);
+            alert(`Bãi xe này hiện không có xe nào đang đỗ để check-out!`);
+            return;
+          }
+        } else {
+          carId = `SENSOR-SYS-${lotId}`;
+        }
+      }
+
+      const payload = {
+        carId: carId,
+        parkingLotId: lotId,
+        slotNumber: slotNum,
+        eventType: eventType,
+        timestamp: new Date().toISOString()
+      };
+
+      eventsCount++;
+      document.getElementById('metricEventsSent').innerText = eventsCount;
+
+      const tagType = eventType === 'CarParked' ? 'in' : eventType === 'CarDeparted' ? 'out' : 'fault';
+      log('IOT_EVENT', tagType, `[Payload] Car: ${carId} | Event: ${eventType} | Lot: #${lotId}`);
+
+      try {
+        const res = await fetch(`${base}/api/iot/events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          log('SERVER_ACK', tagType, `[${res.status} OK] ${data.message}`);
+          await fetchAllLots();
+        } else {
+          log('SERVER_ERR', 'err', `[${res.status}] ${data.message || 'Lỗi khi gửi sự kiện'}`);
+        }
+      } catch (err) {
+        // Fallback local update if backend offline so user can still test UI
+        log('LOCAL_SIM', tagType, `(Backend chưa mở, cập nhật nội bộ) Event: ${eventType} tại bãi #${lotId}`);
+        const lot = lots.find(l => l.id === lotId);
+        if (lot) {
+          if (eventType === 'CarParked' && lot.availableSlots > 0) {
+            lot.availableSlots--;
+            parkedCars.push({ carId: carId, parkingLotId: lotId, parkingLotName: lot.name });
+          }
+          if (eventType === 'CarDeparted') {
+            lot.availableSlots++;
+            parkedCars = parkedCars.filter(c => c.carId !== carId);
+          }
+          renderLots();
+          renderParkedCars();
+        }
+      }
+    }
+
+    async function resetToDefault() {
+      const base = getBaseUrl();
+      try {
+        log('RESET', 'sys', `Đang gửi lệnh reset về bãi mặc định...`);
+        const res = await fetch(`${base}/api/iot/reset`, { method: 'POST' });
+        if (res.ok) {
+          log('RESET', 'sys', `Đã reset dữ liệu thành công!`);
+          await fetchAllLots();
+        } else {
+          throw new Error('API reset thất bại');
+        }
+      } catch (err) {
+        // Local fallback
+        lots = [
+          { id: 1, name: "Bãi xe FPT Software Quận 9", availableSlots: 24, hourlyRate: 15000 },
+          { id: 2, name: "Bãi xe Vincom Landmark 81", availableSlots: 0, hourlyRate: 25000 },
+          { id: 3, name: "Bãi xe Aeon Mall Tân Phú", availableSlots: 8, hourlyRate: 18000 }
+        ];
+        parkedCars = [];
+        renderLots();
+        renderParkedCars();
+        log('RESET', 'sys', 'Đã khôi phục dữ liệu mặc định (24, 0, 8).');
+      }
+    }
+
+    function toggleAutoSim() {
+      const btn = document.getElementById('btnAutoToggle');
+      const modeEl = document.getElementById('metricMode');
+
+      if (autoSimInterval) {
+        clearInterval(autoSimInterval);
+        autoSimInterval = null;
+        btn.innerText = '▶ Bật Auto Traffic';
+        btn.className = 'btn btn-success';
+        modeEl.innerText = 'Thủ công';
+        modeEl.style.color = '#38bdf8';
+        log('SIM_MODE', 'sys', 'Đã DỪNG chế độ mô phỏng lưu lượng xe tự động.');
+      } else {
+        btn.innerText = '⏸ Dừng Auto Traffic';
+        btn.className = 'btn btn-danger';
+        modeEl.innerText = 'TỰ ĐỘNG (3s)';
+        modeEl.style.color = '#10b981';
+        log('SIM_MODE', 'sys', 'Đã BẬT chế độ mô phỏng lưu lượng xe tự động (chu kỳ 3 giây).');
+
+        autoSimInterval = setInterval(() => {
+          // Quyết định hành động thông minh:
+          // Nếu có xe đang đỗ và random < 0.45: cho xe ra
+          // Ngược lại: cho xe vào một bãi còn chỗ
+          if (parkedCars.length > 0 && Math.random() < 0.45) {
+            const randomParked = parkedCars[Math.floor(Math.random() * parkedCars.length)];
+            sendIoTEvent(randomParked.parkingLotId, 'CarDeparted', randomParked.carId);
+          } else {
+            const availableLots = lots.filter(l => l.availableSlots > 0);
+            if (availableLots.length > 0) {
+              const randomLot = availableLots[Math.floor(Math.random() * availableLots.length)];
+              sendIoTEvent(randomLot.id, 'CarParked');
+            }
+          }
+        }, 3000);
+      }
+    }
+
+    // Auto-detect port and init
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.location.protocol.startsWith('http')) {
+        const port = window.location.port;
+        if (port && port !== '5500' && port !== '3000' && port !== '5173') {
+          document.getElementById('apiUrl').value = window.location.origin;
+        }
+      }
+      renderLots();
+      checkApiHealth();
+    });
+  </script>
+</body>
+</html>
