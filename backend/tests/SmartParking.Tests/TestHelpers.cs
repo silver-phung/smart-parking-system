@@ -83,7 +83,9 @@ public class CustomWebApplicationFactory : Microsoft.AspNetCore.Mvc.Testing.WebA
     {
         builder.ConfigureServices(services =>
         {
+            // Remove provider callbacks too, otherwise Npgsql options leak into the in-memory context.
             var descriptors = services.Where(d =>
+                d.ServiceType == typeof(Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<SmartParkingDbContext>) ||
                 d.ServiceType == typeof(Microsoft.EntityFrameworkCore.DbContextOptions<SmartParkingDbContext>) ||
                 d.ServiceType == typeof(Microsoft.EntityFrameworkCore.DbContextOptions) ||
                 d.ServiceType == typeof(SmartParkingDbContext) ||

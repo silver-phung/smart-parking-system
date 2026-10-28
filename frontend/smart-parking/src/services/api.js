@@ -26,11 +26,18 @@ export async function apiRequest(path, options = {}) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = data.message || data.error
+    const validationMessages = data?.errors
+      ? Object.values(data.errors).flat().filter((message) => typeof message === "string")
+      : [];
+    const message = data?.message || data?.error || validationMessages.join(" ")
       || (response.status === 404
         ? "API này chưa được triển khai trong backend."
+        : response.status >= 500
+        ? "Máy chủ đang gặp sự cố. Vui lòng thử lại sau."
         : "Yêu cầu không thành công. Vui lòng thử lại.");
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   return data;

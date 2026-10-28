@@ -6,9 +6,9 @@ import { apiRequest } from "../services/api.js";
 export default function Register() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    name: "",
+    username: "",
+    fullName: "",
     email: "",
-    plate: "",
     password: "",
   });
   const [error, setError] = useState("");
@@ -24,11 +24,24 @@ export default function Register() {
     setLoading(true);
     setError("");
     try {
-      await apiRequest("/auth/register", {
+      const response = await apiRequest("/v1/auth/register", {
         method: "POST",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          username: form.username.trim(),
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
+          password: form.password,
+        }),
+        skipAuth: true,
       });
-      navigate("/");
+      navigate("/verify-email", {
+        state: {
+          email: response.data?.email || form.email.trim(),
+          username: response.data?.username || form.username.trim(),
+          message: response.message,
+          sentAt: Date.now(),
+        },
+      });
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -46,13 +59,30 @@ export default function Register() {
         </p>
 
         <form className="auth-form" onSubmit={onSubmit}>
+          <label htmlFor="register-username">Tên đăng nhập</label>
+          <input
+            id="register-username"
+            name="username"
+            placeholder="Ví dụ: nguyenvana"
+            autoComplete="username"
+            minLength={3}
+            maxLength={50}
+            pattern="[a-zA-Z0-9_.]{3,50}"
+            title="Từ 3–50 ký tự, gồm chữ cái, số, dấu chấm hoặc gạch dưới."
+            value={form.username}
+            onChange={onChange}
+            disabled={loading}
+            required
+          />
+
           <label htmlFor="register-name">Họ và tên</label>
           <input
             id="register-name"
-            name="name"
+            name="fullName"
             placeholder="Nguyễn Văn A"
             autoComplete="name"
-            value={form.name}
+            maxLength={100}
+            value={form.fullName}
             onChange={onChange}
             disabled={loading}
             required
@@ -65,23 +95,11 @@ export default function Register() {
             name="email"
             placeholder="you@example.com"
             autoComplete="email"
+            maxLength={255}
             value={form.email}
             onChange={onChange}
             disabled={loading}
             required
-          />
-
-          <label htmlFor="register-plate">
-            Biển số xe <span className="auth-form__optional">(không bắt buộc)</span>
-          </label>
-          <input
-            id="register-plate"
-            name="plate"
-            placeholder="Ví dụ: 30A-123.45"
-            autoComplete="off"
-            value={form.plate}
-            onChange={onChange}
-            disabled={loading}
           />
 
           <label htmlFor="register-password">Mật khẩu</label>
@@ -89,9 +107,10 @@ export default function Register() {
             id="register-password"
             type="password"
             name="password"
-            placeholder="Tối thiểu 6 ký tự"
+            placeholder="Tối thiểu 8 ký tự"
             autoComplete="new-password"
-            minLength={6}
+            minLength={8}
+            maxLength={100}
             value={form.password}
             onChange={onChange}
             disabled={loading}

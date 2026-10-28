@@ -1,20 +1,12 @@
 import { Component } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout.jsx";
 import { apiRequest } from "../services/api.js";
 import { setAuthSession } from "../services/authSession.js";
 
-const demoAccounts = {
-  ADMIN: "admin",
-  MANAGER: "manager",
-  STAFF: "staff",
-  USER: "user",
-};
-
 class LoginForm extends Component {
   state = {
-    role: "USER",
-    username: demoAccounts.USER,
+    username: this.props.initialUsername || "",
     password: "",
     error: "",
     loading: false,
@@ -22,11 +14,10 @@ class LoginForm extends Component {
 
   onChange = (event) => {
     const { name, value } = event.target;
-    this.setState((current) => ({
+    this.setState({
       [name]: value,
-      ...(name === "role" ? { username: demoAccounts[value] } : {}),
       error: "",
-    }));
+    });
   };
 
   onSubmit = async (event) => {
@@ -36,7 +27,7 @@ class LoginForm extends Component {
       const response = await apiRequest("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
-          username: this.state.username,
+          username: this.state.username.trim(),
           password: this.state.password,
         }),
         skipAuth: true,
@@ -70,20 +61,11 @@ class LoginForm extends Component {
           </p>
 
           <form className="auth-form" onSubmit={this.onSubmit}>
-            <label htmlFor="login-role">Tài khoản thử nghiệm</label>
-            <select
-              id="login-role"
-              name="role"
-              value={this.state.role}
-              onChange={this.onChange}
-              disabled={this.state.loading}
-            >
-              <option value="ADMIN">Quản trị viên (admin)</option>
-              <option value="MANAGER">Quản lý (manager)</option>
-              <option value="STAFF">Nhân viên (staff)</option>
-              <option value="USER">Người dùng (user)</option>
-            </select>
-
+            {this.props.notice && (
+              <p className="auth-form__message auth-form__message--success" role="status">
+                {this.props.notice}
+              </p>
+            )}
             <label htmlFor="login-username">Tên đăng nhập</label>
             <input
               id="login-username"
@@ -121,7 +103,10 @@ class LoginForm extends Component {
             </button>
           </form>
 
-          <p className="auth-switch">Đăng nhập bằng username và mật khẩu tài khoản thử nghiệm.</p>
+          <p className="auth-switch">Dùng tên đăng nhập và mật khẩu bạn đã đăng ký.</p>
+          <p className="auth-switch">
+            Chưa xác minh email? <Link to="/verify-email">Nhập mã xác minh</Link>
+          </p>
           <p className="auth-switch">
             Đăng ký tài khoản mới? <Link to="/register">Tạo tài khoản</Link>
           </p>
@@ -136,5 +121,13 @@ class LoginForm extends Component {
 
 export default function Login() {
   const navigate = useNavigate();
-  return <LoginForm navigate={navigate} />;
+  const location = useLocation();
+  return (
+    <LoginForm
+      key={location.key}
+      navigate={navigate}
+      initialUsername={location.state?.username}
+      notice={location.state?.message}
+    />
+  );
 }
