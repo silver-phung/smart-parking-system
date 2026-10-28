@@ -158,7 +158,7 @@ public class BookingService : IBookingService
                 if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     long lockKey = ParkingLotLockHelper.LotLockBase + lot.Id;
-                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", lockKey, ct);
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { lockKey }, cancellationToken: ct);
                 }
 
                 // Re-calculate authoritative capacity inside the lock with conservative IoT guard and strict slot fallback
@@ -370,7 +370,7 @@ public class BookingService : IBookingService
                 if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     long lockKey = ParkingLotLockHelper.LotLockBase + booking.LotId;
-                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", lockKey, ct);
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { lockKey }, cancellationToken: ct);
                 }
 
                 // Re-fetch booking inside transaction to guard against race with CheckIn

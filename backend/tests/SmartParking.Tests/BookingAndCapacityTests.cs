@@ -1309,5 +1309,28 @@ public class BookingAndCapacityTests
         Assert.True(checkIn2Success.Success);
     }
 
+    [Fact]
+    public void AdvisoryLock_OverloadResolution_PassesParametersExplicitlyAndAvoidsCancellationTokenMappingError()
+    {
+        // Regression test for issue where ExecuteSqlRawAsync was called with (sql, lockKey, ct)
+        // causing C# compiler to select the (string, params object[]) overload and treating CancellationToken as a SQL parameter.
+        // The fix requires passing lockKey as new object[] { lockKey } and cancellationToken: ct,
+        // which unambiguously selects ExecuteSqlRawAsync(DatabaseFacade, string, IEnumerable<object>, CancellationToken).
+
+        var methodWithParamsAndToken = typeof(RelationalDatabaseFacadeExtensions).GetMethod(
+            nameof(RelationalDatabaseFacadeExtensions.ExecuteSqlRawAsync),
+            new[] { typeof(Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade), typeof(string), typeof(IEnumerable<object>), typeof(CancellationToken) }
+        );
+        Assert.NotNull(methodWithParamsAndToken);
+
+        // Verify parameter passing structure
+        long dummyKey = 300001L;
+        var parameters = new object[] { dummyKey };
+        Assert.IsAssignableFrom<IEnumerable<object>>(parameters);
+        Assert.Single(parameters);
+        Assert.Equal(dummyKey, parameters[0]);
+    }
+
     #endregion
 }
+

@@ -82,7 +82,7 @@ public class ParkingSessionService : IParkingSessionService
                 if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     long lockKey = ParkingLotLockHelper.LotLockBase + lot.Id;
-                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", lockKey, ct);
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { lockKey }, cancellationToken: ct);
                 }
 
                 // Kiểm tra xem phương tiện có lượt đặt chỗ PENDING hợp lệ tại bãi này hay không
@@ -277,7 +277,7 @@ public class ParkingSessionService : IParkingSessionService
                 if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     long lockKey = ParkingLotLockHelper.LotLockBase + session.LotId;
-                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", lockKey, ct);
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { lockKey }, cancellationToken: ct);
                 }
 
                 var oldStatus = session.Status;
