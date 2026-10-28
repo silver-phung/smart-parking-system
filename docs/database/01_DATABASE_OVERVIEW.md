@@ -149,3 +149,7 @@ Toàn bộ nghiệp vụ Smart Parking được phân thành 7 nhóm độc lậ
 | **Song** | Frontend & 3D Web | Hiển thị hiện trạng bãi xe trên Web Dashboard, render vị trí và trạng thái ô đỗ trên mô hình 3D | Nhóm B, D |
 | **Trí** | DevOps & Cloud | Cấu hình Neon PostgreSQL, biến môi trường, backup, quản lý connection pool và CI/CD | Hạ tầng Cloud |
 | **Danh** | QA & Testing | Kiểm thử tính toàn vẹn dữ liệu, kiểm thử tải tương tranh (concurrency), kịch bản lỗi | Toàn hệ thống |
+
+### Tài liệu schema triển khai bổ sung
+
+- [Cloudinary image metadata ERD](11_CLOUDINARY_IMAGE_ERD.md): bảng `stored_images` và quan hệ với `users`.
