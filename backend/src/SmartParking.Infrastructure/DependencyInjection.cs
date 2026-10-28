@@ -33,6 +33,14 @@ public static class DependencyInjection
         services.Configure<RecaptchaOptions>(configuration.GetSection(RecaptchaOptions.SectionName));
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<AdminBootstrapOptions>(configuration.GetSection(AdminBootstrapOptions.SectionName));
+        services.Configure<CloudinaryOptions>(options =>
+        {
+            configuration.GetSection(CloudinaryOptions.SectionName).Bind(options);
+            options.Url = configuration["CLOUDINARY_URL"] ?? options.Url;
+            options.CloudName = configuration["CLOUDINARY_CLOUD_NAME"] ?? options.CloudName;
+            options.ApiKey = configuration["CLOUDINARY_API_KEY"] ?? options.ApiKey;
+            options.ApiSecret = configuration["CLOUDINARY_API_SECRET"] ?? options.ApiSecret;
+        });
 
         // 3. Infrastructure & Auth Services
         services.AddHttpClient();
@@ -52,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<IStaffLotAssignmentService, StaffLotAssignmentService>();
         services.AddScoped<IAdminUserService, AdminUserService>();
         services.AddScoped<IBookingService, BookingService>();
+        services.AddScoped<IImageService, ImageService>();
 
         return services;
     }

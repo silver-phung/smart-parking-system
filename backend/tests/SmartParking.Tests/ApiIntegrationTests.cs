@@ -107,6 +107,14 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
+    public async Task GetImageMetadata_RequiresAuthentication()
+    {
+        var response = await _client.GetAsync("/api/v1/images/1");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task GetSwaggerJson_ReturnsValidOpenApiSpecification()
     {
         // Act

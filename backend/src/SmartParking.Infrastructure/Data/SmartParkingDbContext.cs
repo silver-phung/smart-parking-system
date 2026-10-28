@@ -25,6 +25,7 @@ public class SmartParkingDbContext : DbContext, IApplicationDbContext
     public DbSet<StaffLotAssignment> StaffLotAssignments => Set<StaffLotAssignment>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<StoredImage> StoredImages => Set<StoredImage>();
 
     public virtual Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
     {

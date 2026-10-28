@@ -15,3 +15,24 @@ Accept: application/json
 ### 4. Swagger OpenAPI Spec
 GET {{SmartParking.Api_HostAddress}}/swagger/v1/swagger.json
 Accept: application/json
+
+### Upload an image (replace the bearer token and local file path)
+POST {{SmartParking.Api_HostAddress}}/api/v1/images
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=ImageBoundary
+
+--ImageBoundary
+Content-Disposition: form-data; name="file"; filename="parking.png"
+Content-Type: image/png
+
+< C:\path\to\parking.png
+--ImageBoundary--
+
+### Get image metadata (replace the ID)
+GET {{SmartParking.Api_HostAddress}}/api/v1/images/1
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### Delete an image (replace the ID)
+DELETE {{SmartParking.Api_HostAddress}}/api/v1/images/1
+Authorization: Bearer {{accessToken}}
