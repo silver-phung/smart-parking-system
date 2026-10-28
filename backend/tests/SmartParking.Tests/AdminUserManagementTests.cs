@@ -321,10 +321,6 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
         });
         var secOptions = Microsoft.Extensions.Options.Options.Create(new SmartParking.Application.Common.Options.SecurityOptions
         {
-            OtpSecretKey = "SuperSecureOtpSecretKeyForTestingHMAC2026!Min32Bytes",
-            OtpLifetimeMinutes = 15,
-            MaxFailedOtpAttempts = 5,
-            OtpResendCooldownSeconds = 60,
             MaxFailedLoginAttempts = 5,
             LockoutDurationMinutes = 15
         });
@@ -333,12 +329,8 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
             context,
             new PasswordHasherService(),
             new TokenService(jwtOptions),
-            new OtpService(secOptions),
-            new FakeEmailService(),
-            new FakeRecaptchaService(),
             jwtOptions,
             secOptions,
-            Microsoft.Extensions.Options.Options.Create(new SmartParking.Application.Common.Options.RecaptchaOptions { Enabled = false }),
             NullLogger<AuthService>.Instance
         );
 

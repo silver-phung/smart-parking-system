@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SmartPark 3D - Không Gian Bãi Đỗ Xe Thông Minh (Three.js)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=JetBrains+Mono:wght@500;600&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/parking-3d-viewer.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: 'Be Vietnam Pro', sans-serif;
+      overflow-x: hidden;
+    }
+    .page-layout {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+    }
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+      color: #fff;
+      font-weight: 800;
+      font-size: 20px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+    }
+    .brand-text h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .brand-text small {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .action-btn {
+      background: rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      color: #38bdf8;
+      border-color: #38bdf8;
+    }
+    .main-content {
+      display: flex;
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    .viewer-panel {
+      flex: 1;
+      height: 100%;
+      position: relative;
+    }
+    .side-controls {
+      width: 320px;
+      background: rgba(15, 23, 42, 0.85);
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .side-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #38bdf8;
+      margin-bottom: 4px;
+    }
+    .sim-card {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sim-card h3 {
+      margin: 0;
+      font-size: 13px;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sim-btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .sim-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sim-btn:hover {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+    }
+    .slot-detail-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .slot-detail-modal.active {
+      display: flex;
+    }
+    .modal-box {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 440px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-layout">
+    <!-- Header -->
+    <header class="header-bar">
+      <div class="brand-wrap">
+        <div class="brand-logo">3D</div>
+        <div class="brand-text">
+          <h1>SmartPark 3D Scene Viewer</h1>
+          <small>Sprint 3 (Ngày 6–9) · Three.js OrbitControls & Trạng Thái Nghiệp Vụ</small>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="/app/customer" class="action-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Web Client
+        </a>
+        <a href="/app/admin" class="action-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          Web Admin
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-content">
+      <!-- 3D Canvas Viewer Container -->
+      <div class="viewer-panel" id="parking3DContainer"></div>
+
+      <!-- Side Simulator / Controls -->
+      <aside class="side-controls">
+        <div class="side-title">Mô Phỏng Trạng Thái Real-time</div>
+
+        <div class="sim-card">
+          <h3>🎮 Điều khiển thử nghiệm ô đỗ</h3>
+          <p style="font-size:12px;color:#94a3b8;margin:0">Nhấn nút bên dưới để xem ô đỗ thay đổi 3D lập tức:</p>
+          <div class="sim-btn-row">
+            <button class="sim-btn" id="btnSimPark">🚗 Đỗ ô A1-012</button>
+            <button class="sim-btn" id="btnSimExit">💨 Rời ô A1-012</button>
+            <button class="sim-btn" id="btnSimReserve">⏳ Phân chỗ B1-A03</button>
+            <button class="sim-btn" id="btnSimMaint">🟡 Bảo trì B1-A08</button>
+          </div>
+        </div>
+
+        <div class="sim-card">
+          <h3>📋 Bảng mã màu nghiệp vụ 3D</h3>
+          <div style="font-size:12px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:14px;height:14px;border-radius:4px;background:#10b981"></span>
+              <b>🟢 Trống (Available):</b> Sẵn sàng nhận xe
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:14px;height:14px;border-radius:4px;background:#ef4444"></span>
+              <b>🔴 Có xe (Occupied):</b> Render mesh xe ô tô 3D
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:14px;height:14px;border-radius:4px;background:#06b6d4"></span>
+              <b>⏳ Chờ vào (Reserved):</b> Viền nhấp nháy phát sáng
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:14px;height:14px;border-radius:4px;background:#f59e0b"></span>
+              <b>🟡 Bảo trì (Maintenance):</b> Render cọc tiêu 3D
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:14px;height:14px;border-radius:4px;background:#6b7280"></span>
+              <b>⚪ Tạm khóa (Unavailable):</b> Gạch chéo cấm đỗ
+            </div>
+          </div>
+        </div>
+
+        <div class="sim-card">
+          <h3>ℹ️ Thông số kỹ thuật Component</h3>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.5">
+            • <b>Engine:</b> Three.js r128 + OrbitControls<br>
+            • <b>API:</b> /api/ParkingSlots (tương thích /api/v1/parking-viewer/slots)<br>
+            • <b>Export:</b> Module UMD & React Component<br>
+            • <b>Thao tác:</b> Hỗ trợ PC Mouse & Mobile Touch Pinch
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Modal chi tiết khi click ô -->
+  <div class="slot-detail-modal" id="slotModal">
+    <div class="modal-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h2 style="margin:0;font-size:18px;color:#38bdf8" id="modalSlotCode">A1-012</h2>
+        <button id="modalCloseBtn" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">&times;</button>
+      </div>
+      <div id="modalSlotBody" style="font-size:13px;line-height:1.8;color:#cbd5e1;margin-bottom:16px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="action-btn" id="modalToggleOccBtn">Đổi thành Có xe</button>
+        <button class="action-btn" id="modalToggleFreeBtn">Đổi thành Trống</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js & Parking3DViewer Component -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="assets/js/parking-3d-viewer.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // Khởi tạo component 3D Viewer
+      var viewer = new Parking3DViewer({
+        container: '#parking3DContainer',
+        lotId: 1,
+        lotName: 'Bãi xe FPT Software Q9',
+        floorId: 'B1',
+        apiEndpoint: '/api/ParkingSlots',
+        onSlotClick: function (slot) {
+          showSlotDetail(slot);
+        }
+      });
+
+      // Xử lý Modal chi tiết ô
+      var currentSelectedSlot = null;
+      var modal = document.getElementById('slotModal');
+      var modalClose = document.getElementById('modalCloseBtn');
+
+      function showSlotDetail(slot) {
+        currentSelectedSlot = slot;
+        document.getElementById('modalSlotCode').textContent = 'Ô đỗ: ' + slot.slotCode;
+        document.getElementById('modalSlotBody').innerHTML = [
+          '<div><b>Trạng thái:</b> ' + (slot.physicalStatus || 'EMPTY') + '</div>',
+          '<div><b>Loại xe:</b> ' + (slot.vehicleType === 'ev' ? '⚡ Ô tô điện' : '🚗 Ô tô 4-7 chỗ') + '</div>',
+          slot.currentCarPlate ? '<div><b>Biển số:</b> <span style="font-family:monospace;color:#38bdf8">' + slot.currentCarPlate + '</span></div>' : '',
+          slot.vehicleModel ? '<div><b>Model:</b> ' + slot.vehicleModel + '</div>' : '',
+          '<div><b>Tọa độ:</b> X: ' + (slot.positionX || 0).toFixed(1) + ', Z: ' + (slot.positionZ || 0).toFixed(1) + '</div>'
+        ].join('');
+        modal.classList.add('active');
+      }
+
+      modalClose.addEventListener('click', function () {
+        modal.classList.remove('active');
+      });
+
+      document.getElementById('modalToggleOccBtn').addEventListener('click', function () {
+        if (!currentSelectedSlot) return;
+        viewer.updateSlotStatus(currentSelectedSlot.slotCode, 'OCCUPIED', {
+          carPlate: '51F-888.99',
+          vehicleModel: 'Toyota Vios',
+          vehicleColor: 'white'
+        });
+        modal.classList.remove('active');
+      });
+
+      document.getElementById('modalToggleFreeBtn').addEventListener('click', function () {
+        if (!currentSelectedSlot) return;
+        viewer.updateSlotStatus(currentSelectedSlot.slotCode, 'EMPTY');
+        modal.classList.remove('active');
+      });
+
+      // Các nút mô phỏng Real-time
+      document.getElementById('btnSimPark').addEventListener('click', function () {
+        viewer.updateSlotStatus('A1-012', 'OCCUPIED', {
+          carPlate: '51F-123.45',
+          vehicleModel: 'Toyota Vios',
+          vehicleColor: 'white'
+        });
+      });
+
+      document.getElementById('btnSimExit').addEventListener('click', function () {
+        viewer.updateSlotStatus('A1-012', 'EMPTY');
+      });
+
+      document.getElementById('btnSimReserve').addEventListener('click', function () {
+        viewer.updateSlotStatus('B1-A03', 'RESERVED', {
+          carPlate: '72A-999.88'
+        });
+      });
+
+      document.getElementById('btnSimMaint').addEventListener('click', function () {
+        viewer.updateSlotStatus('B1-A08', 'MAINTENANCE');
+      });
+    });
+  </script>
+</body>
+</html>

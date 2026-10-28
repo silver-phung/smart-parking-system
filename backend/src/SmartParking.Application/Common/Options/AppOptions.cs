@@ -28,81 +28,8 @@ public class SecurityOptions
 {
     public const string SectionName = "Security";
 
-    public string OtpSecretKey { get; set; } = string.Empty;
-    public int OtpLifetimeMinutes { get; set; } = 15;
-    public int MaxFailedOtpAttempts { get; set; } = 5;
-    public int OtpResendCooldownSeconds { get; set; } = 60;
     public int MaxFailedLoginAttempts { get; set; } = 5;
     public int LockoutDurationMinutes { get; set; } = 15;
-
-    // Alias for configuration binding compatibility
-    public int OtpExpirationMinutes
-    {
-        get => OtpLifetimeMinutes;
-        set => OtpLifetimeMinutes = value;
-    }
-}
-
-public class RecaptchaOptions
-{
-    public const string SectionName = "Recaptcha";
-
-    public bool Enabled { get; set; } = true;
-    public string SecretKey { get; set; } = string.Empty;
-    public string VerifyUrl { get; set; } = "https://www.google.com/recaptcha/api/siteverify";
-    public double MinScore { get; set; } = 0.5;
-}
-
-public class EmailOptions
-{
-    public const string SectionName = "Email";
-
-    public string Provider { get; set; } = "Smtp"; // Smtp or Mock
-    public string Host { get; set; } = "smtp.gmail.com";
-    public int Port { get; set; } = 587;
-    public string UserName { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
-    public string SenderEmail { get; set; } = "noreply@smartparking.vn";
-    public string SenderName { get; set; } = "Smart Parking System";
-    public bool EnableSsl { get; set; } = true;
-    public int TimeoutSeconds { get; set; } = 10;
-
-    // Aliases for Smtp prefix compatibility
-    public string SmtpHost
-    {
-        get => Host;
-        set => Host = value;
-    }
-
-    public int SmtpPort
-    {
-        get => Port;
-        set => Port = value;
-    }
-
-    public string SmtpUser
-    {
-        get => UserName;
-        set => UserName = value;
-    }
-
-    public string SmtpPass
-    {
-        get => Password;
-        set => Password = value;
-    }
-
-    public string FromEmail
-    {
-        get => SenderEmail;
-        set => SenderEmail = value;
-    }
-
-    public string FromName
-    {
-        get => SenderName;
-        set => SenderName = value;
-    }
 }
 
 public class AdminBootstrapOptions

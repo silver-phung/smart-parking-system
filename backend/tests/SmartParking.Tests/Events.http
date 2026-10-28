@@ -1,0 +1,109 @@
+### Smart Parking System – Event Ingestion & Gemini AI API
+### Sprint 3 Demo Flow – Thức
+### Chạy với: VSCode REST Client / JetBrains HTTP Client / dotnet-httprepl
+
+@baseUrl = https://localhost:7001
+@contentType = application/json
+
+### ─── BƯỚC 0: (Mới - Day 6) Gọi Gemini 2.5 Pro phân tích ảnh xe trước khi vào cổng ───
+POST {{baseUrl}}/api/gemini/analyze?imageUrl=https://storage.googleapis.com/smartparking-mock/vios-white.jpg
+Accept: {{contentType}}
+
+### ─── BƯỚC 1: Xe vào cổng (Camera AI + Staff cổng xác nhận) ───────────────
+# EventId mới mỗi lần gửi; nếu retry thì dùng lại cùng EventId
+POST {{baseUrl}}/api/events
+Content-Type: {{contentType}}
+
+{
+  "eventId": "evt-00000001-0000-0000-0000-000000000001",
+  "parkingLotId": 1,
+  "carPlate": "51F-12345",
+  "eventType": "VehicleEntered",
+  "source": "CameraGate01",
+  "triggeredBy": "gate_staff_01",
+  "fuelType": "gasoline",
+  "carColor": "white",
+  "carModel": "Toyota Vios",
+  "entryImageUrl": "https://storage.example.com/entry/51F-12345-20260101.jpg",
+  "eventTimestampUtc": "2026-01-01T08:00:00Z"
+}
+
+### ─── BƯỚC 2: Cảm biến IoT ô A1-012 phát hiện có xe ───────────────────────
+POST {{baseUrl}}/api/events
+Content-Type: {{contentType}}
+
+{
+  "eventId": "evt-00000002-0000-0000-0000-000000000002",
+  "sessionId": "REPLACE_WITH_SESSION_ID_FROM_STEP_1",
+  "parkingLotId": 1,
+  "slotCode": "A1-012",
+  "eventType": "SensorTriggered",
+  "source": "IoTSensor_A1-012",
+  "eventTimestampUtc": "2026-01-01T08:03:00Z"
+}
+
+### ─── BƯỚC 3: Staff khu vực gán xe vào ô ──────────────────────────────────
+POST {{baseUrl}}/api/events
+Content-Type: {{contentType}}
+
+{
+  "eventId": "evt-00000003-0000-0000-0000-000000000003",
+  "sessionId": "REPLACE_WITH_SESSION_ID_FROM_STEP_1",
+  "parkingLotId": 1,
+  "slotCode": "A1-012",
+  "carPlate": "51F-12345",
+  "eventType": "SlotParked",
+  "source": "ZoneStaff",
+  "triggeredBy": "zone_staff_02",
+  "eventTimestampUtc": "2026-01-01T08:05:00Z"
+}
+
+### ─── BƯỚC 4: Xe ra cổng ────────────────────────────────────────────────────
+POST {{baseUrl}}/api/events
+Content-Type: {{contentType}}
+
+{
+  "eventId": "evt-00000004-0000-0000-0000-000000000004",
+  "sessionId": "REPLACE_WITH_SESSION_ID_FROM_STEP_1",
+  "parkingLotId": 1,
+  "carPlate": "51F-12345",
+  "eventType": "VehicleExited",
+  "source": "GateStaff",
+  "triggeredBy": "gate_staff_01",
+  "exitImageUrl": "https://storage.example.com/exit/51F-12345-20260101.jpg",
+  "eventTimestampUtc": "2026-01-01T09:30:00Z"
+}
+
+### ─── KIỂM TRA: Danh sách phiên đang hoạt động ────────────────────────────
+GET {{baseUrl}}/api/events/sessions/active
+Accept: {{contentType}}
+
+### ─── KIỂM TRA: Nhật ký sự kiện ────────────────────────────────────────────
+GET {{baseUrl}}/api/events/logs
+Accept: {{contentType}}
+
+### ─── TEST: Gửi lại bước 1 với cùng EventId → phải trả duplicate ──────────
+POST {{baseUrl}}/api/events
+Content-Type: {{contentType}}
+
+{
+  "eventId": "evt-00000001-0000-0000-0000-000000000001",
+  "parkingLotId": 1,
+  "carPlate": "51F-12345",
+  "eventType": "VehicleEntered",
+  "source": "CameraGate01"
+}
+
+### ─── TEST: Sự kiện lệch thứ tự (SlotParked không có session) ─────────────
+POST {{baseUrl}}/api/events
+Content-Type: {{contentType}}
+
+{
+  "eventId": "evt-99999999-0000-0000-0000-000000000099",
+  "sessionId": "00000000-0000-0000-0000-000000000000",
+  "parkingLotId": 1,
+  "slotCode": "B2-005",
+  "eventType": "SlotParked",
+  "source": "ZoneStaff",
+  "triggeredBy": "zone_staff_03"
+}

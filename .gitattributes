@@ -1,1 +1,3 @@
 /scripts/connect-shared-database.sh text eol=lf
+/frontend/smart-parking/index.html text eol=lf
+/backend/src/SmartParking.Api/wwwroot/app/index.html text eol=lf
