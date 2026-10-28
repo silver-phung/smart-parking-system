@@ -20,6 +20,7 @@ public interface IApplicationDbContext
     DbSet<StaffLotAssignment> StaffLotAssignments { get; }
     DbSet<Booking> Bookings { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<StoredImage> StoredImages { get; }
 
     DatabaseFacade Database { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

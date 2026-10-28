@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -19,6 +20,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+var maxImageUploadSizeBytes = builder.Configuration.GetValue<long?>("Cloudinary:MaxUploadSizeBytes") ?? 10 * 1024 * 1024;
+builder.Services.Configure<FormOptions>(options =>
+    options.MultipartBodyLengthLimit = maxImageUploadSizeBytes + 64 * 1024);
 
 // 1. Configure Options & Security Secret Validation
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
