@@ -304,14 +304,18 @@
   transform: translateY(0);
 }
 
-.p3d-btn.primary {
+.p3d-btn.primary,
+.p3d-btn.active {
   background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
   border-color: #38bdf8;
   color: #ffffff;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
 }
 
-.p3d-btn.primary:hover {
+.p3d-btn.primary:hover,
+.p3d-btn.active:hover {
   background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.6);
 }
 
 /* Gợi ý điều khiển */

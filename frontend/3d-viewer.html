@@ -263,8 +263,8 @@
         <div class="sim-card">
           <h3>🎮 Mô phỏng sự kiện Real-time</h3>
           <div class="sim-btn-row">
-            <button class="sim-btn" id="btnSimPark">🚗 Đỗ ô A1-012</button>
-            <button class="sim-btn" id="btnSimExit">💨 Rời ô A1-012</button>
+            <button class="sim-btn" id="btnSimPark">🚗 Đỗ ô B1-A12</button>
+            <button class="sim-btn" id="btnSimExit">💨 Rời ô B1-A12</button>
             <button class="sim-btn" id="btnSimReserve">⏳ Phân ô B1-A03</button>
             <button class="sim-btn" id="btnSimMaint">🟡 Bảo trì B1-A08</button>
           </div>
@@ -392,7 +392,7 @@
 
       // Mô phỏng sự kiện
       document.getElementById('btnSimPark').addEventListener('click', function () {
-        viewer.updateSlotStatus('A1-012', 'OCCUPIED', {
+        viewer.updateSlotStatus('B1-A12', 'OCCUPIED', {
           carPlate: '51F-123.45',
           vehicleModel: 'Toyota Vios',
           vehicleColor: 'white'
@@ -400,7 +400,7 @@
       });
 
       document.getElementById('btnSimExit').addEventListener('click', function () {
-        viewer.updateSlotStatus('A1-012', 'EMPTY');
+        viewer.updateSlotStatus('B1-A12', 'EMPTY');
       });
 
       document.getElementById('btnSimReserve').addEventListener('click', function () {
