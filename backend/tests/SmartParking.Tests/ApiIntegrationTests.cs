@@ -212,4 +212,32 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.False(result.Success);
         Assert.Equal(EventProcessingStatus.PendingVerification, result.ProcessingStatus);
     }
+
+    // ─── Sprint 3 Day 6-9: 3D Visualization / ParkingSlots API smoke tests ───
+
+    [Fact]
+    public async Task GetParkingSlots_Returns200WithSlotsList()
+    {
+        var response = await _client.GetAsync("/api/ParkingSlots?lotId=1&floorId=B1");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("slots", content);
+        Assert.Contains("B1-A01", content);
+    }
+
+    [Fact]
+    public async Task PatchParkingSlotStatus_UpdatesPhysicalStatus()
+    {
+        var updateRequest = new
+        {
+            physicalStatus = "OCCUPIED",
+            carPlate = "51F-999.88"
+        };
+
+        var response = await _client.PatchAsJsonAsync("/api/ParkingSlots/B1-A02/status", updateRequest);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("51F-999.88", content);
+        Assert.Contains("OCCUPIED", content);
+    }
 }

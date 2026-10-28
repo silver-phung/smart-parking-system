@@ -5,7 +5,7 @@
   var sess = S.auth.guard('admin', '../');   // chưa đăng nhập hoặc không phải admin thì tự chuyển trang
   if (!sess) return;
   var $ = function (s, r) { return (r || document).querySelector(s); };
-  var PAGES = { dash: ['Tổng quan', 'grid'], live: ['Sơ đồ trực tiếp', 'map'], heat: ['Heatmap', 'flame'], rev: ['Doanh thu', 'chart'], price: ['Giá vé', 'tag'], alerts: ['Cảnh báo', 'bell'] };
+  var PAGES = { dash: ['Tổng quan', 'grid'], live: ['Sơ đồ trực tiếp', 'map'], view3d: ['Sơ đồ 3D', 'map'], heat: ['Heatmap', 'flame'], rev: ['Doanh thu', 'chart'], price: ['Giá vé', 'tag'], alerts: ['Cảnh báo', 'bell'] };
   var DOW = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
   var ui = { page: 'dash', lot: 'all', liveLot: 'L1', liveFloor: null, sel: null, heatMetric: 'occ', revDays: 14, priceScope: 'def', afStatus: 'open', afSev: 'all', sim: true, simT: 0 };
   var toastT;
@@ -269,16 +269,39 @@
     return h + '<div class="alist">' + (list.length ? list.map(function (a) { return alertHtml(a); }).join('') : '<p class="empty card">Không có cảnh báo nào trong bộ lọc này.</p>') + '</div>';
   }
 
+  var admin3DInstance = null;
+  function pView3D() {
+    var l = S.lot(ui.liveLot) || S.LOTS[0];
+    var h = '<div class="fbar"><div class="chips">' + S.LOTS.map(function (x) { return '<button type="button" class="chip" data-act="liveLot" data-id="' + x.id + '" aria-pressed="' + (x.id === l.id) + '">' + esc(x.name) + '</button>'; }).join('') + '</div></div>';
+    h += '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2>Sơ đồ không gian 3D - ' + esc(l.name) + '</h2><a href="../3d-viewer.html" target="_blank" class="btn sm primary">Mở toàn màn hình ↗</a></div><div id="admin3DContainer" style="height:580px;position:relative;border-radius:12px;overflow:hidden"></div></div>';
+    setTimeout(function () {
+      if (admin3DInstance) {
+        admin3DInstance.destroy();
+        admin3DInstance = null;
+      }
+      var target = document.querySelector('#admin3DContainer');
+      if (target && window.Parking3DViewer) {
+        admin3DInstance = new window.Parking3DViewer({
+          container: target,
+          lotId: l.id === 'L1' ? 1 : (l.id === 'L2' ? 2 : 3),
+          lotName: l.name,
+          floorId: l.floors[0] ? l.floors[0].id : 'B1'
+        });
+      }
+    }, 50);
+    return h;
+  }
+
   /* ---------- Vẽ và làm mới giao diện ----------
      render() thay nội dung trang hiện tại; softRender() tránh làm mất nội dung đang nhập.
   */
   function render() {
-    var el = $('#page'), fn = { dash: pDash, live: pLive, heat: pHeat, rev: pRev, price: pPrice, alerts: pAlerts }[ui.page];
+    var el = $('#page'), fn = { dash: pDash, live: pLive, view3d: pView3D, heat: pHeat, rev: pRev, price: pPrice, alerts: pAlerts }[ui.page];
     var y = window.scrollY; el.innerHTML = fn(); if (ui.page === 'price') calcPrice(); window.scrollTo(0, y); badges();
   }
   function softRender() {
     var a = document.activeElement; if (a && a.closest && a.closest('#page') && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
-    if (ui.page === 'price' || ui.page === 'rev' || ui.page === 'heat') { badges(); return; }
+    if (ui.page === 'price' || ui.page === 'rev' || ui.page === 'heat' || ui.page === 'view3d') { badges(); return; }
     render();
   }
 
