@@ -1,5 +1,8 @@
 # 🚗 Tài Liệu Module IoT Hardware Simulator (Sprint 2)
 
+**Trạng thái:** Hướng dẫn công cụ mô phỏng; không thay nguồn thiết bị/DB vận hành.  
+**Ưu tiên:** Luồng và trạng thái hiện hành nằm tại [event and IoT architecture](../architecture/event-and-iot.md) và [main flows](../product/main-flows.md).
+
 **Người phụ trách:** Thức (IoT Ingestion & Streaming Lead)  
 **Mã yêu cầu (SRS):** `US-FR-IOT-001`, `FR-IOT-001`, `FR-IOT-007`  
 **Nhánh:** `feat/Thuc/iot-simulator`

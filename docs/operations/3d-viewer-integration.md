@@ -1,5 +1,8 @@
 # Hướng Dẫn Tích Hợp Component Parking3DViewer (Sprint 3: Ngày 6–9)
 
+**Trạng thái:** Hướng dẫn triển khai lịch sử của module 3D tại nhánh feature; không phải nguồn quy tắc nghiệp vụ.  
+**Ưu tiên:** Dùng [business rules](../product/business-rules.md), [state machines](../product/state-machines.md) và [ADR](../decisions/README.md) khi tài liệu này còn mô tả `RESERVED` như physical status, dữ liệu mẫu hoặc biển số trong projection public.
+
 Tài liệu bàn giao cho **Song (Frontend React)** và các thành viên nhóm phát triển Smart Parking System.
 
 ---

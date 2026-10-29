@@ -1,5 +1,8 @@
 # Kết nối database Neon dùng chung
 
+**Trạng thái:** Hướng dẫn vận hành kết nối; không mô tả schema hoặc nghiệp vụ hiện hành.  
+**Schema:** Xem [data model](../architecture/data-model.md).
+
 Mỗi thành viên cài **.NET 10 SDK**, có Internet và nhận **username/password DB** từ người quản lý Neon. Không cần cài PostgreSQL, Docker hoặc deploy web.
 
 Thông tin đích của nhóm nằm trong `scripts/shared-database.json`: branch Neon `production`, database `smartparking`. Đây là branch của Neon, khác với nhánh code GitHub `duong`/`develop`. Username của các thành viên có thể khác nhau, nhưng phải có quyền truy cập cùng database này.
