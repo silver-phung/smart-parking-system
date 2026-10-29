@@ -20,7 +20,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-var maxImageUploadSizeBytes = builder.Configuration.GetValue<long?>("Cloudinary:MaxUploadSizeBytes") ?? 10 * 1024 * 1024;
+var maxImageUploadSizeBytes = Math.Max(
+    builder.Configuration.GetValue<long?>("Cloudinary:MaxUploadSizeBytes") ?? 10 * 1024 * 1024,
+    builder.Configuration.GetValue<long?>("AiService:MaxUploadSizeBytes") ?? 10 * 1024 * 1024);
 builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = maxImageUploadSizeBytes + 64 * 1024);
 

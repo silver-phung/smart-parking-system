@@ -1,10 +1,13 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.StaffAssignments;
 using SmartParking.Domain.Constants;
+using SmartParking.Infrastructure.Services;
 
 namespace SmartParking.Api.Controllers;
 
@@ -15,13 +18,86 @@ public class StaffAssignmentsController : ControllerBase
 {
     private readonly IStaffLotAssignmentService _assignmentService;
     private readonly ILogger<StaffAssignmentsController> _logger;
+    private readonly IStaffDetectionService _detectionService;
 
     public StaffAssignmentsController(
         IStaffLotAssignmentService assignmentService,
-        ILogger<StaffAssignmentsController> logger)
+        ILogger<StaffAssignmentsController> logger,
+        IStaffDetectionService detectionService)
     {
         _assignmentService = assignmentService;
         _logger = logger;
+        _detectionService = detectionService;
+    }
+
+    [HttpPost("/api/v1/staff/detect")]
+    [Authorize(Roles = $"{Roles.Staff},{Roles.Admin}")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> Detect(IFormFile? file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "A non-empty image file is required in the 'file' field." });
+
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await _detectionService.DetectAsync(
+                stream, file.ContentType, file.Length, actorId.Value, ct);
+            return Ok(new { message = "Image recognized successfully.", data = result });
+        }
+        catch (ImageValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (AiServiceException exception)
+        {
+            return StatusCode((int)exception.StatusCode, new { message = exception.Message });
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "AI service is unavailable." });
+        }
+        catch (DbUpdateException exception)
+        {
+            _logger.LogError(exception,
+                "Failed to persist AI recognition result for staff user {StaffUserId}.", actorId.Value);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = "AI recognition database is unavailable." });
+        }
+    }
+
+    [HttpPost("/api/v1/staff/detections/{id:long}/confirm")]
+    [Authorize(Roles = $"{Roles.Staff},{Roles.Admin}")]
+    [ProducesResponseType(typeof(StaffDetectionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ConfirmDetection(
+        long id, [FromBody] ConfirmStaffDetectionRequestDto request, CancellationToken ct)
+    {
+        var plateNumber = request.PlateNumber?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(plateNumber) || plateNumber.Length > 32
+            || string.IsNullOrWhiteSpace(request.Note) && !System.Text.RegularExpressions.Regex.IsMatch(
+                plateNumber, "^[A-Z0-9.-]+$"))
+            return BadRequest(new { message = "A plate number between 1 and 32 characters is required." });
+
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue)
+            return Unauthorized(new { message = "Cannot identify the current user." });
+
+        try
+        {
+            var result = await _detectionService.ConfirmAsync(id, plateNumber,
+                request.Note?.Trim(), actorId.Value, ct);
+            return result is null ? NotFound(new { message = "Recognition record was not found." }) : Ok(new { data = result });
+        }
+        catch (ImageValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     /// <summary>
