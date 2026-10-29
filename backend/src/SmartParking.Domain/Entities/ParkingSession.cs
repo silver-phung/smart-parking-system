@@ -1,8 +1,8 @@
 namespace SmartParking.Domain.Entities;
 
 /// <summary>
-/// Phiên gửi xe – mỗi lượt xe vào/ra tạo ra 1 phiên.
-/// Phiên được mở khi xe qua cổng vào (VehicleEntered) và đóng khi xe ra (VehicleExited).
+/// Projection nội bộ của pipeline sự kiện. Đây không phải nguồn trạng thái core.
+/// Ảnh/OCR tại cổng chỉ tạo phiên chờ xác minh; Staff điều phối mới chốt biển số và ô thực tế.
 /// </summary>
 public class ParkingSession
 {
@@ -11,8 +11,11 @@ public class ParkingSession
     /// <summary>UUID v4 do client sinh khi xe vào cổng – khóa nghiệp vụ duy nhất cho phiên.</summary>
     public string SessionId { get; set; } = string.Empty;
 
-    /// <summary>Biển số xe, ví dụ: "51F-67890". Đã chuẩn hóa thành chữ HOA.</summary>
+    /// <summary>Biển số đã được Staff điều phối xác nhận. Rỗng khi mới nhận OCR tại cổng.</summary>
     public string CarPlate { get; set; } = string.Empty;
+
+    /// <summary>Biển số OCR tạm thời, không dùng làm khóa nghiệp vụ trước khi xác minh.</summary>
+    public string? RecognizedPlate { get; set; }
 
     public int ParkingLotId { get; set; }
 
@@ -24,11 +27,11 @@ public class ParkingSession
 
     /// <summary>
     /// Trạng thái phiên:
-    ///   pending_slot – xe đã vào cổng, chờ cảm biến IoT + Staff gán slot.
-    ///   parked        – Staff đã gán slot, xe đang đậu.
-    ///   exited        – xe đã ra cổng, phiên đóng.
+    ///   waiting_verification – đã nhận ảnh/OCR tại cổng, chờ xác minh tại slot.
+    ///   parked              – Staff điều phối đã xác nhận xe và actual slot.
+    ///   exit_processing     – đã nhận tín hiệu cổng ra; chưa chứng minh đủ phí/đã ra.
     /// </summary>
-    public string Status { get; set; } = ParkingSessionStatus.PendingSlot;
+    public string Status { get; set; } = ParkingSessionStatus.WaitingVerification;
 
     /// <summary>
     /// Cảnh báo nghiệp vụ – null nếu không có vấn đề.
@@ -42,8 +45,11 @@ public class ParkingSession
     /// <summary>URL ảnh xe tại cổng ra – đối chiếu lúc check-out.</summary>
     public string? ExitImageUrl { get; set; }
 
-    /// <summary>Loại nhiên liệu Gemini nhận diện: "gasoline" | "electric" | "unknown".</summary>
+    /// <summary>Loại nhiên liệu đã được Staff xác nhận, không suy ra chỉ từ OCR/biển số.</summary>
     public string? FuelType { get; set; }
+
+    /// <summary>Gợi ý nhiên liệu từ AI, chỉ để đối chiếu và không dùng quyết định tương thích.</summary>
+    public string? RecognizedFuelType { get; set; }
 
     /// <summary>Màu xe Gemini nhận diện, ví dụ: "white", "black", "silver".</summary>
     public string? CarColor { get; set; }
@@ -51,10 +57,7 @@ public class ParkingSession
     /// <summary>Hãng/Model xe Gemini nhận diện, ví dụ: "Toyota Vios", "VinFast VF8".</summary>
     public string? CarModel { get; set; }
 
-    /// <summary>Staff cổng vào thực hiện check-in.</summary>
-    public string? GateStaffId { get; set; }
-
-    /// <summary>Staff khu vực gán slot.</summary>
+    /// <summary>Staff điều phối xác minh xe và actual slot.</summary>
     public string? ZoneStaffId { get; set; }
 
     public DateTimeOffset EnteredAtUtc { get; set; }
@@ -67,9 +70,9 @@ public class ParkingSession
 /// <summary>Hằng số trạng thái phiên gửi xe.</summary>
 public static class ParkingSessionStatus
 {
-    public const string PendingSlot = "pending_slot";
-    public const string Parked      = "parked";
-    public const string Exited      = "exited";
+    public const string WaitingVerification = "waiting_verification";
+    public const string Parked             = "parked";
+    public const string ExitProcessing     = "exit_processing";
 }
 
 /// <summary>Hằng số cảnh báo nghiệp vụ trên phiên.</summary>

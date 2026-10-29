@@ -28,9 +28,8 @@ public class InMemoryParkingSessionRepository : IParkingSessionRepository
     {
         var normalized = carPlate.Trim().ToUpperInvariant();
         var session = _bySessionId.Values.FirstOrDefault(s =>
-            s.CarPlate.Equals(normalized, StringComparison.OrdinalIgnoreCase) &&
-            (s.Status == ParkingSessionStatus.PendingSlot ||
-             s.Status == ParkingSessionStatus.Parked));
+            !string.IsNullOrWhiteSpace(s.CarPlate) &&
+            s.CarPlate.Equals(normalized, StringComparison.OrdinalIgnoreCase));
 
         return Task.FromResult(session);
     }
@@ -58,8 +57,9 @@ public class InMemoryParkingSessionRepository : IParkingSessionRepository
         IReadOnlyList<ParkingSession> result = _bySessionId.Values
             .Where(s =>
                 s.ParkingLotId == parkingLotId &&
-                (s.Status == ParkingSessionStatus.PendingSlot ||
-                 s.Status == ParkingSessionStatus.Parked))
+                (s.Status == ParkingSessionStatus.WaitingVerification ||
+                 s.Status == ParkingSessionStatus.Parked ||
+                 s.Status == ParkingSessionStatus.ExitProcessing))
             .OrderBy(s => s.EnteredAtUtc)
             .ToList();
 

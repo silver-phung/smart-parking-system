@@ -35,8 +35,11 @@ public class ParkingEventLog
     /// <summary>Nguồn gốc sự kiện, ví dụ: "CameraGate01", "IoTSensor_A1-012", "GateStaff".</summary>
     public string Source { get; set; } = string.Empty;
 
-    /// <summary>ID nhân viên kích hoạt (nếu là thao tác của Staff).</summary>
+    /// <summary>ID actor lấy từ ngữ cảnh xác thực, không lấy từ body request.</summary>
     public string? TriggeredBy { get; set; }
+
+    /// <summary>Phiên bản payload để consumer xử lý tương thích.</summary>
+    public int PayloadVersion { get; set; } = 1;
 
     /// <summary>
     /// Kết quả xử lý:
@@ -70,15 +73,15 @@ public static class EventProcessingStatus
 /// <summary>Hằng số loại sự kiện IoT/Staff.</summary>
 public static class ParkingEventType
 {
-    /// <summary>Xe qua cổng vào – Camera + Gemini AI phân tích, Staff cổng xác nhận.</summary>
+    /// <summary>Camera/AI ghi nhận xe qua cổng; OCR vẫn là dữ liệu tạm.</summary>
     public const string VehicleEntered  = "VehicleEntered";
 
     /// <summary>Cảm biến siêu âm tại ô phát hiện có xe – chưa xác định xe nào.</summary>
     public const string SensorTriggered = "SensorTriggered";
 
-    /// <summary>Staff khu vực gán xe vào ô sau khi cảm biến báo.</summary>
+    /// <summary>Staff điều phối xác minh biển số và actual slot.</summary>
     public const string SlotParked      = "SlotParked";
 
-    /// <summary>Xe ra cổng – Staff đối chiếu ảnh + đóng phiên.</summary>
+    /// <summary>Tín hiệu xe tới cổng ra; không tự đóng phiên hoặc trả ô.</summary>
     public const string VehicleExited   = "VehicleExited";
 }
