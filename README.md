@@ -19,6 +19,41 @@ Tài liệu nghiệp vụ, kiến trúc, API và hướng dẫn vận hành bắ
 - Tuyệt đối không commit file `.env`, connection strings có chứa password hoặc credentials của Neon Cloud vào repository.
 - Sử dụng file cấu hình mẫu `.env.example` hoặc user secrets khi phát triển cục bộ.
 
+Để chạy luồng Staff nhận diện ảnh ở local, copy `.env.example` thành `.env`, điền
+`ConnectionStrings__AiRecognitionConnection` và các giá trị cần thiết, sau đó nạp
+biến môi trường vào terminal hiện tại:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+. .\scripts\Load-Env.ps1
+```
+
+Sau đó chạy migration database AI và backend:
+
+```powershell
+dotnet ef database update `
+  --project backend\src\SmartParking.Infrastructure `
+  --startup-project backend\src\SmartParking.Api `
+  --context AiRecognitionDbContext
+
+dotnet run --project backend\src\SmartParking.Api --launch-profile http
+```
+
+Endpoint `POST /api/v1/staff/detect` trả `PENDING_CONFIRMATION` khi có biển số và
+`UNREADABLE` khi AI không đọc được. Staff xác nhận hoặc nhập biển số bằng
+`POST /api/v1/staff/detections/{id}/confirm` với JSON `{ "plateNumber": "51F12345", "note": "..." }`;
+ghi chú bắt buộc khi sửa biển số AI đã đọc. Bản ghi lưu biển số AI ban đầu, kết quả
+xác nhận, người xác nhận, thời điểm và ghi chú để đối chiếu.
+
+FastAPI chạy ở terminal riêng. Có thể chạy từ thư mục gốc bằng đường dẫn đầy đủ,
+nhưng chạy từ `ai-service` là cách khuyến nghị:
+
+```powershell
+Set-Location ai-service
+python run.py
+```
+
 ## 4. Lưu trữ ảnh Cloudinary
 
 API ảnh dùng thông tin tài khoản Cloudinary qua User Secrets hoặc biến môi trường; API secret không được đặt trong `appsettings.json` hay commit vào Git. Sau khi rotate API secret trên Cloudinary, cấu hình local bằng User Secrets:

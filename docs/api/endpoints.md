@@ -258,6 +258,8 @@ Admin cấp/thu hồi; chưa có field nhiệm vụ Staff.
 | SP-API-070 | `GET /api/v1/staff-assignments/my-lots` | ADMIN,MANAGER,STAFF | Không có đầu vào nghiệp vụ | 200, 401, 403 | Các bãi của người gọi |
 | SP-API-071 | `GET /api/v1/staff-assignments/{id:long}` | ADMIN | route/inferred: id (Int64) | 200, 401, 403, 404 | Chi tiết phân công |
 | SP-API-072 | `POST /api/v1/staff-assignments/{id:long}/revoke` | ADMIN | route/inferred: id (Int64); body: request (RevokeStaffAssignmentRequestDto) | 200, 400, 401, 403, 404 | Thu hồi phân công và lưu lý do |
+| SP-API-073 | `POST /api/v1/staff/detect` | STAFF,ADMIN | multipart `file` (JPEG/PNG/WebP) | 200, 400, 401, 403, 422, 502, 503 | Validate ảnh, gọi FastAPI `/api/v1/detect`, lưu kết quả vào database AI Neon riêng |
+| SP-API-074 | `POST /api/v1/staff/detections/{id}/confirm` | STAFF,ADMIN | route `id`; JSON `plateNumber`, optional `note` | 200, 400, 401, 403, 404 | Xác nhận kết quả nhận diện hoặc nhập tay; bắt buộc note nếu sửa biển số đã nhận diện; lưu actor/thời điểm |
 
 [Nguồn controller](https://github.com/silver-phung/smart-parking-system/blob/4bed0c8a929fe050d644aa4e07c0a1caa77d8d0e/backend/src/SmartParking.Api/Controllers/StaffAssignmentsController.cs).
 

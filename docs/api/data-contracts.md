@@ -186,7 +186,7 @@ Viewer trả wrapper `{ success, lotId, floorId, total, availableCount, occupied
 
 ## 4 Hợp đồng nhận diện và xác nhận
 
-FastAPI trả snake_case `plate_number`, `raw_plate_number`, `confidence`, `is_legit`, `vehicle_type`, `vehicle_confidence`, `vehicle_bbox`, `plate_bbox`, `inference_time_ms`; envelope success/message/data. Gemini trả camelCase imageUrl/carPlate/fuelType/carColor/carModel/confidence/isSuccess/errorMessage. Không đổi hai response thành cùng một cấu trúc mà bỏ thông tin lỗi/gốc.
+FastAPI trả snake_case `plate_number`, `raw_plate_number`, `confidence`, `is_legit`, `vehicle_confidence`, `vehicle_bbox`, `plate_bbox`, `inference_time_ms`; envelope success/message/data. Gemini trả camelCase imageUrl/carPlate/fuelType/carColor/carModel/confidence/isSuccess/errorMessage. Không đổi hai response thành cùng một cấu trúc mà bỏ thông tin lỗi/gốc.
 
 Kết quả AI/OCR ở cổng cần được lưu là nhận dạng tạm gồm raw/normalized/confidence/source/time và tham chiếu ảnh/vé/sự kiện. Kết quả này được phép tạo session ACTIVE chờ xác minh nhưng chưa phải biển số chính thức. Staff điều phối tại ô xác nhận/sửa cần lưu người/thời điểm/lý do, actual slot và liên kết ảnh-phiên-bãi trong cùng kết quả nghiệp vụ. Đây là hợp đồng cần bổ sung, chưa có đầy đủ trong DTO check-in/confirm hiện tại. `unknown` phải được giữ cho tới khi xác minh, không mặc định thành xe điện hoặc xe xăng.
 

@@ -56,6 +56,29 @@ public static class DependencyInjection
         services.AddScoped<IAdminUserService, AdminUserService>();
         services.AddScoped<IBookingService, BookingService>();
         services.AddScoped<IImageService, ImageService>();
+        var aiConnectionString = configuration.GetConnectionString("AiRecognitionConnection");
+        if (!string.IsNullOrWhiteSpace(aiConnectionString))
+        {
+            services.AddDbContext<AiRecognitionDbContext>(options =>
+                options.UseNpgsql(aiConnectionString, b => b
+                    .MigrationsAssembly(typeof(AiRecognitionDbContext).Assembly)
+                    .MigrationsHistoryTable("__AiRecognitionMigrationsHistory")));
+        }
+        else
+        {
+            services.AddDbContext<AiRecognitionDbContext>(options =>
+                options.UseNpgsql(b => b
+                    .MigrationsAssembly(typeof(AiRecognitionDbContext).Assembly)
+                    .MigrationsHistoryTable("__AiRecognitionMigrationsHistory")));
+        }
+        services.AddHttpClient<IStaffDetectionService, StaffDetectionService>((provider, client) =>
+        {
+            var baseUrl = provider.GetRequiredService<IConfiguration>()["AiService:BaseUrl"];
+            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+                throw new InvalidOperationException("AiService:BaseUrl must be a valid absolute URL.");
+            client.BaseAddress = uri.AbsoluteUri.EndsWith('/') ? uri : new Uri(uri, "/");
+            client.Timeout = TimeSpan.FromSeconds(60);
+        });
         var relativePath = configuration["ParkingLots:DataFile"] ?? "Data/parking-lots.json";
         var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
         if (!File.Exists(fullPath))
