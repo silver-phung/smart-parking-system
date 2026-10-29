@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Events.Dtos;
 using SmartParking.Domain.Entities;
@@ -11,6 +12,8 @@ namespace SmartParking.Application.Events;
 /// </summary>
 public class ParkingEventService
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> EventLocks = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> SlotLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly IParkingEventLogRepository  _eventLogRepo;
     private readonly IParkingSessionRepository   _sessionRepo;
     private readonly IVehicleCompatibilityChecker _compatibilityChecker;
@@ -46,32 +49,39 @@ public class ParkingEventService
             return await RejectAndLogAsync(request, authenticatedActorId,
                 $"PayloadVersion '{request.PayloadVersion}' chưa được hỗ trợ.", ct);
 
-        // ── 1. IDEMPOTENCY CHECK ─────────────────────────────────────────────
-        // Gửi lặp cùng EventId → trả kết quả cũ, không xử lý lần 2.
-        var existingLog = await _eventLogRepo.FindByEventIdAsync(request.EventId, ct);
-        if (existingLog is not null)
+        var eventLock = EventLocks.GetOrAdd(request.EventId, _ => new SemaphoreSlim(1, 1));
+        await eventLock.WaitAsync(ct);
+        try
         {
-            return new IngestEventResponse
+            // Gửi lặp cùng EventId → trả kết quả cũ, không xử lý lần 2.
+            var existingLog = await _eventLogRepo.FindByEventIdAsync(request.EventId, ct);
+            if (existingLog is not null)
             {
-                Success          = true,
-                IsDuplicate      = true,
-                ProcessingStatus = EventProcessingStatus.Duplicate,
-                EventId          = request.EventId,
-                SessionId        = existingLog.SessionId,
-                Message          = "Sự kiện đã được xử lý trước đó (idempotent – bỏ qua)."
+                return new IngestEventResponse
+                {
+                    Success          = true,
+                    IsDuplicate      = true,
+                    ProcessingStatus = EventProcessingStatus.Duplicate,
+                    EventId          = request.EventId,
+                    SessionId        = existingLog.SessionId,
+                    Message          = "Sự kiện đã được xử lý trước đó (idempotent – bỏ qua)."
+                };
+            }
+
+            return request.EventType switch
+            {
+                ParkingEventType.VehicleEntered  => await HandleVehicleEnteredAsync(request, authenticatedActorId, ct),
+                ParkingEventType.SensorTriggered => await HandleSensorTriggeredAsync(request, authenticatedActorId, ct),
+                ParkingEventType.SlotParked      => await HandleSlotParkedAsync(request, authenticatedActorId, ct),
+                ParkingEventType.VehicleExited   => await HandleVehicleExitedAsync(request, authenticatedActorId, ct),
+                _ => await RejectAndLogAsync(request, authenticatedActorId,
+                         $"EventType '{request.EventType}' không được hỗ trợ.", ct)
             };
         }
-
-        // ── 2. DISPATCH THEO LOẠI SỰ KIỆN ───────────────────────────────────
-        return request.EventType switch
+        finally
         {
-            ParkingEventType.VehicleEntered  => await HandleVehicleEnteredAsync(request, authenticatedActorId, ct),
-            ParkingEventType.SensorTriggered => await HandleSensorTriggeredAsync(request, authenticatedActorId, ct),
-            ParkingEventType.SlotParked      => await HandleSlotParkedAsync(request, authenticatedActorId, ct),
-            ParkingEventType.VehicleExited   => await HandleVehicleExitedAsync(request, authenticatedActorId, ct),
-            _ => await RejectAndLogAsync(request, authenticatedActorId,
-                     $"EventType '{request.EventType}' không được hỗ trợ.", ct)
-        };
+            eventLock.Release();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -84,6 +94,7 @@ public class ParkingEventService
             ? Guid.NewGuid().ToString()
             : request.SessionId;
 
+        var occurredAt = request.EventTimestampUtc ?? DateTimeOffset.UtcNow;
         var session = new ParkingSession
         {
             SessionId     = sessionId,
@@ -95,7 +106,8 @@ public class ParkingEventService
             RecognizedFuelType = request.FuelType,
             CarColor      = request.CarColor,
             CarModel      = request.CarModel,
-            EnteredAtUtc  = request.EventTimestampUtc ?? DateTimeOffset.UtcNow
+            EnteredAtUtc  = occurredAt,
+            LastAppliedEventAtUtc = occurredAt
         };
 
         await _sessionRepo.AddAsync(session, ct);
@@ -144,9 +156,6 @@ public class ParkingEventService
             return await RejectAndLogAsync(request, authenticatedActorId, "SessionId bắt buộc với SlotParked.", ct);
         if (string.IsNullOrWhiteSpace(request.SlotCode))
             return await RejectAndLogAsync(request, authenticatedActorId, "SlotCode bắt buộc với SlotParked.", ct);
-        if (string.IsNullOrWhiteSpace(authenticatedActorId))
-            return await RejectAndLogAsync(request, null,
-                "SlotParked cần danh tính Staff điều phối từ ngữ cảnh xác thực.", ct);
         if (string.IsNullOrWhiteSpace(request.CarPlate))
             return await RejectAndLogAsync(request, authenticatedActorId,
                 "Staff điều phối phải xác nhận biển số tại actual slot.", ct);
@@ -156,32 +165,57 @@ public class ParkingEventService
             return await PendingVerifyAsync(request, authenticatedActorId,
                 $"Sự kiện đến không đúng thứ tự – không tìm thấy phiên '{request.SessionId}'. Chờ xác minh thủ công.", ct);
 
+        if (string.IsNullOrWhiteSpace(authenticatedActorId))
+            return await RejectAndLogAsync(request, null,
+                "SlotParked cần danh tính Staff điều phối từ ngữ cảnh xác thực.", ct);
+
         if (session.Status != ParkingSessionStatus.WaitingVerification)
             return await RejectAndLogAsync(request, authenticatedActorId,
                 $"Phiên '{request.SessionId}' đang ở trạng thái '{session.Status}' – không thể xác nhận slot.", ct);
 
-        var confirmedPlate = NormalizePlate(request.CarPlate)!;
-        var existing = await _sessionRepo.FindActiveByCarPlateAsync(confirmedPlate, ct);
-        if (existing is not null && !existing.SessionId.Equals(session.SessionId, StringComparison.OrdinalIgnoreCase))
-            return await RejectAndLogAsync(request, authenticatedActorId,
-                $"Biển số '{confirmedPlate}' đã có phiên hoạt động khác.", ct);
+        var occurredAt = request.EventTimestampUtc ?? DateTimeOffset.UtcNow;
+        if (occurredAt < session.LastAppliedEventAtUtc)
+            return await PendingVerifyAsync(request, authenticatedActorId,
+                "Event cũ hơn trạng thái đã lưu; chuyển xác minh thay vì ghi đè.", ct);
 
-        // Chỉ dùng loại nhiên liệu Staff vừa xác nhận; không dùng gợi ý AI ở cổng.
-        var compatWarning = await _compatibilityChecker.CheckAsync(request.SlotCode!, request.FuelType, ct);
-        if (compatWarning is not null)
-            return await RejectAndLogAsync(request, authenticatedActorId,
-                "Xe không tương thích với cấu hình ô; chưa cập nhật trạng thái vật lý.", ct);
+        var slotKey = $"{request.ParkingLotId}:{request.SlotCode}";
+        var slotLock = SlotLocks.GetOrAdd(slotKey, _ => new SemaphoreSlim(1, 1));
+        await slotLock.WaitAsync(ct);
+        try
+        {
+            var confirmedPlate = NormalizePlate(request.CarPlate)!;
+            var existing = await _sessionRepo.FindActiveByCarPlateAsync(confirmedPlate, ct);
+            if (existing is not null && !existing.SessionId.Equals(session.SessionId, StringComparison.OrdinalIgnoreCase))
+                return await RejectAndLogAsync(request, authenticatedActorId,
+                    $"Biển số '{confirmedPlate}' đã có phiên hoạt động khác.", ct);
 
-        // Đây là xác minh thực tế; slot physical chỉ được render OCCUPIED sau bước này.
-        session.CarPlate    = confirmedPlate;
-        session.FuelType    = request.FuelType;
-        session.SlotCode    = request.SlotCode;
-        session.Status      = ParkingSessionStatus.Parked;
-        session.ZoneStaffId = authenticatedActorId;
-        session.ParkedAtUtc = request.EventTimestampUtc ?? DateTimeOffset.UtcNow;
+            var occupyingSession = await _sessionRepo.FindActiveBySlotAsync(
+                request.ParkingLotId, request.SlotCode!, ct);
+            if (occupyingSession is not null &&
+                !occupyingSession.SessionId.Equals(session.SessionId, StringComparison.OrdinalIgnoreCase))
+                return await RejectAndLogAsync(request, authenticatedActorId,
+                    $"Ô '{request.SlotCode}' đang được một phiên khác chiếm.", ct);
 
-        await _sessionRepo.UpdateAsync(session, ct);
-        await WriteLogAsync(request, request.SessionId, authenticatedActorId, EventProcessingStatus.Accepted, null, ct);
+            var compatWarning = await _compatibilityChecker.CheckAsync(request.SlotCode!, request.FuelType, ct);
+            if (compatWarning is not null)
+                return await RejectAndLogAsync(request, authenticatedActorId,
+                    "Xe không tương thích với cấu hình ô; chưa cập nhật trạng thái vật lý.", ct);
+
+            session.CarPlate    = confirmedPlate;
+            session.FuelType    = request.FuelType;
+            session.SlotCode    = request.SlotCode;
+            session.Status      = ParkingSessionStatus.Parked;
+            session.ZoneStaffId = authenticatedActorId;
+            session.ParkedAtUtc = occurredAt;
+            session.LastAppliedEventAtUtc = occurredAt;
+
+            await _sessionRepo.UpdateAsync(session, ct);
+            await WriteLogAsync(request, request.SessionId, authenticatedActorId, EventProcessingStatus.Accepted, null, ct);
+        }
+        finally
+        {
+            slotLock.Release();
+        }
 
         return new IngestEventResponse
         {
@@ -212,9 +246,15 @@ public class ParkingEventService
             return await RejectAndLogAsync(request, authenticatedActorId,
                 $"Phiên '{request.SessionId}' đang ở trạng thái '{session.Status}' – không thể mở xử lý cổng ra.", ct);
 
+        var occurredAt = request.EventTimestampUtc ?? DateTimeOffset.UtcNow;
+        if (occurredAt < session.LastAppliedEventAtUtc)
+            return await PendingVerifyAsync(request, authenticatedActorId,
+                "Event cổng ra cũ hơn trạng thái đã lưu; chuyển xác minh thay vì ghi đè.", ct);
+
         // Chỉ ghi nhận xe tới cổng ra. API phí/vé/confirm-exit mới được đóng phiên và trả ô.
         session.Status       = ParkingSessionStatus.ExitProcessing;
         session.ExitImageUrl = request.ExitImageUrl;
+        session.LastAppliedEventAtUtc = occurredAt;
 
         await _sessionRepo.UpdateAsync(session, ct);
         await WriteLogAsync(request, request.SessionId, authenticatedActorId, EventProcessingStatus.Accepted, null, ct);

@@ -218,12 +218,11 @@ public class ParkingEventServiceTests
             SlotCode     = "A1-012",
             CarPlate     = "51F-00001",
             EventType    = ParkingEventType.SlotParked,
-            Source       = "ZoneStaff",
-            TriggeredBy  = "staff_01"
+            Source       = "ZoneStaff"
         };
 
         // Act
-        var result = await _service.IngestAsync(request);
+        var result = await _service.IngestAsync(request, "staff_01");
 
         // Assert - should not reject, should flag as pending_verification
         Assert.False(result.Success);
@@ -231,7 +230,7 @@ public class ParkingEventServiceTests
     }
 
     [Fact]
-    public async Task IngestAsync_VehicleExited_OnAlreadyExitedSession_ShouldReject()
+    public async Task IngestAsync_VehicleExited_OnExitProcessingSession_ShouldReject()
     {
         var plate = "51F-77001";
         // Enter
@@ -242,19 +241,27 @@ public class ParkingEventServiceTests
         });
         var sessionId = enterRes.SessionId!;
 
-        // Exit
+        // Verify at slot first
+        await _service.IngestAsync(new IngestEventRequest
+        {
+            EventId = Guid.NewGuid().ToString(), SessionId = sessionId, ParkingLotId = 1,
+            SlotCode = "A1-021", CarPlate = plate, FuelType = "gasoline",
+            EventType = ParkingEventType.SlotParked, Source = "ZoneStaff"
+        }, "staff_01");
+
+        // First exit signal
         await _service.IngestAsync(new IngestEventRequest
         {
             EventId   = Guid.NewGuid().ToString(), SessionId = sessionId, ParkingLotId = 1,
             CarPlate  = plate, EventType = ParkingEventType.VehicleExited, Source = "GateStaff"
-        });
+        }, "gate_staff_01");
 
         // Exit again - should reject
         var result = await _service.IngestAsync(new IngestEventRequest
         {
             EventId   = Guid.NewGuid().ToString(), SessionId = sessionId, ParkingLotId = 1,
             CarPlate  = plate, EventType = ParkingEventType.VehicleExited, Source = "GateStaff"
-        });
+        }, "gate_staff_01");
 
         Assert.False(result.Success);
         Assert.Equal(EventProcessingStatus.Rejected, result.ProcessingStatus);
@@ -295,5 +302,85 @@ public class ParkingEventServiceTests
 
         Assert.False(result.Success);
         Assert.Equal(EventProcessingStatus.PendingVerification, result.ProcessingStatus);
+    }
+
+    [Fact]
+    public async Task IngestAsync_TwoSessionsCannotOccupySameSlot()
+    {
+        async Task<string> Enter(string plate)
+        {
+            var response = await _service.IngestAsync(new IngestEventRequest
+            {
+                EventId = Guid.NewGuid().ToString(), ParkingLotId = 7, CarPlate = plate,
+                EventType = ParkingEventType.VehicleEntered, Source = "CameraGate01"
+            });
+            return response.SessionId!;
+        }
+
+        var firstSession = await Enter("51F-70001");
+        var secondSession = await Enter("51F-70002");
+
+        var first = await _service.IngestAsync(new IngestEventRequest
+        {
+            EventId = Guid.NewGuid().ToString(), SessionId = firstSession, ParkingLotId = 7,
+            SlotCode = "A1-099", CarPlate = "51F-70001", FuelType = "gasoline",
+            EventType = ParkingEventType.SlotParked, Source = "ZoneStaff"
+        }, "staff_01");
+        var second = await _service.IngestAsync(new IngestEventRequest
+        {
+            EventId = Guid.NewGuid().ToString(), SessionId = secondSession, ParkingLotId = 7,
+            SlotCode = "A1-099", CarPlate = "51F-70002", FuelType = "gasoline",
+            EventType = ParkingEventType.SlotParked, Source = "ZoneStaff"
+        }, "staff_02");
+
+        Assert.True(first.Success);
+        Assert.False(second.Success);
+        Assert.Contains("đang được một phiên khác chiếm", second.Message);
+    }
+
+    [Fact]
+    public async Task IngestAsync_OlderExitEventGoesToPendingVerification()
+    {
+        var entered = await _service.IngestAsync(new IngestEventRequest
+        {
+            EventId = Guid.NewGuid().ToString(), ParkingLotId = 8, CarPlate = "51F-80001",
+            EventTimestampUtc = DateTimeOffset.UtcNow,
+            EventType = ParkingEventType.VehicleEntered, Source = "CameraGate01"
+        });
+        var parkedAt = DateTimeOffset.UtcNow.AddMinutes(1);
+        await _service.IngestAsync(new IngestEventRequest
+        {
+            EventId = Guid.NewGuid().ToString(), SessionId = entered.SessionId, ParkingLotId = 8,
+            SlotCode = "B2-088", CarPlate = "51F-80001", FuelType = "gasoline",
+            EventTimestampUtc = parkedAt,
+            EventType = ParkingEventType.SlotParked, Source = "ZoneStaff"
+        }, "staff_01");
+
+        var result = await _service.IngestAsync(new IngestEventRequest
+        {
+            EventId = Guid.NewGuid().ToString(), SessionId = entered.SessionId, ParkingLotId = 8,
+            EventTimestampUtc = parkedAt.AddMinutes(-2),
+            EventType = ParkingEventType.VehicleExited, Source = "GateCamera"
+        });
+
+        Assert.False(result.Success);
+        Assert.Equal(EventProcessingStatus.PendingVerification, result.ProcessingStatus);
+    }
+
+    [Fact]
+    public async Task IngestAsync_ConcurrentRetryAppliesOnlyOnce()
+    {
+        var request = new IngestEventRequest
+        {
+            EventId = Guid.NewGuid().ToString(), ParkingLotId = 9, CarPlate = "51F-90001",
+            EventType = ParkingEventType.VehicleEntered, Source = "CameraGate01"
+        };
+
+        var results = await Task.WhenAll(
+            _service.IngestAsync(request),
+            _service.IngestAsync(request));
+
+        Assert.Single(results.Where(r => !r.IsDuplicate));
+        Assert.Single(results.Where(r => r.IsDuplicate));
     }
 }

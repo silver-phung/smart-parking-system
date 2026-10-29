@@ -14,6 +14,10 @@ public interface IParkingSessionRepository
     /// </summary>
     Task<ParkingSession?> FindActiveByCarPlateAsync(string carPlate, CancellationToken ct = default);
 
+    /// <summary>Tìm phiên đã xác nhận đang chiếm actual slot.</summary>
+    Task<ParkingSession?> FindActiveBySlotAsync(
+        int parkingLotId, string slotCode, CancellationToken ct = default);
+
     /// <summary>Tạo phiên mới (khi xe qua cổng vào).</summary>
     Task AddAsync(ParkingSession session, CancellationToken ct = default);
 

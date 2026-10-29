@@ -34,6 +34,16 @@ public class InMemoryParkingSessionRepository : IParkingSessionRepository
         return Task.FromResult(session);
     }
 
+    public Task<ParkingSession?> FindActiveBySlotAsync(
+        int parkingLotId, string slotCode, CancellationToken ct = default)
+    {
+        var session = _bySessionId.Values.FirstOrDefault(s =>
+            s.ParkingLotId == parkingLotId &&
+            s.Status == ParkingSessionStatus.Parked &&
+            string.Equals(s.SlotCode, slotCode, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(session);
+    }
+
     public Task AddAsync(ParkingSession session, CancellationToken ct = default)
     {
         session.Id = Interlocked.Increment(ref _idCounter);

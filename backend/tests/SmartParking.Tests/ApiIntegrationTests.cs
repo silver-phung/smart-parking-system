@@ -59,7 +59,7 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     // ─── Sprint 3 Day 5: Event Ingestion API smoke tests ─────────────────────
 
     /// <summary>
-    /// Xe vào cổng → tạo phiên pending_slot thành công.
+    /// Camera cổng vào tạo projection waiting_verification; OCR chưa là biển số chính thức.
     /// </summary>
     [Fact]
     public async Task PostEvent_VehicleEntered_Returns200WithAccepted()
@@ -86,7 +86,7 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.NotNull(result);
         Assert.True(result.Success);
         Assert.Equal(EventProcessingStatus.Accepted, result.ProcessingStatus);
-        Assert.Equal(ParkingSessionStatus.PendingSlot, result.SessionStatus);
+        Assert.Equal(ParkingSessionStatus.WaitingVerification, result.SessionStatus);
         Assert.False(string.IsNullOrEmpty(result.SessionId));
     }
 
@@ -121,10 +121,10 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     /// <summary>
-    /// Full lifecycle: VehicleEntered → SlotParked → VehicleExited.
+    /// Body không được tự khai TriggeredBy để xác nhận đỗ.
     /// </summary>
     [Fact]
-    public async Task PostEvent_FullLifecycle_Returns200AtEveryStep()
+    public async Task PostEvent_SlotParkedWithoutAuthenticatedActor_Returns400()
     {
         var plate = "72F-IntTest03";
 
@@ -145,25 +145,12 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
             EventId = Guid.NewGuid().ToString(), SessionId = sessionId,
             ParkingLotId = 1, SlotCode = "A1-012", CarPlate = plate,
             EventType = ParkingEventType.SlotParked,
-            Source = "ZoneStaff", TriggeredBy = "zone_staff_01"
+            Source = "ZoneStaff"
         });
-        Assert.Equal(HttpStatusCode.OK, parkRes.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, parkRes.StatusCode);
         var parkDto = await parkRes.Content.ReadFromJsonAsync<IngestEventResponse>();
         Assert.NotNull(parkDto);
-        Assert.Equal(ParkingSessionStatus.Parked, parkDto.SessionStatus);
-
-        // Step 3: Exit
-        var exitRes = await _client.PostAsJsonAsync("/api/events", new IngestEventRequest
-        {
-            EventId = Guid.NewGuid().ToString(), SessionId = sessionId,
-            ParkingLotId = 1, CarPlate = plate,
-            EventType = ParkingEventType.VehicleExited,
-            Source = "GateStaff", TriggeredBy = "gate_staff_01"
-        });
-        Assert.Equal(HttpStatusCode.OK, exitRes.StatusCode);
-        var exitDto = await exitRes.Content.ReadFromJsonAsync<IngestEventResponse>();
-        Assert.NotNull(exitDto);
-        Assert.Equal(ParkingSessionStatus.Exited, exitDto.SessionStatus);
+        Assert.Equal(EventProcessingStatus.Rejected, parkDto.ProcessingStatus);
     }
 
     /// <summary>
@@ -187,10 +174,10 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     /// <summary>
-    /// SlotParked không có session → phải trả 400 với pending_verification.
+    /// SlotParked không có session → nhận để xác minh (202), không giả vờ thành công.
     /// </summary>
     [Fact]
-    public async Task PostEvent_SlotParked_WithUnknownSession_ReturnsBadRequestWithPendingVerification()
+    public async Task PostEvent_SlotParked_WithUnknownSession_Returns202WithPendingVerification()
     {
         var request = new IngestEventRequest
         {
@@ -200,13 +187,12 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
             SlotCode     = "B2-005",
             CarPlate     = "99A-IntTest",
             EventType    = ParkingEventType.SlotParked,
-            Source       = "ZoneStaff",
-            TriggeredBy  = "zone_staff_01"
+            Source       = "ZoneStaff"
         };
 
         var response = await _client.PostAsJsonAsync("/api/events", request);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<IngestEventResponse>();
         Assert.NotNull(result);
         Assert.False(result.Success);
