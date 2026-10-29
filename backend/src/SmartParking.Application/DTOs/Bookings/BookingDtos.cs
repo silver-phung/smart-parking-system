@@ -101,6 +101,9 @@ public class LotCapacityDto
     public int? ProposedSafetyBuffer { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? UnmatchedPhysicalOccupiedCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DiscrepancyNotes { get; set; }
 }
 

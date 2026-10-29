@@ -156,6 +156,12 @@ public class ParkingSessionService : IParkingSessionService
                         return (false, $"Ô đỗ '{slot.SlotCode}' không thuộc bãi đỗ xe '{lot.Name}'.", null);
                     }
 
+                    if (slot.PhysicalStatus == SlotPhysicalStatuses.Maintenance || slot.PhysicalStatus == SlotPhysicalStatuses.Unavailable)
+                    {
+                        await transaction.RollbackAsync(ct);
+                        return (false, $"Ô đỗ '{slot.SlotCode}' hiện đang bảo trì hoặc ngừng phục vụ ({slot.PhysicalStatus}). Không thể gán ô đỗ này.", null);
+                    }
+
                     if (slot.PhysicalStatus != SlotPhysicalStatuses.Empty)
                     {
                         await transaction.RollbackAsync(ct);
@@ -169,6 +175,15 @@ public class ParkingSessionService : IParkingSessionService
                     {
                         await transaction.RollbackAsync(ct);
                         return (false, $"Ô đỗ '{slot.SlotCode}' hiện đang được phân công cho một phương tiện khác.", null);
+                    }
+
+                    // Không gán ô đang có phiên đỗ xe ACTIVE hoặc PAID chiếm dụng (chống gán trùng lặp ô)
+                    var isSlotOccupiedBySession = await _context.ParkingSessions
+                        .AnyAsync(s => s.CurrentSlotId == slot.Id && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
+                    if (isSlotOccupiedBySession)
+                    {
+                        await transaction.RollbackAsync(ct);
+                        return (false, $"Ô đỗ '{slot.SlotCode}' hiện đang được sử dụng bởi một phiên đỗ xe khác.", null);
                     }
 
                     // Lưu ý theo Core Business Invariant: Check-in tại cổng KHÔNG tự động chuyển trạng thái vật lý của Slot sang OCCUPIED.
@@ -267,6 +282,15 @@ public class ParkingSessionService : IParkingSessionService
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng ra (GATE) tại bãi đỗ xe này.", null);
         }
 
+        // Kiểm tra nhận diện biển số tại cổng ra nếu có cung cấp (chuẩn hóa đối chiếu theo PlateNumberHelper.IsMatch)
+        if (!string.IsNullOrWhiteSpace(request.ConfirmedPlateNumber))
+        {
+            if (!PlateNumberHelper.IsMatch(request.ConfirmedPlateNumber, session.PlateNumber))
+            {
+                return (false, $"Biển số xe xác nhận tại cổng ra ({request.ConfirmedPlateNumber.Trim()}) không khớp với phiên gửi xe #{session.Id} (Biển số: {session.PlateNumber}).", null);
+            }
+        }
+
         // Financial Clearance Invariant:
         // 1. Xe đã thanh toán hoàn tất (Status == PAID): Đủ điều kiện tài chính để xác nhận ra bãi.
         // 2. Nếu phiên có thu phí (TotalFee > 0) mà chưa thanh toán (Status != PAID):
@@ -325,6 +349,29 @@ public class ParkingSessionService : IParkingSessionService
                 {
                     long lockKey = ParkingLotLockHelper.LotLockBase + session.LotId;
                     await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { lockKey }, cancellationToken: ct);
+                }
+
+                // Double-checked locking: Re-check session status within lock to prevent duplicate checkout race
+                if (_context is DbContext dbContext)
+                {
+                    await dbContext.Entry(session).ReloadAsync(ct);
+                }
+                else
+                {
+                    var freshStatus = await _context.ParkingSessions
+                        .Where(s => s.Id == session.Id)
+                        .Select(s => s.Status)
+                        .FirstOrDefaultAsync(ct);
+                    if (freshStatus != null)
+                    {
+                        session.Status = freshStatus;
+                    }
+                }
+
+                if (session.Status == SessionStatuses.Completed || session.Status == SessionStatuses.Cancelled)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Phiên gửi xe này đã kết thúc trước đó với trạng thái: {session.Status}.", null);
                 }
 
                 var oldStatus = session.Status;
@@ -786,6 +833,12 @@ public class ParkingSessionService : IParkingSessionService
                     return (false, $"Ô đỗ '{slot.SlotCode}' không thuộc cùng bãi đỗ xe với phiên gửi xe này.", null);
                 }
 
+                if (slot.PhysicalStatus == SlotPhysicalStatuses.Maintenance || slot.PhysicalStatus == SlotPhysicalStatuses.Unavailable)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Ô đỗ '{slot.SlotCode}' hiện đang bảo trì hoặc không khả dụng ({slot.PhysicalStatus}). Không thể xác minh ô đỗ.", null);
+                }
+
                 var conflictingSession = await _context.ParkingSessions
                     .FirstOrDefaultAsync(s => s.Id != session.Id && s.CurrentSlotId == slot.Id && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
 
@@ -797,9 +850,11 @@ public class ParkingSessionService : IParkingSessionService
 
                 var oldSlotId = session.CurrentSlotId;
                 session.CurrentSlotId = slot.Id;
+                session.UpdatedAt = DateTime.UtcNow;
+
+                // Sensor Integrity Invariant: Nhân viên xác minh liên kết Session-Slot KHÔNG ghi đè trạng thái cảm biến vật lý.
+                // Trạng thái vật lý được giữ nguyên; nếu có bất đồng, ghi nhận DiscrepancyWithSensor vào AuditLog.
                 var previousSensorStatus = slot.PhysicalStatus;
-                slot.PhysicalStatus = SlotPhysicalStatuses.Occupied;
-                slot.UpdatedAt = DateTime.UtcNow;
 
                 var dispatch = await _context.ParkingDispatches
                     .Where(d => d.SessionId == session.Id && (d.Status == DispatchStatuses.Pending || d.Status == DispatchStatuses.Assigned))
@@ -943,6 +998,12 @@ public class ParkingSessionService : IParkingSessionService
                     return (false, $"Ô đỗ thực tế '{actualSlot.SlotCode}' không thuộc cùng bãi đỗ xe.", null);
                 }
 
+                if (actualSlot.PhysicalStatus == SlotPhysicalStatuses.Maintenance || actualSlot.PhysicalStatus == SlotPhysicalStatuses.Unavailable)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Ô đỗ thực tế '{actualSlot.SlotCode}' hiện đang bảo trì hoặc không khả dụng ({actualSlot.PhysicalStatus}). Không thể chuyển xe vào ô này.", null);
+                }
+
                 var conflictingSession = await _context.ParkingSessions
                     .FirstOrDefaultAsync(s => s.Id != session.Id && s.CurrentSlotId == actualSlot.Id && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
 
@@ -970,8 +1031,8 @@ public class ParkingSessionService : IParkingSessionService
                 session.CurrentSlotId = actualSlot.Id;
                 session.UpdatedAt = DateTime.UtcNow;
 
-                actualSlot.PhysicalStatus = SlotPhysicalStatuses.Occupied;
-                actualSlot.UpdatedAt = DateTime.UtcNow;
+                // Sensor Integrity Invariant: Nhân viên báo sai ô và cập nhật Session-Slot KHÔNG ghi đè trạng thái cảm biến vật lý của actualSlot.
+                // Trạng thái vật lý của actualSlot được giữ nguyên từ nguồn telemetry cảm biến.
 
                 var dispatch = await _context.ParkingDispatches
                     .Where(d => d.SessionId == session.Id && (d.Status == DispatchStatuses.Pending || d.Status == DispatchStatuses.Assigned || d.Status == DispatchStatuses.Occupied))
@@ -1088,15 +1149,24 @@ public class ParkingSessionService : IParkingSessionService
         string? ipAddress,
         CancellationToken ct = default)
     {
-        if (amountPaid < 0)
+        // 1. Phân quyền: Chỉ Quản trị viên (ADMIN) hoặc Dịch vụ Thanh toán hệ thống mới có quyền ghi nhận xác nhận tài chính
+        if (actorRole != Roles.Admin)
         {
-            return (false, "Số tiền thanh toán không được âm.", null);
+            return (false, "Chỉ Quản trị viên (ADMIN) hoặc Dịch vụ Thanh toán của hệ thống mới có quyền ghi nhận xác nhận tài chính (Financial Clearance). Nhân viên cổng hoặc tài khoản khác không có thẩm quyền.", null);
+        }
+
+        // 2. Kiểm tra số tiền thanh toán hợp lệ (> 0)
+        if (amountPaid <= 0)
+        {
+            return (false, "Số tiền thanh toán phải lớn hơn 0 VNĐ.", null);
         }
 
         if (string.IsNullOrWhiteSpace(transactionRef))
         {
             return (false, "Mã giao dịch thanh toán (transactionRef) không được để trống.", null);
         }
+
+        var trimmedRef = transactionRef.Trim();
 
         var session = await _context.ParkingSessions
             .Include(s => s.Lot)
@@ -1109,6 +1179,11 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Không tìm thấy phiên gửi xe với ID: {sessionId}.", null);
         }
 
+        var lotName = session.Lot?.Name ?? string.Empty;
+        var slotCode = session.CurrentSlot?.SlotCode;
+        var floorNumber = session.CurrentSlot?.Floor?.FloorNumber;
+
+        // 3. Vòng đời phiên: Phiên đã kết thúc hoặc bị hủy không thể ghi nhận thanh toán
         if (session.Status == SessionStatuses.Completed)
         {
             return (false, $"Phiên gửi xe #{sessionId} đã kết thúc trước đó, không thể ghi nhận thanh toán.", null);
@@ -1119,6 +1194,36 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Phiên gửi xe #{sessionId} đã bị hủy, không thể ghi nhận thanh toán.", null);
         }
 
+        // 4. Authoritative TotalFee Invariant: Không cho phép số tiền ghi nhận thấp hơn phí đã được tính của phiên
+        if (session.TotalFee > 0 && amountPaid < session.TotalFee)
+        {
+            return (false, $"Số tiền thanh toán ({amountPaid:N0} VNĐ) không đủ so với phí gửi xe cần thanh toán ({session.TotalFee:N0} VNĐ).", null);
+        }
+
+        // 5. Idempotency & Duplicate Reference Invariant:
+        // Nếu phiên đã PAID, kiểm tra xem có phải gọi lại cùng mã giao dịch hay không (idempotent retry)
+        if (session.Status == SessionStatuses.Paid)
+        {
+            var existingClearance = await _context.AuditLogs
+                .FirstOrDefaultAsync(a => a.Action == "PAYMENT_CLEARED" && a.TargetId == session.Id.ToString() && a.NewValues != null && a.NewValues.Contains(trimmedRef), ct);
+
+            if (existingClearance != null)
+            {
+                return (true, $"Phiên gửi xe #{session.Id} đã được ghi nhận thanh toán hợp lệ trước đó với mã giao dịch '{trimmedRef}'.", MapToDto(session, lotName, slotCode, floorNumber));
+            }
+
+            return (false, $"Phiên gửi xe #{session.Id} đã hoàn tất thanh toán trước đó với một giao dịch khác.", null);
+        }
+
+        // Chống sử dụng trùng lặp mã giao dịch trên phiên gửi xe khác
+        var isDuplicateRefUsed = await _context.AuditLogs
+            .AnyAsync(a => a.Action == "PAYMENT_CLEARED" && a.TargetId != session.Id.ToString() && a.NewValues != null && a.NewValues.Contains(trimmedRef), ct);
+
+        if (isDuplicateRefUsed)
+        {
+            return (false, $"Mã giao dịch '{trimmedRef}' đã được sử dụng cho một phiên gửi xe khác.", null);
+        }
+
         var oldState = new { session.Status, session.TotalFee, session.PaidAt };
 
         session.TotalFee = amountPaid;
@@ -1126,17 +1231,13 @@ public class ParkingSessionService : IParkingSessionService
         session.Status = SessionStatuses.Paid;
         session.UpdatedAt = DateTime.UtcNow;
 
-        var newState = new { session.Status, session.TotalFee, session.PaidAt, transactionRef, paymentMethod };
+        var newState = new { session.Status, session.TotalFee, session.PaidAt, TransactionRef = trimmedRef, PaymentMethod = paymentMethod };
 
         await LogAuditAsync("PAYMENT_CLEARED", nameof(ParkingSession), session.Id.ToString(), oldState, newState, actorId, ct);
         await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Financial clearance recorded for session {SessionId}: Amount {Amount:N0} VNĐ, Ref {Ref}, Method {Method}",
-            session.Id, amountPaid, transactionRef, paymentMethod ?? "N/A");
-
-        var lotName = session.Lot?.Name ?? string.Empty;
-        var slotCode = session.CurrentSlot?.SlotCode;
-        var floorNumber = session.CurrentSlot?.Floor?.FloorNumber;
+            session.Id, amountPaid, trimmedRef, paymentMethod ?? "N/A");
 
         return (true, $"Ghi nhận thanh toán hoàn tất cho phiên #{session.Id}.", MapToDto(session, lotName, slotCode, floorNumber));
     }

@@ -570,6 +570,7 @@ public class BookingService : IBookingService
             PhysicalEmptySlotsCount = includeDiagnostics ? calc.PhysicalEmptySlotsCount : null,
             UnassignedSessionsCount = includeDiagnostics ? calc.UnassignedSessionsCount : null,
             ProposedSafetyBuffer = includeDiagnostics ? calc.ProposedSafetyBuffer : null,
+            UnmatchedPhysicalOccupiedCount = includeDiagnostics ? calc.UnmatchedPhysicalOccupiedCount : null,
             DiscrepancyNotes = includeDiagnostics ? calc.DiscrepancyNotes : null
         };
     }

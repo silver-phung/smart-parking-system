@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.Application.DTOs.Sessions;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
+using SmartParking.Infrastructure.Common;
 using SmartParking.Infrastructure.Services;
 using Xunit;
 
@@ -194,9 +195,9 @@ public class WalkInSessionAndStaffDutyTests
         Assert.True(verifyRes.Success);
         Assert.Equal(20201, verifyRes.Data!.CurrentSlotId);
 
-        // Verify physical status updated to OCCUPIED
+        // Fix 4 Invariant: Sensor state remains unchanged (EMPTY) under business verification (staff association != IoT sensor update)
         var slot = await context.ParkingSlots.FindAsync(20201L);
-        Assert.Equal(SlotPhysicalStatuses.Occupied, slot!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Empty, slot!.PhysicalStatus);
 
         // 3. SLOT_VERIFIER attempts check-out -> rejected
         var checkOutRes = await sessionService.CheckOutAsync(
@@ -336,14 +337,15 @@ public class WalkInSessionAndStaffDutyTests
             new CheckInRequestDto { LotId = 207, PlateNumber = "51A-LOST-CAR" },
             1, Roles.Admin, "127.0.0.1")).Data!;
 
+        var slot1 = await context.ParkingSlots.FindAsync(20701L);
+        slot1!.PhysicalStatus = SlotPhysicalStatuses.Occupied; // Simulated IoT sensor telemetry
+        await context.SaveChangesAsync();
+
         // Initially verified at slot 20701
         await sessionService.VerifySessionSlotAsync(
             session.Id,
             new VerifySessionSlotRequestDto { SlotId = 20701 },
             1, Roles.Admin, "127.0.0.1");
-
-        var slot1 = await context.ParkingSlots.FindAsync(20701L);
-        Assert.Equal(SlotPhysicalStatuses.Occupied, slot1!.PhysicalStatus);
 
         // Staff detects car actually parked in slot 20702
         var reportRes = await sessionService.ReportSessionWrongSlotAsync(
@@ -358,9 +360,9 @@ public class WalkInSessionAndStaffDutyTests
         slot1 = await context.ParkingSlots.FindAsync(20701L);
         Assert.Equal(SlotPhysicalStatuses.Occupied, slot1!.PhysicalStatus);
 
-        // New slot marked OCCUPIED
+        // New slot physical status remains what IoT reported (does not force OCCUPIED)
         var slot2 = await context.ParkingSlots.FindAsync(20702L);
-        Assert.Equal(SlotPhysicalStatuses.Occupied, slot2!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Empty, slot2!.PhysicalStatus);
     }
 
     [Fact]
@@ -617,5 +619,294 @@ public class WalkInSessionAndStaffDutyTests
         var audit = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
             context.AuditLogs, a => a.Action == "PAYMENT_CLEARED" && a.TargetId == sessionId.ToString());
         Assert.NotNull(audit);
+    }
+
+    [Fact]
+    public async Task PaymentClearance_UnauthorizedRole_StaffOrUser_IsRejected()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        SeedLot(context, 213, "Bãi Auth Clearance");
+        AddStaffWithDuty(context, 2131, 213, StaffDuties.Gate);
+        await context.SaveChangesAsync();
+
+        var checkInRes = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 213, PlateNumber = "51A-UNAUTH-01" },
+            actorId: 2131, actorRole: Roles.Staff, ipAddress: "127.0.0.1");
+        var sessionId = checkInRes.Data!.Id;
+
+        // Staff attempts payment clearance -> 403 Forbidden
+        var staffClearance = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 20000m, "TX-STAFF-ATTEMPT", "CASH",
+            actorId: 2131, actorRole: Roles.Staff, ipAddress: "127.0.0.1");
+        Assert.False(staffClearance.Success);
+        Assert.Contains("Dịch vụ Thanh toán", staffClearance.Message);
+
+        // User attempts payment clearance -> 403 Forbidden
+        var userClearance = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 20000m, "TX-USER-ATTEMPT", "MOCK",
+            actorId: 999, actorRole: Roles.User, ipAddress: "127.0.0.1");
+        Assert.False(userClearance.Success);
+        Assert.Contains("Dịch vụ Thanh toán", userClearance.Message);
+    }
+
+    [Fact]
+    public async Task PaymentClearance_AmountZeroOrNegative_IsRejected()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        SeedLot(context, 214, "Bãi Zero Amount");
+        var checkInRes = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 214, PlateNumber = "51A-ZERO-01" },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        var sessionId = checkInRes.Data!.Id;
+
+        // Amount <= 0 rejected
+        var zeroClearance = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 0m, "TX-ZERO", "MOCK",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(zeroClearance.Success);
+        Assert.Contains("phải lớn hơn 0", zeroClearance.Message);
+
+        var negClearance = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, -5000m, "TX-NEG", "MOCK",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(negClearance.Success);
+        Assert.Contains("phải lớn hơn 0", negClearance.Message);
+    }
+
+    [Fact]
+    public async Task PaymentClearance_UnderpaymentOfTotalFee_IsRejected()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        SeedLot(context, 215, "Bãi Underpayment");
+        var checkInRes = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 215, PlateNumber = "51A-UNDER-01" },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        var sessionId = checkInRes.Data!.Id;
+
+        // Simulate authoritative pricing calculation by Nam Anh set TotalFee = 50,000 VNĐ
+        var session = await context.ParkingSessions.FindAsync(sessionId);
+        session!.TotalFee = 50000m;
+        await context.SaveChangesAsync();
+
+        // Caller attempts to clear payment with only 30,000 VNĐ -> rejected
+        var underpaid = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 30000m, "TX-UNDERPAID-01", "VNPAY",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(underpaid.Success);
+        Assert.Contains("không đủ so với phí gửi xe cần thanh toán", underpaid.Message);
+    }
+
+    [Fact]
+    public async Task PaymentClearance_DuplicateTransactionRef_AcrossDifferentSessions_IsRejected()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        SeedLot(context, 216, "Bãi Duplicate Ref");
+        var s1Res = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 216, PlateNumber = "51A-REF-01" },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        var s2Res = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 216, PlateNumber = "51A-REF-02" },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+
+        // Clear session 1 with ref TX-UNIQUE-100
+        var c1 = await sessionService.RecordPaymentClearanceAsync(
+            s1Res.Data!.Id, 25000m, "TX-UNIQUE-100", "MOMOPAY",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(c1.Success);
+
+        // Attempt to clear session 2 with SAME ref TX-UNIQUE-100 -> rejected
+        var c2 = await sessionService.RecordPaymentClearanceAsync(
+            s2Res.Data!.Id, 25000m, "TX-UNIQUE-100", "MOMOPAY",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(c2.Success);
+        Assert.Contains("đã được sử dụng cho một phiên gửi xe khác", c2.Message);
+    }
+
+    [Fact]
+    public async Task PaymentClearance_IdempotencyAndMismatchedRetry_HandledCorrectly()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        SeedLot(context, 217, "Bãi Idempotency");
+        var sRes = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 217, PlateNumber = "51A-IDEMP-01" },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        var sessionId = sRes.Data!.Id;
+
+        // First clearance
+        var c1 = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 40000m, "TX-IDEMPOTENT-888", "ZALOPAY",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(c1.Success);
+
+        // Idempotent retry with identical ref -> returns true
+        var retry = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 40000m, "TX-IDEMPOTENT-888", "ZALOPAY",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(retry.Success);
+        Assert.Contains("đã được ghi nhận thanh toán hợp lệ trước đó", retry.Message);
+
+        // Retry on already PAID session with DIFFERENT ref -> rejected
+        var diffRef = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 40000m, "TX-ANOTHER-999", "ZALOPAY",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(diffRef.Success);
+        Assert.Contains("đã hoàn tất thanh toán trước đó với một giao dịch khác", diffRef.Message);
+    }
+
+    [Fact]
+    public async Task CheckIn_AssignDuplicateSlot_AlreadyOccupiedByAnotherActiveSession_IsRejected()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLot(context, 218, "Bãi Duplicate Slot", slotCount: 3);
+        var slotToOccupy = slots[0];
+
+        // Session 1 checks in and is assigned slotToOccupy
+        var s1Res = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 218, PlateNumber = "51A-OCCUPIER", SlotId = slotToOccupy.Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(s1Res.Success);
+        Assert.Equal(slotToOccupy.Id, s1Res.Data!.CurrentSlotId);
+
+        // Session 2 attempts check in with same slot -> rejected
+        var s2Res = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 218, PlateNumber = "51A-INTRUDER", SlotId = slotToOccupy.Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(s2Res.Success);
+        Assert.Contains("hiện đang được sử dụng bởi một phiên đỗ xe khác", s2Res.Message);
+
+        // Normal walk-in with SlotId = null -> succeeds
+        var normalWalkIn = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 218, PlateNumber = "51A-NORMAL-WALKIN", SlotId = null },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(normalWalkIn.Success);
+        Assert.Null(normalWalkIn.Data!.CurrentSlotId);
+    }
+
+    [Fact]
+    public async Task CheckIn_AssignSlotUnderMaintenance_IsRejected()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLot(context, 219, "Bãi Maint Slot", slotCount: 3);
+        var maintSlot = slots[1];
+        maintSlot.PhysicalStatus = SlotPhysicalStatuses.Maintenance;
+        await context.SaveChangesAsync();
+
+        var res = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 219, PlateNumber = "51A-MAINT-TEST", SlotId = maintSlot.Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(res.Success);
+        Assert.Contains("bảo trì hoặc ngừng phục vụ", res.Message);
+    }
+
+    [Fact]
+    public async Task VerifySessionSlot_MaintenanceSlot_IsRejected_AndSensorPreserved()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        var (_, _, slots) = SeedLot(context, 220, "Bãi Verify Maint", slotCount: 3);
+        var maintSlot = slots[1];
+        maintSlot.PhysicalStatus = SlotPhysicalStatuses.Maintenance;
+        await context.SaveChangesAsync();
+
+        var checkIn = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 220, PlateNumber = "51A-VERIFY-MAINT" },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        var sessionId = checkIn.Data!.Id;
+
+        // Attempt to verify to maintenance slot -> rejected
+        var verifyMaint = await sessionService.VerifySessionSlotAsync(
+            sessionId,
+            new VerifySessionSlotRequestDto { SlotId = maintSlot.Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(verifyMaint.Success);
+        Assert.Contains("bảo trì hoặc không khả dụng", verifyMaint.Message);
+
+        // Verify to normal slot -> succeeds and sensor state remains EMPTY
+        var normalSlot = slots[0];
+        var verifyNormal = await sessionService.VerifySessionSlotAsync(
+            sessionId,
+            new VerifySessionSlotRequestDto { SlotId = normalSlot.Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(verifyNormal.Success);
+        var reloadedSlot = await context.ParkingSlots.FindAsync(normalSlot.Id);
+        Assert.Equal(SlotPhysicalStatuses.Empty, reloadedSlot!.PhysicalStatus);
+    }
+
+    [Fact]
+    public async Task CheckOut_ConfirmedPlateMismatch_IsRejected_AndNormalizedMatch_Succeeds()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        SeedLot(context, 221, "Bãi Plate Verify");
+        AddStaffWithDuty(context, 2211, 221, StaffDuties.Gate);
+        await context.SaveChangesAsync();
+
+        var checkIn = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 221, PlateNumber = "51A-123.45" },
+            actorId: 2211, actorRole: Roles.Staff, ipAddress: "127.0.0.1");
+        var sessionId = checkIn.Data!.Id;
+
+        // Clear payment so checkout financial precondition passes
+        await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 20000m, "TX-PLATE-01", "CASH",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+
+        // Attempt checkout with wrong plate
+        var wrongPlateRes = await sessionService.CheckOutAsync(
+            sessionId,
+            new CheckOutRequestDto { ConfirmedPlateNumber = "29B-999.99" },
+            actorId: 2211, actorRole: Roles.Staff, ipAddress: "127.0.0.1");
+        Assert.False(wrongPlateRes.Success);
+        Assert.Contains("không khớp", wrongPlateRes.Message);
+
+        // Checkout with matching plate normalized (e.g. 51A12345 without punctuation) -> succeeds
+        var matchPlateRes = await sessionService.CheckOutAsync(
+            sessionId,
+            new CheckOutRequestDto { ConfirmedPlateNumber = "51a12345" },
+            actorId: 2211, actorRole: Roles.Staff, ipAddress: "127.0.0.1");
+        Assert.True(matchPlateRes.Success);
+        Assert.Equal(SessionStatuses.Completed, matchPlateRes.Data!.Status);
+    }
+
+    [Fact]
+    public async Task Capacity_DisjointAndOverlappingOccupancy_CalculatesCorrectConservativeCapacity()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        var (lot, _, slots) = SeedLot(context, 222, "Bãi Capacity Calc", slotCount: 5);
+
+        // Slot 0: Confirmed pair (car checks in to slot 0 when EMPTY, then IoT sensor detects OCCUPIED)
+        var s1Res = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 222, PlateNumber = "51A-PAIR-01", SlotId = slots[0].Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(s1Res.Success);
+        slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+
+        // Slot 1: Unmatched physical occupancy (Occupied sensor without any backend session)
+        slots[1].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+
+        // Session 2: Unassigned roaming walk-in session (Active, CurrentSlotId = null)
+        var s2Res = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 222, PlateNumber = "51A-ROAMING-02", SlotId = null },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.True(s2Res.Success);
+
+        // Slot 4: Maintenance slot (must be excluded from usable capacity)
+        slots[4].PhysicalStatus = SlotPhysicalStatuses.Maintenance;
+        await context.SaveChangesAsync();
+
+        var calc = await ParkingLotCapacityHelper.CalculateAsync(context, 222, lot);
+
+        // Usable capacity: 4 (5 slots total - 1 maintenance = 4)
+        Assert.Equal(4, calc.TotalCapacity);
+        // Active sessions: 2
+        Assert.Equal(2, calc.ActiveSessionsCount);
+        // Physical occupied slots: 2 (slots[0] and slots[1])
+        Assert.Equal(2, calc.PhysicalOccupiedSlotsCount);
+        // Effective occupied: Max(2 active sessions, 2 physical occupied) = 2
+        Assert.Equal(2, calc.EffectiveOccupied);
+        // Available capacity: 4 - 2 = 2
+        Assert.Equal(2, calc.AvailableCapacity);
+        // Unmatched physical occupied count: 1 (slots[1])
+        Assert.Equal(1, calc.UnmatchedPhysicalOccupiedCount);
+        // Unassigned sessions count: 1 (s2)
+        Assert.Equal(1, calc.UnassignedSessionsCount);
     }
 }

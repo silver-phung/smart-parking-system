@@ -17,7 +17,8 @@ public record LotCapacityCalculation(
     bool HasConfiguredSlots,
     string? DiscrepancyNotes,
     int UnassignedSessionsCount = 0,
-    int ProposedSafetyBuffer = 5
+    int ProposedSafetyBuffer = 5,
+    int UnmatchedPhysicalOccupiedCount = 0
 );
 
 public static class ParkingLotCapacityHelper
@@ -35,6 +36,7 @@ public static class ParkingLotCapacityHelper
         int totalCapacity;
         int physicalOccupiedSlots = 0;
         int physicalEmptySlots = 0;
+        int unmatchedPhysicalOccupiedCount = 0;
 
         if (hasConfiguredSlots)
         {
@@ -51,6 +53,12 @@ public static class ParkingLotCapacityHelper
 
             physicalEmptySlots = await context.ParkingSlots
                 .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Empty && s.IsActive && s.Floor.IsActive, ct);
+
+            // Ô đỗ có cảm biến báo OCCUPIED nhưng chưa có phiên đỗ xe ACTIVE/PAID gắn vào
+            unmatchedPhysicalOccupiedCount = await context.ParkingSlots
+                .CountAsync(s => s.Floor.LotId == lotId &&
+                                 s.PhysicalStatus == SlotPhysicalStatuses.Occupied &&
+                                 !s.CurrentSessions.Any(sess => sess.Status == SessionStatuses.Active || sess.Status == SessionStatuses.Paid), ct);
         }
         else
         {
@@ -79,6 +87,8 @@ public static class ParkingLotCapacityHelper
         // 4. Conservative IoT Capacity Guard:
         // Used = max(ActiveOrPaidSessions, PhysicalOccupiedSlots) + PendingBookingHolds
         // Available = max(0, UsableCapacity - Used)
+        // Invariant: Chống đếm trùng giữa phiên đã gán ô và cảm biến của chính ô đó,
+        // đồng thời chống bỏ sót sức chứa bị chiếm dụng bởi ô vật lý có xe không rõ danh tính (unmatched physical occupancy).
         int effectiveOccupied = Math.Max(activeSessionsCount, physicalOccupiedSlots);
         int totalOccupiedOrReserved = effectiveOccupied + pendingBookingsCount;
         int availableCapacity = Math.Max(0, totalCapacity - totalOccupiedOrReserved);
@@ -90,7 +100,7 @@ public static class ParkingLotCapacityHelper
         string? discrepancyNotes = null;
         if (hasConfiguredSlots && physicalOccupiedSlots != activeSessionsCount)
         {
-            discrepancyNotes = $"Ghi nhận chênh lệch IoT: {physicalOccupiedSlots} ô vật lý báo có xe (OCCUPIED), hệ thống đang có {activeSessionsCount} phiên đỗ xe (ACTIVE/PAID).";
+            discrepancyNotes = $"Ghi nhận chênh lệch IoT: {physicalOccupiedSlots} ô vật lý báo có xe (OCCUPIED, trong đó {unmatchedPhysicalOccupiedCount} ô chưa khớp phiên), hệ thống có {activeSessionsCount} phiên đỗ xe (ACTIVE/PAID, trong đó {unassignedSessionsCount} xe chưa xác minh ô).";
         }
 
         return new LotCapacityCalculation(
@@ -105,7 +115,8 @@ public static class ParkingLotCapacityHelper
             HasConfiguredSlots: hasConfiguredSlots,
             DiscrepancyNotes: discrepancyNotes,
             UnassignedSessionsCount: unassignedSessionsCount,
-            ProposedSafetyBuffer: proposedSafetyBuffer
+            ProposedSafetyBuffer: proposedSafetyBuffer,
+            UnmatchedPhysicalOccupiedCount: unmatchedPhysicalOccupiedCount
         );
     }
 }

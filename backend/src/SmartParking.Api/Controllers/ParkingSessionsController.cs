@@ -360,13 +360,14 @@ public class ParkingSessionsController : ControllerBase
     /// <summary>
     /// Ghi nhận xác nhận thanh toán hoàn tất (Financial Clearance) từ module Thanh toán của Nam Anh.
     /// Cập nhật TotalFee, PaidAt, chuyển trạng thái sang PAID để đủ điều kiện mở cổng khi check-out.
-    /// Dành cho ADMIN, MANAGER hoặc STAFF.
+    /// Dành cho Quản trị viên (ADMIN) hoặc Dịch vụ Thanh toán hệ thống.
     /// </summary>
     [HttpPost("{id:long}/payment-clearance")]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
+    [Authorize(Roles = Roles.Admin)]
     [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RecordPaymentClearance(long id, [FromBody] PaymentClearanceRequestDto request, CancellationToken ct)
@@ -385,11 +386,15 @@ public class ParkingSessionsController : ControllerBase
 
         if (!success)
         {
+            if (message.Contains("không có quyền") || message.Contains("Chỉ Quản trị viên"))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message });
+            }
             if (message.Contains("Không tìm thấy"))
             {
                 return NotFound(new { message });
             }
-            if (message.Contains("đã kết thúc") || message.Contains("đã bị hủy"))
+            if (message.Contains("đã kết thúc") || message.Contains("đã bị hủy") || message.Contains("đã được sử dụng"))
             {
                 return Conflict(new { message });
             }

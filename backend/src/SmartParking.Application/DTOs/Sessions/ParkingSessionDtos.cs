@@ -45,6 +45,9 @@ public class CheckOutRequestDto
     [MaxLength(500, ErrorMessage = "URL hình ảnh check-out không được vượt quá 500 ký tự.")]
     public string? CheckOutImageUrl { get; set; }
 
+    [MaxLength(20, ErrorMessage = "Biển số xe xác nhận xuất bãi không được vượt quá 20 ký tự.")]
+    public string? ConfirmedPlateNumber { get; set; }
+
     public bool? AllowExitWithoutPayment { get; set; }
 
     [MaxLength(500, ErrorMessage = "Lý do miễn trừ thanh toán không được vượt quá 500 ký tự.")]
