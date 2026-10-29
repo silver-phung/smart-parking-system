@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Events;
 using SmartParking.Application.Events.Dtos;
+using SmartParking.Domain.Entities;
 
 namespace SmartParking.Api.Controllers;
 
@@ -56,7 +57,9 @@ public class ParkingEventController : ControllerBase
             _logger.LogWarning(
                 "Event rejected: EventId={EventId} Reason={Reason}",
                 request.EventId, response.Message);
-            return BadRequest(response);
+            return response.ProcessingStatus == EventProcessingStatus.PendingVerification
+                ? Accepted(response)
+                : BadRequest(response);
         }
 
         return Ok(response);

@@ -63,6 +63,8 @@ public class ParkingSession
     public DateTimeOffset EnteredAtUtc { get; set; }
     public DateTimeOffset? ParkedAtUtc { get; set; }
     public DateTimeOffset? ExitedAtUtc { get; set; }
+    /// <summary>Occurred-at mới nhất đã làm thay đổi projection; event cũ hơn không được ghi đè.</summary>
+    public DateTimeOffset LastAppliedEventAtUtc { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
