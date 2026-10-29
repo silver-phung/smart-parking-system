@@ -23,7 +23,12 @@ namespace SmartParking.Application.Events.Dtos;
 public sealed class IngestEventRequest
 {
     [Required(ErrorMessage = "EventId là bắt buộc.")]
+    [RegularExpression("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+        ErrorMessage = "EventId phải là UUID v4.")]
     public string EventId { get; init; } = string.Empty;
+
+    [Range(1, 1, ErrorMessage = "PayloadVersion hiện chỉ hỗ trợ phiên bản 1.")]
+    public int PayloadVersion { get; init; } = 1;
 
     public string? SessionId { get; init; }
 
@@ -38,7 +43,10 @@ public sealed class IngestEventRequest
         ErrorMessage = "SlotCode sai định dạng. Ví dụ hợp lệ: A1-012, B2-005.")]
     public string? SlotCode { get; init; }
 
-    /// <summary>Biển số xe, ví dụ: "51F-67890". Bắt buộc với VehicleEntered và VehicleExited.</summary>
+    /// <summary>
+    /// Với VehicleEntered đây là OCR tạm. Với SlotParked đây là biển số Staff điều phối xác nhận.
+    /// Không dùng OCR tạm làm khóa duy nhất của phiên.
+    /// </summary>
     public string? CarPlate { get; init; }
 
     /// <summary>
@@ -52,7 +60,11 @@ public sealed class IngestEventRequest
     [Required(ErrorMessage = "Source là bắt buộc.")]
     public string Source { get; init; } = string.Empty;
 
-    /// <summary>ID nhân viên thực hiện (nếu là thao tác của Staff).</summary>
+    /// <summary>
+    /// Giá trị legacy do client khai báo, chỉ lưu để chẩn đoán và không dùng làm actor có quyền.
+    /// Actor chính thức phải được truyền từ ngữ cảnh xác thực vào service.
+    /// </summary>
+    [Obsolete("Không dùng TriggeredBy từ body để phân quyền.")]
     public string? TriggeredBy { get; init; }
 
     /// <summary>Thời điểm sự kiện xảy ra (UTC). Null → server dùng thời gian nhận.</summary>
@@ -63,7 +75,7 @@ public sealed class IngestEventRequest
     /// <summary>URL ảnh xe tại cổng vào đã upload lên Object Storage.</summary>
     public string? EntryImageUrl { get; init; }
 
-    /// <summary>Loại nhiên liệu Gemini nhận diện: "gasoline" | "electric" | "unknown".</summary>
+    /// <summary>Gợi ý AI ở cổng hoặc giá trị Staff xác nhận tại slot, tùy EventType.</summary>
     public string? FuelType { get; init; }
 
     /// <summary>Màu xe, ví dụ: "white", "black", "silver".</summary>
@@ -95,7 +107,7 @@ public sealed class IngestEventResponse
     public string EventId { get; init; } = string.Empty;
     public string? SessionId { get; init; }
 
-    /// <summary>Trạng thái phiên sau xử lý: "pending_slot" | "parked" | "exited".</summary>
+    /// <summary>Trạng thái projection: waiting_verification | parked | exit_processing.</summary>
     public string? SessionStatus { get; init; }
 
     /// <summary>Cảnh báo nghiệp vụ nếu có, ví dụ: "wrong_vehicle_type".</summary>
@@ -110,6 +122,7 @@ public sealed class ActiveSessionDto
 {
     public string SessionId { get; init; } = string.Empty;
     public string CarPlate { get; init; } = string.Empty;
+    public string? RecognizedPlate { get; init; }
     public int ParkingLotId { get; init; }
     public string? SlotCode { get; init; }
     public string Status { get; init; } = string.Empty;
@@ -134,6 +147,7 @@ public sealed class EventLogDto
     public string EventType { get; init; } = string.Empty;
     public string Source { get; init; } = string.Empty;
     public string? TriggeredBy { get; init; }
+    public int PayloadVersion { get; init; }
     public string ProcessingStatus { get; init; } = string.Empty;
     public string? RejectReason { get; init; }
     public DateTimeOffset EventTimestampUtc { get; init; }
