@@ -217,5 +217,62 @@ public class AuthServiceTests
         Assert.False(dupRes.Succeeded);
         Assert.Equal(409, dupRes.StatusCode);
     }
+
+    [Fact]
+    public async Task CustomerAuth_OtpValidationRules_EnforcesCooldownAndAttempts()
+    {
+        using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
+        var secOptions = Options.Create(new SecurityOptions
+        {
+            MaxFailedLoginAttempts = 5,
+            LockoutDurationMinutes = 15,
+            OtpSecretKey = "super-secret-otp-key-for-testing-32-chars-long!",
+            OtpLifetimeMinutes = 15,
+            OtpResendCooldownSeconds = 60,
+            MaxFailedOtpAttempts = 5
+        });
+        var testEmail = new TestEmailService();
+        var otpService = new OtpService(secOptions);
+        var testRecaptcha = new DummyRecaptchaService();
+
+        var service = new AuthService(
+            context, _hasher, new TokenService(Options.Create(_jwtOptions)),
+            otpService, testEmail, testRecaptcha,
+            Options.Create(_jwtOptions), secOptions,
+            Options.Create(new RecaptchaOptions { Enabled = false }),
+            NullLogger<AuthService>.Instance);
+
+        // 1. Register customer
+        var regDto = new RegisterRequestDto
+        {
+            Username = "otp_rules_user",
+            Email = "otp_rules@smartparking.test",
+            Password = "Password123!",
+            FullName = "OTP Tester",
+            PhoneNumber = "0909998888"
+        };
+        var regRes = await service.RegisterAsync(regDto, "127.0.0.1");
+        Assert.True(regRes.Succeeded);
+
+        // 2. Immediate resend within 60s cooldown fails with 429
+        var resendRes = await service.ResendVerificationAsync(
+            new ResendVerificationRequestDto { Email = "otp_rules@smartparking.test" });
+        Assert.False(resendRes.Succeeded);
+        Assert.Equal(429, resendRes.StatusCode);
+        Assert.Contains("giây", resendRes.Message);
+
+        // 3. Incorrect OTP fails with 400
+        var wrongOtpRes = await service.VerifyEmailAsync(
+            new VerifyEmailRequestDto { Email = "otp_rules@smartparking.test", Code = "000000" });
+        Assert.False(wrongOtpRes.Succeeded);
+        Assert.Equal(400, wrongOtpRes.StatusCode);
+        Assert.Contains("không chính xác", wrongOtpRes.Message);
+
+        // 4. Correct OTP succeeds
+        var correctOtp = testEmail.LastOtpCode!;
+        var correctOtpRes = await service.VerifyEmailAsync(
+            new VerifyEmailRequestDto { Email = "otp_rules@smartparking.test", Code = correctOtp });
+        Assert.True(correctOtpRes.Succeeded);
+    }
 }
 

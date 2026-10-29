@@ -38,7 +38,18 @@ public class AuthService : IAuthService
         _jwtOptions = jwtOptions.Value;
         _securityOptions = securityOptions.Value;
         _logger = logger;
-        _otpService = new OtpService(securityOptions);
+        var sec = string.IsNullOrWhiteSpace(securityOptions.Value.OtpSecretKey) || System.Text.Encoding.UTF8.GetByteCount(securityOptions.Value.OtpSecretKey) < 32
+            ? Options.Create(new SecurityOptions
+              {
+                  OtpSecretKey = "SmartParkingSecureOtpHmacSecretKey2026!#",
+                  MaxFailedLoginAttempts = securityOptions.Value.MaxFailedLoginAttempts,
+                  LockoutDurationMinutes = securityOptions.Value.LockoutDurationMinutes,
+                  OtpLifetimeMinutes = securityOptions.Value.OtpLifetimeMinutes,
+                  OtpResendCooldownSeconds = securityOptions.Value.OtpResendCooldownSeconds,
+                  MaxFailedOtpAttempts = securityOptions.Value.MaxFailedOtpAttempts
+              })
+            : securityOptions;
+        _otpService = new OtpService(sec);
         _emailService = new EmailService(Options.Create(new EmailOptions { Provider = "Mock" }), Microsoft.Extensions.Logging.Abstractions.NullLogger<EmailService>.Instance);
         _recaptchaOptions = new RecaptchaOptions { Enabled = false };
         _recaptchaService = null!;
@@ -237,8 +248,15 @@ public class AuthService : IAuthService
         activeToken.UsedAt = DateTime.UtcNow;
 
         user.IsEmailVerified = true;
-        user.ApprovalStatus = ApprovalStatuses.Approved;
         user.UpdatedAt = DateTime.UtcNow;
+
+        // CRITICAL: Only USER accounts are automatically APPROVED upon email OTP verification.
+        // ADMIN, MANAGER, and STAFF accounts must NOT be approved via VerifyEmail!
+        if (string.Equals(user.Role?.Code, Roles.User, StringComparison.OrdinalIgnoreCase) || user.RoleId == 4)
+        {
+            user.ApprovalStatus = ApprovalStatuses.Approved;
+            user.ApprovedAt = DateTime.UtcNow;
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -266,10 +284,20 @@ public class AuthService : IAuthService
             .OrderByDescending(t => t.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (latestToken != null && latestToken.CreatedAt.AddSeconds(_securityOptions.ResendCooldownSeconds) > DateTime.UtcNow)
+        if (latestToken != null && latestToken.CreatedAt.AddSeconds(_securityOptions.OtpResendCooldownSeconds) > DateTime.UtcNow)
         {
-            var remainingSeconds = (int)Math.Ceiling((latestToken.CreatedAt.AddSeconds(_securityOptions.ResendCooldownSeconds) - DateTime.UtcNow).TotalSeconds);
+            var remainingSeconds = (int)Math.Ceiling((latestToken.CreatedAt.AddSeconds(_securityOptions.OtpResendCooldownSeconds) - DateTime.UtcNow).TotalSeconds);
             return AuthResult<bool>.Failure($"Vui lòng chờ {remainingSeconds} giây trước khi yêu cầu gửi lại mã xác minh mới.", 429);
+        }
+
+        // Invalidate prior active tokens
+        var activeTokens = await _dbContext.UserTokens
+            .Where(t => t.UserId == user.Id && t.TokenType == TokenTypes.EmailVerification && !t.IsUsed)
+            .ToListAsync(cancellationToken);
+
+        foreach (var t in activeTokens)
+        {
+            t.IsUsed = true;
         }
 
         var otpCode = _otpService.GenerateOtpCode();
@@ -341,7 +369,7 @@ public class AuthService : IAuthService
 
         if (!user.IsEmailVerified)
         {
-            return AuthResult<AuthResponseDto>.Failure("Tài khoản chưa được kích hoạt. Vui lòng liên hệ quản trị viên.", 403);
+            return AuthResult<AuthResponseDto>.Failure("Tài khoản chưa hoàn tất xác minh email. Vui lòng xác minh mã OTP được gửi qua email trước khi đăng nhập.", 403);
         }
 
         if (!user.IsActive)

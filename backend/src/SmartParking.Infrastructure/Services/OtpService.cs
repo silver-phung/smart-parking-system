@@ -14,12 +14,11 @@ public class OtpService : IOtpService
     public OtpService(IOptions<SecurityOptions> options)
     {
         _options = options.Value;
-        var key = string.IsNullOrWhiteSpace(_options.OtpSecretKey) ? "SmartParkingSecureOtpHmacSecretKey2026!#" : _options.OtpSecretKey;
-        if (Encoding.UTF8.GetByteCount(key) < 32)
+        if (string.IsNullOrWhiteSpace(_options.OtpSecretKey) || Encoding.UTF8.GetByteCount(_options.OtpSecretKey) < 32)
         {
-            key = key.PadRight(32, '!');
+            throw new InvalidOperationException("Security:OtpSecretKey is missing or less than 32 bytes (256 bits).");
         }
-        _secretKeyBytes = Encoding.UTF8.GetBytes(key);
+        _secretKeyBytes = Encoding.UTF8.GetBytes(_options.OtpSecretKey);
     }
 
     public string GenerateOtpCode()
