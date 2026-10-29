@@ -15,7 +15,9 @@ public record LotCapacityCalculation(
     int TotalOccupiedOrReserved,
     int AvailableCapacity,
     bool HasConfiguredSlots,
-    string? DiscrepancyNotes
+    string? DiscrepancyNotes,
+    int UnassignedSessionsCount = 0,
+    int ProposedSafetyBuffer = 5
 );
 
 public static class ParkingLotCapacityHelper
@@ -64,6 +66,12 @@ public static class ParkingLotCapacityHelper
         var activeSessionsCount = await context.ParkingSessions
             .CountAsync(s => s.LotId == lotId && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
 
+        // 2b. Admitted sessions whose vehicles do NOT yet occupy a verified physical OCCUPIED slot (in queue / looking for slot)
+        var unassignedSessionsCount = await context.ParkingSessions
+            .CountAsync(s => s.LotId == lotId &&
+                             (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid) &&
+                             (s.CurrentSlotId == null || s.CurrentSlot!.PhysicalStatus != SlotPhysicalStatuses.Occupied), ct);
+
         // 3. Active unconsumed reservation holds (only PENDING bookings await check-in; CHECKED_IN/CANCELLED/EXPIRED excluded)
         var pendingBookingsCount = await context.Bookings
             .CountAsync(b => b.LotId == lotId && b.Status == BookingStatuses.Pending, ct);
@@ -74,6 +82,9 @@ public static class ParkingLotCapacityHelper
         int effectiveOccupied = Math.Max(activeSessionsCount, physicalOccupiedSlots);
         int totalOccupiedOrReserved = effectiveOccupied + pendingBookingsCount;
         int availableCapacity = Math.Max(0, totalCapacity - totalOccupiedOrReserved);
+
+        // Proposed safety buffer (proposal only, non-blocking until Owner approves enforcement)
+        const int proposedSafetyBuffer = 5;
 
         // 5. Diagnostics for discrepancy between sensor and backend sessions
         string? discrepancyNotes = null;
@@ -92,7 +103,9 @@ public static class ParkingLotCapacityHelper
             TotalOccupiedOrReserved: totalOccupiedOrReserved,
             AvailableCapacity: availableCapacity,
             HasConfiguredSlots: hasConfiguredSlots,
-            DiscrepancyNotes: discrepancyNotes
+            DiscrepancyNotes: discrepancyNotes,
+            UnassignedSessionsCount: unassignedSessionsCount,
+            ProposedSafetyBuffer: proposedSafetyBuffer
         );
     }
 }

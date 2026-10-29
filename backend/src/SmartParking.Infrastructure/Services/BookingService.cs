@@ -568,6 +568,8 @@ public class BookingService : IBookingService
             TotalOccupiedOrReserved = includeDiagnostics ? calc.TotalOccupiedOrReserved : null,
             PhysicalOccupiedSlotsCount = includeDiagnostics ? calc.PhysicalOccupiedSlotsCount : null,
             PhysicalEmptySlotsCount = includeDiagnostics ? calc.PhysicalEmptySlotsCount : null,
+            UnassignedSessionsCount = includeDiagnostics ? calc.UnassignedSessionsCount : null,
+            ProposedSafetyBuffer = includeDiagnostics ? calc.ProposedSafetyBuffer : null,
             DiscrepancyNotes = includeDiagnostics ? calc.DiscrepancyNotes : null
         };
     }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
 
 namespace SmartParking.Infrastructure.Data.Configurations;
@@ -55,6 +56,12 @@ public class StaffLotAssignmentConfiguration : IEntityTypeConfiguration<StaffLot
         builder.Property(a => a.IsActive)
             .HasColumnName("is_active")
             .HasDefaultValue(true)
+            .IsRequired();
+
+        builder.Property(a => a.Duty)
+            .HasColumnName("duty")
+            .HasMaxLength(30)
+            .HasDefaultValue(StaffDuties.Gate)
             .IsRequired();
 
         builder.Property(a => a.RevokedBy)

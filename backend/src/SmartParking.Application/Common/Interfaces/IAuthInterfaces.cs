@@ -25,6 +25,12 @@ public interface IAuthService
     Task<AuthResult<bool>> LogoutAsync(LogoutRequestDto request, CancellationToken cancellationToken = default);
 }
 
+public interface IEmailService
+{
+    Task<bool> SendVerificationOtpAsync(string toEmail, string otpCode, CancellationToken cancellationToken = default);
+}
+
+
 public interface IUserService
 {
     Task<UserProfileDto?> GetUserProfileAsync(long userId, CancellationToken cancellationToken = default);

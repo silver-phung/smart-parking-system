@@ -43,3 +43,19 @@ public class AdminBootstrapOptions
     public string FullName { get; set; } = "System Administrator";
     public string? PhoneNumber { get; set; }
 }
+
+public class EmailOptions
+{
+    public const string SectionName = "Email";
+
+    public string Provider { get; set; } = "Smtp"; // Smtp or Mock
+    public string Host { get; set; } = "smtp.gmail.com";
+    public int Port { get; set; } = 587;
+    public string UserName { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string SenderEmail { get; set; } = "noreply@smartparking.vn";
+    public string SenderName { get; set; } = "Smart Parking System";
+    public bool EnableSsl { get; set; } = true;
+    public int TimeoutSeconds { get; set; } = 10;
+}
+

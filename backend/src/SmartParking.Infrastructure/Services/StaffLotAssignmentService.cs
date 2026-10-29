@@ -58,6 +58,25 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             return (false, $"Chỉ có thể phân công bãi đỗ xe cho tài khoản có vai trò MANAGER hoặc STAFF. Vai trò hiện tại của '{targetUser.Username}' là: {roleCode}.", null);
         }
 
+        string duty;
+        if (targetUser.Role.Code == Roles.Manager)
+        {
+            // Quản lý bãi xe (MANAGER) có thẩm quyền điều hành toàn diện trên bãi được phân công
+            duty = StaffDuties.Both;
+        }
+        else
+        {
+            // Nhân viên vận hành (STAFF): Mặc định quyền tối thiểu GATE (không cấp mặc định BOTH) nếu chưa chỉ định
+            duty = string.IsNullOrWhiteSpace(request.Duty)
+                ? StaffDuties.Gate
+                : request.Duty.Trim().ToUpperInvariant();
+
+            if (!StaffDuties.IsValid(duty))
+            {
+                return (false, $"Nhiệm vụ trực ca '{request.Duty}' không hợp lệ. Chỉ chấp nhận các giá trị: GATE, SLOT_VERIFIER, hoặc BOTH.", null);
+            }
+        }
+
         var targetLot = await _context.ParkingLots
             .FirstOrDefaultAsync(l => l.Id == request.LotId, ct);
 
@@ -89,6 +108,7 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             {
                 UserId = targetUser.Id,
                 LotId = targetLot.Id,
+                Duty = duty,
                 AssignedBy = actorId,
                 AssignedAt = DateTime.UtcNow,
                 IsActive = true,
@@ -343,6 +363,7 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             AssignedByUsername = assignedByUsername,
             AssignedAt = a.AssignedAt,
             IsActive = a.IsActive,
+            Duty = a.Duty,
             RevokedBy = a.RevokedBy,
             RevokedByUsername = revokedByUsername,
             RevokedAt = a.RevokedAt,

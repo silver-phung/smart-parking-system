@@ -95,5 +95,12 @@ public class LotCapacityDto
     public int? PhysicalEmptySlotsCount { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? UnassignedSessionsCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ProposedSafetyBuffer { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DiscrepancyNotes { get; set; }
 }
+

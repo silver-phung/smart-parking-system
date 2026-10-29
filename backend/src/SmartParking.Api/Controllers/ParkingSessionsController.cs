@@ -215,6 +215,194 @@ public class ParkingSessionsController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Lấy danh sách các phiên đỗ đang chờ gán/xác minh ô đỗ (xe vãng lai đã check-in qua cổng nhưng chưa được gán ô).
+    /// Dành cho ADMIN, MANAGER hoặc STAFF có quyền SLOT_VERIFIER tại bãi đỗ xe này.
+    /// </summary>
+    [HttpGet("unmatched")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
+    [ProducesResponseType(typeof(IReadOnlyList<UnmatchedSessionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetUnmatchedSessions([FromQuery] int lotId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
+
+        var result = await _sessionService.GetUnmatchedSessionsAsync(lotId, actorId, actorRole, ct);
+        return Ok(new
+        {
+            message = "Lấy danh sách phiên chờ xếp ô thành công.",
+            data = result
+        });
+    }
+
+    /// <summary>
+    /// Lấy danh sách các ô đỗ đang có trạng thái vật lý OCCUPIED nhưng chưa được liên kết với phiên gửi xe ACTIVE/PAID nào.
+    /// Dành cho ADMIN, MANAGER hoặc STAFF có quyền SLOT_VERIFIER tại bãi đỗ xe này.
+    /// </summary>
+    [HttpGet("unmatched-occupied-slots")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
+    [ProducesResponseType(typeof(IReadOnlyList<UnmatchedSlotDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetUnmatchedOccupiedSlots([FromQuery] int lotId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
+
+        var result = await _sessionService.GetUnmatchedOccupiedSlotsAsync(lotId, actorId, actorRole, ct);
+        return Ok(new
+        {
+            message = "Lấy danh sách ô đỗ có xe chưa đối soát thành công.",
+            data = result
+        });
+    }
+
+    /// <summary>
+    /// Nhân viên xác minh và liên kết phiên gửi xe vào ô đỗ thực tế.
+    /// Cập nhật ô đỗ sang OCCUPIED và hoàn tất lệnh điều phối.
+    /// Dành cho ADMIN, MANAGER hoặc STAFF có quyền SLOT_VERIFIER tại bãi đỗ xe này.
+    /// </summary>
+    [HttpPost("{id:long}/verify-slot")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
+    [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> VerifySessionSlot(long id, [FromBody] VerifySessionSlotRequestDto request, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        var (success, message, session) = await _sessionService.VerifySessionSlotAsync(id, request, actorId, actorRole, clientIp, ct);
+        if (!success)
+        {
+            if (message.Contains("không có quyền"))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message });
+            }
+            if (message.Contains("Không tìm thấy"))
+            {
+                return NotFound(new { message });
+            }
+            if (message.Contains("Không thể gán trùng lặp") || message.Contains("hiện đang được liên kết"))
+            {
+                return Conflict(new { message });
+            }
+            return BadRequest(new { message });
+        }
+
+        return Ok(new
+        {
+            message,
+            data = session
+        });
+    }
+
+    /// <summary>
+    /// Nhân viên ghi nhận xe đỗ sai ô và điều chỉnh sang ô thực tế.
+    /// Giải phóng ô cũ về EMPTY, chuyển ô thực tế sang OCCUPIED, và cập nhật lệnh điều phối sang WRONG_SLOT với audit trail.
+    /// Dành cho ADMIN, MANAGER hoặc STAFF có quyền SLOT_VERIFIER tại bãi đỗ xe này.
+    /// </summary>
+    [HttpPost("{id:long}/report-wrong-slot")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
+    [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ReportWrongSlot(long id, [FromBody] ReportWrongSlotSessionRequestDto request, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        var (success, message, session) = await _sessionService.ReportSessionWrongSlotAsync(id, request, actorId, actorRole, clientIp, ct);
+        if (!success)
+        {
+            if (message.Contains("không có quyền"))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message });
+            }
+            if (message.Contains("Không tìm thấy"))
+            {
+                return NotFound(new { message });
+            }
+            if (message.Contains("đang được liên kết với phiên") || message.Contains("Vui lòng xử lý xung đột"))
+            {
+                return Conflict(new { message });
+            }
+            return BadRequest(new { message });
+        }
+
+        return Ok(new
+        {
+            message,
+            data = session
+        });
+    }
+
+    /// <summary>
+    /// Ghi nhận xác nhận thanh toán hoàn tất (Financial Clearance) từ module Thanh toán của Nam Anh.
+    /// Cập nhật TotalFee, PaidAt, chuyển trạng thái sang PAID để đủ điều kiện mở cổng khi check-out.
+    /// Dành cho ADMIN, MANAGER hoặc STAFF.
+    /// </summary>
+    [HttpPost("{id:long}/payment-clearance")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
+    [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RecordPaymentClearance(long id, [FromBody] PaymentClearanceRequestDto request, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        var (success, message, session) = await _sessionService.RecordPaymentClearanceAsync(
+            id, request.AmountPaid, request.TransactionRef, request.PaymentMethod, actorId, actorRole, clientIp, ct);
+
+        if (!success)
+        {
+            if (message.Contains("Không tìm thấy"))
+            {
+                return NotFound(new { message });
+            }
+            if (message.Contains("đã kết thúc") || message.Contains("đã bị hủy"))
+            {
+                return Conflict(new { message });
+            }
+            return BadRequest(new { message });
+        }
+
+        return Ok(new
+        {
+            message,
+            data = session
+        });
+    }
+
     private long? GetCurrentUserId()
     {
         var claimValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value

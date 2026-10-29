@@ -57,7 +57,8 @@ public class PerLotAuthorizationTests
             LotId = lot1.Id,
             AssignedBy = admin.Id,
             AssignedAt = DateTime.UtcNow,
-            IsActive = true
+            IsActive = true,
+            Duty = StaffDuties.Both
         };
 
         // Staff 2 assigned to Lot 2 (active)
@@ -68,7 +69,8 @@ public class PerLotAuthorizationTests
             LotId = lot2.Id,
             AssignedBy = admin.Id,
             AssignedAt = DateTime.UtcNow,
-            IsActive = true
+            IsActive = true,
+            Duty = StaffDuties.Both
         };
 
         // Revoked Staff assignment to Lot 1 (inactive)
@@ -218,7 +220,7 @@ public class PerLotAuthorizationTests
     [Fact]
     public async Task CheckOut_CrossLotStaff_Forbidden()
     {
-        var (_, sessionService, _, _, admin, staff1, staff2, _, _, lot1, _, slot1, _, _) = await SetupPerLotEnvironmentAsync();
+        var (_, sessionService, _, context, admin, staff1, staff2, _, _, lot1, _, slot1, _, _) = await SetupPerLotEnvironmentAsync();
 
         // Tạo phiên tại Lot 1
         var (sIn, _, session) = await sessionService.CheckInAsync(new CheckInRequestDto
@@ -234,7 +236,12 @@ public class PerLotAuthorizationTests
         Assert.False(sOut2);
         Assert.Contains("không có quyền", msgOut2);
 
-        // Staff 1 (Lot 1) check-out -> Thành công
+        // Staff 1 (Lot 1) check-out -> Thành công khi phiên đã hoàn tất thanh toán
+        var sessionEntity = await context.ParkingSessions.FindAsync(session.Id);
+        sessionEntity!.Status = SessionStatuses.Paid;
+        sessionEntity.PaidAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
         var (sOut1, _, _) = await sessionService.CheckOutAsync(session.Id, new CheckOutRequestDto(), staff1.Id, Roles.Staff, "127.0.0.1");
         Assert.True(sOut1);
     }
