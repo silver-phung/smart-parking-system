@@ -116,9 +116,6 @@ public class ParkingEventService
         await _sessionRepo.AddAsync(session, ct);
         await WriteLogAsync(request, sessionId, authenticatedActorId, EventProcessingStatus.Accepted, null, ct);
 
-        // Day 8: Thông báo bridge đồng bộ sang module của Phụng (NoOp cho đến khi merge)
-        await _bridge.OnVehicleEnteredAsync(request, sessionId, ct);
-
         return new IngestEventResponse
         {
             Success          = true,
@@ -223,8 +220,8 @@ public class ParkingEventService
             slotLock.Release();
         }
 
-        // Day 8: Đồng bộ sang module điều phối / đỗ xe
-        await _bridge.OnSlotParkedAsync(request, request.SessionId, ct);
+        await _bridge.OnParkingVerifiedAsync(
+            request, request.SessionId, authenticatedActorId, ct);
 
         return new IngestEventResponse
         {
@@ -267,9 +264,6 @@ public class ParkingEventService
 
         await _sessionRepo.UpdateAsync(session, ct);
         await WriteLogAsync(request, request.SessionId, authenticatedActorId, EventProcessingStatus.Accepted, null, ct);
-
-        // Day 8: Đồng bộ sang module tính phí / giải phóng slot của Phụng
-        await _bridge.OnVehicleExitedAsync(request, request.SessionId, ct);
 
         return new IngestEventResponse
         {

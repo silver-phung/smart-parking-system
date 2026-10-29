@@ -6,7 +6,7 @@
 //
 // LƯU Ý quan trọng về conflict với Phụng's ParkingSession entity:
 //   • Phụng's entity dùng: LotId, PlateNumber, Status = "ACTIVE/PAID/COMPLETED"
-//   • Thức's entity dùng: ParkingLotId, CarPlate, Status = "pending_slot/parked/exited"
+//   • Event projection dùng: waiting_verification/parked/exit_processing.
 //
 // Chiến lược tích hợp (sau merge):
 //   Option A – Dùng bảng riêng "parking_event_sessions" cho module Thức (khuyến nghị)
@@ -50,9 +50,18 @@ public class EfParkingSessionRepository : IParkingSessionRepository
         return await _db.EventParkingSessions
             .AsNoTracking()
             .FirstOrDefaultAsync(s =>
-                s.CarPlate == normalized &&
-                (s.Status == ParkingSessionStatus.PendingSlot ||
-                 s.Status == ParkingSessionStatus.Parked), ct);
+                s.CarPlate != "" && s.CarPlate == normalized, ct);
+    }
+
+    public async Task<ParkingSession?> FindActiveBySlotAsync(
+        int parkingLotId, string slotCode, CancellationToken ct = default)
+    {
+        return await _db.EventParkingSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s =>
+                s.ParkingLotId == parkingLotId &&
+                s.Status == ParkingSessionStatus.Parked &&
+                s.SlotCode == slotCode, ct);
     }
 
     public async Task AddAsync(ParkingSession session, CancellationToken ct = default)
@@ -75,8 +84,9 @@ public class EfParkingSessionRepository : IParkingSessionRepository
             .AsNoTracking()
             .Where(s =>
                 s.ParkingLotId == parkingLotId &&
-                (s.Status == ParkingSessionStatus.PendingSlot ||
-                 s.Status == ParkingSessionStatus.Parked))
+                (s.Status == ParkingSessionStatus.WaitingVerification ||
+                 s.Status == ParkingSessionStatus.Parked ||
+                 s.Status == ParkingSessionStatus.ExitProcessing))
             .OrderBy(s => s.EnteredAtUtc)
             .ToListAsync(ct);
     }

@@ -199,20 +199,19 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(EventProcessingStatus.PendingVerification, result.ProcessingStatus);
     }
 
-    // ─── Sprint 3 Day 6-9: 3D Visualization / ParkingSlots API smoke tests ───
+    // ─── 3D viewer: legacy mock routes must not be an operational source ───
 
     [Fact]
-    public async Task GetParkingSlots_Returns200WithSlotsList()
+    public async Task GetLegacyParkingSlots_ReturnsGoneWithoutSampleData()
     {
         var response = await _client.GetAsync("/api/ParkingSlots?lotId=1&floorId=B1");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
-        Assert.Contains("slots", content);
-        Assert.Contains("B1-A01", content);
+        Assert.DoesNotContain("B1-A01", content);
     }
 
     [Fact]
-    public async Task PatchParkingSlotStatus_UpdatesPhysicalStatus()
+    public async Task PatchLegacyParkingSlotStatus_ReturnsGone()
     {
         var updateRequest = new
         {
@@ -221,20 +220,16 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         };
 
         var response = await _client.PatchAsJsonAsync("/api/ParkingSlots/B1-A02/status", updateRequest);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var content = await response.Content.ReadAsStringAsync();
-        Assert.Contains("51F-999.88", content);
-        Assert.Contains("OCCUPIED", content);
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
     }
 
     [Fact]
-    public async Task GetParkingLotsMetadata_ReturnsAllThreeLotsWithFloorConfigurations()
+    public async Task GetLegacyParkingLots_DoesNotInventThreeLots()
     {
         var response = await _client.GetAsync("/api/ParkingSlots/lots");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
-        Assert.Contains("Bãi 1", content);
-        Assert.Contains("Bãi 2", content);
-        Assert.Contains("Bãi 3", content);
+        Assert.DoesNotContain("Vincom Landmark 81", content);
+        Assert.DoesNotContain("Aeon Mall", content);
     }
 }

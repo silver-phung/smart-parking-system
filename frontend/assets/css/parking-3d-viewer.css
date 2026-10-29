@@ -431,6 +431,26 @@
   transition: opacity 0.4s;
 }
 
+.p3d-data-state {
+  position: absolute;
+  right: 14px;
+  bottom: 70px;
+  z-index: 18;
+  max-width: min(420px, calc(100% - 28px));
+  padding: 7px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #cbd5e1;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.p3d-data-state:empty { display: none; }
+.p3d-data-state.state-fresh { border-color: rgba(16, 185, 129, 0.55); color: #a7f3d0; }
+.p3d-data-state.state-empty { border-color: rgba(148, 163, 184, 0.55); }
+.p3d-data-state.state-error { border-color: rgba(239, 68, 68, 0.65); color: #fecaca; }
+
 .p3d-spinner {
   width: 40px;
   height: 40px;

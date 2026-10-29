@@ -18,20 +18,17 @@
  *   5. Chế độ Camera góc nhìn thực tế người đi bộ / người lái xe trong hầm (Eye-Level Garage Perspective)
  *      kết hợp chuyển đổi mượt mà sang góc nhìn toàn cảnh (Overview 3D) và mặt bằng (Top-down 2D).
  *      Tự động ẩn trần khi ở trên cao để dễ dàng quản lý theo dõi slot đỗ.
- *   6. 3 BÃI MẪU:
- *       • Bãi 1: 2 Tầng (Hầm B1, Hầm B2) - Tổng slot theo DB (64 slots).
- *       • Bãi 2: 3 Tầng (Hầm B1, Hầm B2, Hầm B3) - Số slot random (82 slots).
- *       • Bãi 3: 4 Tầng (Hầm B1, Hầm B2, Hầm B3, Hầm B4) - Số slot random (112 slots).
+ *   6. Sơ đồ bãi/tầng/slot được truyền từ API; viewer không tự sinh dữ liệu vận hành.
  *   7. CỤM THANG MÁY KÍNH & CẦU THANG BỘ THOÁT HIỂM:
  *       • Bảng nút bấm 3D Lên/Xuống tương tác ngay tại cửa thang.
  *       • Widget nổi gắn neo 3D (Floating Elevator Call Widget) chuyển tầng mượt mà.
  *       • Hoạt cảnh camera di chuyển theo phương đứng mô phỏng thang máy.
- *   8. 4 TRẠNG THÁI VẬT LÝ + ĐẶC BIỆT:
+ *   8. 4 TRẠNG THÁI VẬT LÝ + lớp assignment riêng:
  *       🟢 Trống (Available)
  *       🔴 Có xe (Occupied) -> Mesh ô tô 3D chân thực, đèn xe, biển số
  *       🟡 Bảo trì (Maintenance) -> Cọc tiêu phản quang 3D
  *       ⚪ Tạm khóa (Unavailable) -> Gạch chéo cảnh báo
- *       ⏳ Chờ vào (Reserved) -> Khung viền nhấp nháy phát sáng & Beacon 3D
+ *       ⏳ Đã phân ô -> assignmentStatus, không phải PhysicalStatus thứ năm
  * ==========================================================
  */
 
@@ -46,38 +43,39 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  // Cấu hình 3 bãi đỗ xe mẫu
-  var LOT_CONFIGS = {
-    1: {
-      id: 1,
-      name: 'Bãi 1: Hầm ngầm FPT Q9 (Mô hình Chuẩn)',
-      desc: 'Mô hình 2 tầng hầm chuẩn DB (B1: 32 ô, B2: 32 ô = 64 ô)',
-      floors: ['B1', 'B2'],
-      floorLabels: { B1: 'Hầm B1', B2: 'Hầm B2' }
-    },
-    2: {
-      id: 2,
-      name: 'Bãi 2: Vincom Landmark 81 Underground',
-      desc: 'Mô hình 3 tầng hầm (B1, B2, B3) số slot ngẫu nhiên (82 ô)',
-      floors: ['B1', 'B2', 'B3'],
-      floorLabels: { B1: 'Hầm B1', B2: 'Hầm B2', B3: 'Hầm B3' }
-    },
-    3: {
-      id: 3,
-      name: 'Bãi 3: Aeon Mall Mega Parking Hub',
-      desc: 'Mô hình 4 tầng ngầm (B1, B2, B3, B4) số slot ngẫu nhiên (112 ô)',
-      floors: ['B1', 'B2', 'B3', 'B4'],
-      floorLabels: { B1: 'Hầm B1', B2: 'Hầm B2', B3: 'Hầm B3', B4: 'Hầm B4' }
-    }
-  };
-
   var STATUS_COLORS = {
     EMPTY:       { hex: 0x10b981, css: '#10b981', label: 'Trống', code: 'free' },
     OCCUPIED:    { hex: 0xef4444, css: '#ef4444', label: 'Có xe', code: 'occ' },
-    RESERVED:    { hex: 0x06b6d4, css: '#06b6d4', label: 'Chờ xe vào', code: 'res' },
     MAINTENANCE: { hex: 0xf59e0b, css: '#f59e0b', label: 'Bảo trì', code: 'blk' },
     UNAVAILABLE: { hex: 0x6b7280, css: '#6b7280', label: 'Tạm khóa', code: 'off' }
   };
+
+  function normalizeLotConfigs(options) {
+    var result = {};
+    var supplied = Array.isArray(options.lots) ? options.lots : [];
+    supplied.forEach(function (lot) {
+      var floors = Array.isArray(lot.floors) && lot.floors.length ? lot.floors : [options.floorId || 'B1'];
+      result[lot.id] = {
+        id: lot.id,
+        name: lot.name || ('Bãi ' + lot.id),
+        desc: lot.description || '',
+        floors: floors,
+        floorLabels: lot.floorLabels || {}
+      };
+    });
+    if (!result[options.lotId || 1]) {
+      var id = options.lotId || 1;
+      var floor = options.floorId || 'B1';
+      result[id] = {
+        id: id,
+        name: options.lotName || 'Bãi đỗ xe',
+        desc: '',
+        floors: Array.isArray(options.floors) && options.floors.length ? options.floors : [floor],
+        floorLabels: options.floorLabels || {}
+      };
+    }
+    return result;
+  }
 
   /**
    * Class Parking3DViewer
@@ -94,10 +92,11 @@
     }
 
     var initialLotId = options.lotId || 1;
-    var lotCfg = LOT_CONFIGS[initialLotId] || LOT_CONFIGS[1];
+    this.lotConfigs = normalizeLotConfigs(options);
+    var lotCfg = this.lotConfigs[initialLotId];
 
     this.options = {
-      apiEndpoint: options.apiEndpoint || '/api/ParkingSlots',
+      apiEndpoint: options.apiEndpoint || '/api/v1/parking-floors/{floorId}/slots',
       lotId: initialLotId,
       lotName: lotCfg.name,
       floorId: options.floorId || lotCfg.floors[0],
@@ -105,7 +104,9 @@
       showControls: options.showControls !== false,
       onSlotClick: options.onSlotClick || null,
       onSlotHover: options.onSlotHover || null,
-      onFloorChange: options.onFloorChange || null
+      onFloorChange: options.onFloorChange || null,
+      onDataStateChange: options.onDataStateChange || null,
+      showInternalDetails: options.showInternalDetails === true
     };
 
     this.slots = [];
@@ -113,6 +114,7 @@
     this.carMeshes = {};
     this.coneMeshes = {};
     this.pulsingSlots = [];
+    this.lastSyncedAt = null;
     this.activeFilter = 'ALL';
     this.currentViewMode = 'FIRST_PERSON'; // 'FIRST_PERSON' | 'DRIVEWAY' | 'OVERVIEW' | 'TOP_DOWN'
     this.isTransitioning = false;
@@ -182,8 +184,14 @@
     // Loader
     this.loaderEl = document.createElement('div');
     this.loaderEl.className = 'p3d-loader';
-    this.loaderEl.innerHTML = '<div class="p3d-spinner"></div><span>Đang dựng không gian hầm đỗ xe 3D chuẩn Sketchfab...</span>';
+    this.loaderEl.innerHTML = '<div class="p3d-spinner"></div><span>Đang tải sơ đồ bãi đỗ xe...</span>';
     this.container.appendChild(this.loaderEl);
+
+    this.dataStateEl = document.createElement('div');
+    this.dataStateEl.className = 'p3d-data-state';
+    this.dataStateEl.setAttribute('role', 'status');
+    this.dataStateEl.setAttribute('aria-live', 'polite');
+    this.container.appendChild(this.dataStateEl);
 
     // Top HUD
     if (this.options.showStats) {
@@ -277,10 +285,10 @@
    */
   Parking3DViewer.prototype._renderTopHUD = function () {
     var self = this;
-    var lotCfg = LOT_CONFIGS[this.options.lotId] || LOT_CONFIGS[1];
+    var lotCfg = this.lotConfigs[this.options.lotId];
 
-    var lotOptions = Object.keys(LOT_CONFIGS).map(function (k) {
-      var c = LOT_CONFIGS[k];
+    var lotOptions = Object.keys(this.lotConfigs).map(function (k) {
+      var c = self.lotConfigs[k];
       return '<option value="' + c.id + '" ' + (c.id === self.options.lotId ? 'selected' : '') + '>' + c.name + '</option>';
     }).join('');
 
@@ -298,7 +306,7 @@
       '  <span class="p3d-pill" data-filter="ALL" title="Xem tất cả">Tất cả: <b id="statTotal">0</b></span>',
       '  <span class="p3d-pill active" data-filter="EMPTY" title="Lọc ô trống"><i class="dot dot-free"></i> Trống: <b id="statFree">0</b></span>',
       '  <span class="p3d-pill" data-filter="OCCUPIED" title="Lọc ô có xe"><i class="dot dot-occ"></i> Có xe: <b id="statOcc">0</b></span>',
-      '  <span class="p3d-pill" data-filter="RESERVED" title="Lọc ô đã phân chờ vào"><i class="dot dot-res"></i> Chờ vào: <b id="statRes">0</b></span>',
+      '  <span class="p3d-pill" data-filter="ASSIGNED" title="Lọc ô đã phân nhưng chưa xác nhận đỗ"><i class="dot dot-res"></i> Đã phân: <b id="statRes">0</b></span>',
       '  <span class="p3d-pill" data-filter="MAINTENANCE" title="Lọc ô bảo trì"><i class="dot dot-blk"></i> Bảo trì: <b id="statBlk">0</b></span>',
       '</div>'
     ].join('');
@@ -328,7 +336,7 @@
    */
   Parking3DViewer.prototype._updateElevatorWidget = function () {
     var self = this;
-    var lotCfg = LOT_CONFIGS[this.options.lotId] || LOT_CONFIGS[1];
+    var lotCfg = this.lotConfigs[this.options.lotId];
     var floors = lotCfg.floors;
     var currentIdx = floors.indexOf(this.options.floorId);
     if (currentIdx === -1) currentIdx = 0;
@@ -1150,10 +1158,10 @@
   };
 
   /**
-   * Chuyển Bãi đỗ xe (1, 2 hoặc 3)
+   * Chuyển bãi theo metadata đã nhận từ ứng dụng/API.
    */
   Parking3DViewer.prototype.setLot = function (lotId) {
-    var lotCfg = LOT_CONFIGS[lotId];
+    var lotCfg = this.lotConfigs[lotId];
     if (!lotCfg) return;
 
     this.options.lotId = lotId;
@@ -1169,7 +1177,7 @@
    * Chuyển tầng hầm
    */
   Parking3DViewer.prototype.setFloor = function (floorId, direction) {
-    var lotCfg = LOT_CONFIGS[this.options.lotId] || LOT_CONFIGS[1];
+    var lotCfg = this.lotConfigs[this.options.lotId];
     if (lotCfg.floors.indexOf(floorId) === -1) return;
 
     var currentIdx = lotCfg.floors.indexOf(this.options.floorId);
@@ -1265,7 +1273,19 @@
       this.loaderEl.style.pointerEvents = 'auto';
     }
 
-    var url = this.options.apiEndpoint + '?lotId=' + this.options.lotId + '&floorId=' + targetFloor;
+    this._setDataState('loading', 'Đang tải dữ liệu máy chủ...');
+    var endpoint = this.options.apiEndpoint;
+    var hasTemplate = endpoint.indexOf('{floorId}') >= 0 || endpoint.indexOf('{lotId}') >= 0;
+    var url = endpoint
+      .replace('{floorId}', encodeURIComponent(targetFloor))
+      .replace('{lotId}', encodeURIComponent(this.options.lotId));
+    if (!hasTemplate) {
+      url += (url.indexOf('?') >= 0 ? '&' : '?') +
+        'lotId=' + encodeURIComponent(this.options.lotId) +
+        '&floorId=' + encodeURIComponent(targetFloor);
+    } else if (endpoint.indexOf('{lotId}') < 0) {
+      url += (url.indexOf('?') >= 0 ? '&' : '?') + 'lotId=' + encodeURIComponent(this.options.lotId);
+    }
 
     fetch(url)
       .then(function (res) {
@@ -1273,15 +1293,22 @@
         return res.json();
       })
       .then(function (data) {
-        var slotsList = data.slots || data.data || (Array.isArray(data) ? data : []);
-        if (slotsList.length === 0) {
-          self._renderFallbackSlots(self.options.lotId, targetFloor);
-        } else {
-          self._renderSlots(slotsList);
-        }
+        var slotsList = data.slots || (data.data && data.data.items) || data.data || (Array.isArray(data) ? data : []);
+        if (!Array.isArray(slotsList)) throw new Error('Payload slot không hợp lệ.');
+        self.lastSyncedAt = data.snapshotAtUtc || data.updatedAtUtc || new Date().toISOString();
+        self._renderSlots(slotsList);
+        self._setDataState(
+          slotsList.length ? 'fresh' : 'empty',
+          slotsList.length ? 'Đã đồng bộ ' + new Date(self.lastSyncedAt).toLocaleTimeString('vi-VN') : 'Chưa có dữ liệu slot được xác nhận.'
+        );
       })
-      .catch(function () {
-        self._renderFallbackSlots(self.options.lotId, targetFloor);
+      .catch(function (error) {
+        var suffix = self.lastSyncedAt
+          ? ' Đang giữ snapshot cuối lúc ' + new Date(self.lastSyncedAt).toLocaleTimeString('vi-VN') + '.'
+          : ' Không có dữ liệu để hiển thị.';
+        self._setDataState('error', 'Không thể đồng bộ dữ liệu.' + suffix);
+        if (!self.lastSyncedAt) self._renderSlots([]);
+        if (window.console) console.error('[Parking3DViewer] ' + error.message);
       })
       .finally(function () {
         if (self.loaderEl) {
@@ -1291,61 +1318,14 @@
       });
   };
 
-  /**
-   * Dữ liệu fallback cho 3 bãi mẫu
-   */
-  Parking3DViewer.prototype._renderFallbackSlots = function (lotId, floorId) {
-    var sampleSlots = [];
-    var countPerRow = 16; // Bãi 1: 16 x 2 = 32 ô/tầng (chuẩn DB)
-
-    if (lotId === 2) {
-      countPerRow = floorId === 'B1' ? 14 : (floorId === 'B2' ? 13 : 14);
-    } else if (lotId === 3) {
-      countPerRow = floorId === 'B1' ? 14 : (floorId === 'B2' ? 14 : (floorId === 'B3' ? 14 : 14));
+  Parking3DViewer.prototype._setDataState = function (state, message) {
+    if (this.dataStateEl) {
+      this.dataStateEl.className = 'p3d-data-state state-' + state;
+      this.dataStateEl.textContent = message || '';
     }
-
-    var spacing = 3.2;
-    var startX = -((countPerRow - 1) * spacing) / 2.0;
-
-    // Dãy A: Phía Bắc (Z = -7.8), quay đầu về phía lối đi (+Z)
-    for (var i = 1; i <= countPerRow; i++) {
-      var codeA = floorId + '-A' + (i < 10 ? '0' : '') + i;
-      var stA = (i % 3 === 0) ? 'OCCUPIED' : (i === 3 ? 'RESERVED' : (i === 8 ? 'MAINTENANCE' : 'EMPTY'));
-      sampleSlots.push({
-        id: i,
-        slotCode: codeA,
-        physicalStatus: stA,
-        vehicleType: 'car',
-        positionX: startX + ((i - 1) * spacing),
-        positionY: 0,
-        positionZ: -7.8,
-        rotationY: 0,
-        currentCarPlate: stA === 'OCCUPIED' ? '51F-123.' + (i * 11) : (stA === 'RESERVED' ? '72A-888.99' : null),
-        vehicleModel: stA === 'OCCUPIED' ? 'Toyota Vios' : null,
-        vehicleColor: (i % 2 === 0) ? 'white' : 'black'
-      });
+    if (this.options.onDataStateChange) {
+      this.options.onDataStateChange({ state: state, message: message, lastSyncedAt: this.lastSyncedAt });
     }
-
-    // Dãy B: Phía Nam (Z = +7.8), quay đầu về phía lối đi (-Z)
-    for (var j = 1; j <= countPerRow; j++) {
-      var codeB = floorId + '-B' + (j < 10 ? '0' : '') + j;
-      var stB = (j % 4 === 0) ? 'OCCUPIED' : (j === 5 ? 'RESERVED' : (j === 9 ? 'UNAVAILABLE' : 'EMPTY'));
-      sampleSlots.push({
-        id: 100 + j,
-        slotCode: codeB,
-        physicalStatus: stB,
-        vehicleType: j <= 4 ? 'ev' : 'car',
-        positionX: startX + ((j - 1) * spacing),
-        positionY: 0,
-        positionZ: 7.8,
-        rotationY: 180,
-        currentCarPlate: stB === 'OCCUPIED' ? '30H-999.' + (j * 11) : (stB === 'RESERVED' ? '51K-777.66' : null),
-        vehicleModel: stB === 'OCCUPIED' ? 'VinFast VF8' : null,
-        vehicleColor: 'emerald'
-      });
-    }
-
-    this._renderSlots(sampleSlots);
   };
 
   /**
@@ -1353,7 +1333,15 @@
    */
   Parking3DViewer.prototype._renderSlots = function (slotsData) {
     var self = this;
-    this.slots = slotsData;
+    this.slots = slotsData.map(function (slot) {
+      var normalized = Object.assign({}, slot);
+      var physical = String(normalized.physicalStatus || 'EMPTY').toUpperCase();
+      if (physical === 'RESERVED') {
+        normalized.physicalStatus = 'EMPTY';
+        normalized.assignmentStatus = normalized.assignmentStatus || 'ASSIGNED';
+      }
+      return normalized;
+    });
 
     if (this.slotsGroup) {
       this.scene.remove(this.slotsGroup);
@@ -1364,7 +1352,7 @@
     this.coneMeshes = {};
     this.pulsingSlots = [];
 
-    slotsData.forEach(function (slot) {
+    this.slots.forEach(function (slot) {
       self._createSlotMesh(slot);
     });
 
@@ -1377,7 +1365,7 @@
    *   - Vạch kẻ ô đỗ song song (Double white bay lines)
    *   - Thanh chặn bánh xe cao su chống va chạm tường (Rubber tire stoppers)
    *   - Mesh xe ô tô 3D chân thực khi OCCUPIED
-   *   - Khung viền nhấp nháy phát sáng khi RESERVED
+   *   - Khung viền nhấp nháy khi có assignment riêng và physical vẫn EMPTY
    *   - Cọc tiêu an toàn khi MAINTENANCE
    */
   Parking3DViewer.prototype._createSlotMesh = function (slot) {
@@ -1390,6 +1378,9 @@
     var length = 5.4;
     var status = (slot.physicalStatus || 'EMPTY').toUpperCase();
     var statusCfg = STATUS_COLORS[status] || STATUS_COLORS.EMPTY;
+    var assignmentStatus = (slot.assignmentStatus || '').toUpperCase();
+    var isAssigned = status === 'EMPTY' &&
+      (assignmentStatus === 'ASSIGNED' || assignmentStatus === 'HELD' || assignmentStatus === 'RESERVED');
 
     // 1. Mặt đệm sàn ô đỗ (subtle colored status pad)
     var padGeo = new THREE.PlaneGeometry(width - 0.2, length - 0.2);
@@ -1398,7 +1389,7 @@
       roughness: 0.8,
       metalness: 0.1,
       transparent: true,
-      opacity: status === 'OCCUPIED' ? 0.25 : (status === 'RESERVED' ? 0.38 : (status === 'EMPTY' ? 0.15 : 0.35))
+      opacity: status === 'OCCUPIED' ? 0.25 : (isAssigned ? 0.38 : (status === 'EMPTY' ? 0.15 : 0.35))
     });
     var pad = new THREE.Mesh(padGeo, padMat);
     pad.rotation.x = -Math.PI / 2;
@@ -1408,7 +1399,7 @@
 
     // 2. VẠCH KẺ Ô ĐỖ TRẮNG KẺ ĐÔI (Double Parallel White Bay Lines)
     var lineMat = new THREE.MeshBasicMaterial({
-      color: status === 'RESERVED' ? 0x06b6d4 : (slot.vehicleType === 'ev' ? 0x10b981 : 0xffffff)
+      color: isAssigned ? 0x06b6d4 : (slot.vehicleType === 'ev' ? 0x10b981 : 0xffffff)
     });
     var lineWidth = 0.12;
 
@@ -1472,12 +1463,12 @@
       cone.position.set(0, 0, 0);
       group.add(cone);
       this.coneMeshes[slot.slotCode] = cone;
-    } else if (status === 'RESERVED') {
+    } else if (isAssigned) {
       var pulseFrame = this._createPulsingFrame(width, length);
       group.add(pulseFrame);
       this.pulsingSlots.push({ frame: pulseFrame, pad: pad, slotCode: slot.slotCode });
 
-      var beacon = this._createReservedBeacon(slot.currentCarPlate || 'ĐANG ĐẾN');
+      var beacon = this._createReservedBeacon('ĐÃ PHÂN');
       beacon.position.set(0, 1.8, 0);
       group.add(beacon);
     } else if (status === 'UNAVAILABLE') {
@@ -1495,10 +1486,12 @@
   Parking3DViewer.prototype._create3DCarMesh = function (slot) {
     var car = new THREE.Group();
     var color = 0xf8fafc;
-    if (slot.vehicleColor === 'black') color = 0x1e293b;
-    else if (slot.vehicleColor === 'blue') color = 0x2563eb;
-    else if (slot.vehicleColor === 'red') color = 0xdc2626;
-    else if (slot.vehicleColor === 'emerald') color = 0x059669;
+    if (this.options.showInternalDetails) {
+      if (slot.vehicleColor === 'black') color = 0x1e293b;
+      else if (slot.vehicleColor === 'blue') color = 0x2563eb;
+      else if (slot.vehicleColor === 'red') color = 0xdc2626;
+      else if (slot.vehicleColor === 'emerald') color = 0x059669;
+    }
 
     var carWidth = 2.0;
     var carLength = 4.4;
@@ -1560,7 +1553,7 @@
     car.add(tl2);
 
     // Biển số xe trước
-    if (slot.currentCarPlate) {
+    if (this.options.showInternalDetails && slot.currentCarPlate) {
       var plateSprite = this._createLicensePlateSprite(slot.currentCarPlate);
       plateSprite.position.set(0, 0.55, carLength / 2 + 0.06);
       car.add(plateSprite);
@@ -1700,7 +1693,7 @@
     ctx.font = 'bold 24px "JetBrains Mono", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(plate || '51F-123.45', 80, 24);
+    ctx.fillText(plate || 'NỘI BỘ', 80, 24);
 
     var texture = new THREE.CanvasTexture(canvas);
     var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
@@ -1720,10 +1713,11 @@
 
     for (var i = 0; i < total; i++) {
       var s = (this.slots[i].physicalStatus || 'EMPTY').toUpperCase();
+      var assignment = (this.slots[i].assignmentStatus || '').toUpperCase();
       if (s === 'EMPTY') free++;
       else if (s === 'OCCUPIED') occ++;
-      else if (s === 'RESERVED') res++;
       else if (s === 'MAINTENANCE' || s === 'UNAVAILABLE') blk++;
+      if (assignment === 'ASSIGNED' || assignment === 'HELD' || assignment === 'RESERVED') res++;
     }
 
     var elTotal = document.getElementById('statTotal');
@@ -1751,7 +1745,9 @@
       if (!mesh) return;
 
       var st = (slot.physicalStatus || 'EMPTY').toUpperCase();
-      if (statusFilter === 'ALL' || st === statusFilter) {
+      var assignment = (slot.assignmentStatus || '').toUpperCase();
+      var assigned = assignment === 'ASSIGNED' || assignment === 'HELD' || assignment === 'RESERVED';
+      if (statusFilter === 'ALL' || st === statusFilter || (statusFilter === 'ASSIGNED' && assigned)) {
         mesh.visible = true;
       } else {
         mesh.visible = false;
@@ -1774,8 +1770,9 @@
 
     slot.physicalStatus = newStatus;
     if (details) {
-      if (details.carPlate) slot.currentCarPlate = details.carPlate;
-      if (details.vehicleModel) slot.vehicleModel = details.vehicleModel;
+      if (details.assignmentStatus) slot.assignmentStatus = details.assignmentStatus;
+      if (this.options.showInternalDetails && details.carPlate) slot.currentCarPlate = details.carPlate;
+      if (this.options.showInternalDetails && details.vehicleModel) slot.vehicleModel = details.vehicleModel;
       if (details.vehicleColor) slot.vehicleColor = details.vehicleColor;
     }
 
@@ -1902,12 +1899,12 @@
       for (var j = 0; j < elevHits.length; j++) {
         var action = elevHits[j].object.userData.action;
         if (action === 'ELEV_UP') {
-          var lotCfg = LOT_CONFIGS[this.options.lotId] || LOT_CONFIGS[1];
+          var lotCfg = this.lotConfigs[this.options.lotId];
           var idx = lotCfg.floors.indexOf(this.options.floorId);
           if (idx > 0) this.setFloor(lotCfg.floors[idx - 1], 'UP');
           return;
         } else if (action === 'ELEV_DOWN') {
-          var lotCfg2 = LOT_CONFIGS[this.options.lotId] || LOT_CONFIGS[1];
+          var lotCfg2 = this.lotConfigs[this.options.lotId];
           var idx2 = lotCfg2.floors.indexOf(this.options.floorId);
           if (idx2 < lotCfg2.floors.length - 1) this.setFloor(lotCfg2.floors[idx2 + 1], 'DOWN');
           return;
@@ -1964,6 +1961,9 @@
 
     var status = (slot.physicalStatus || 'EMPTY').toUpperCase();
     var statusCfg = STATUS_COLORS[status] || STATUS_COLORS.EMPTY;
+    var assignment = (slot.assignmentStatus || '').toUpperCase();
+    var isAssigned = assignment === 'ASSIGNED' || assignment === 'HELD' || assignment === 'RESERVED';
+    var showInternal = this.options.showInternalDetails;
 
     var html = [
       '<div class="p3d-tooltip-header">',
@@ -1972,8 +1972,9 @@
       '</div>',
       '<div class="p3d-tooltip-body">',
       '  <div class="p3d-tooltip-row"><span class="label">Loại xe:</span><span class="val">' + (slot.vehicleType === 'ev' ? '⚡ Xe điện' : '🚗 Ô tô 4-7 chỗ') + '</span></div>',
-      slot.currentCarPlate ? '  <div class="p3d-tooltip-row"><span class="label">Biển số:</span><span class="val" style="font-family:monospace;color:#38bdf8">' + slot.currentCarPlate + '</span></div>' : '',
-      slot.vehicleModel ? '  <div class="p3d-tooltip-row"><span class="label">Dòng xe:</span><span class="val">' + slot.vehicleModel + '</span></div>' : '',
+      isAssigned ? '  <div class="p3d-tooltip-row"><span class="label">Điều phối:</span><span class="val">Đã phân ô, chưa xác nhận đỗ</span></div>' : '',
+      showInternal && slot.currentCarPlate ? '  <div class="p3d-tooltip-row"><span class="label">Biển số:</span><span class="val" style="font-family:monospace;color:#38bdf8">' + slot.currentCarPlate + '</span></div>' : '',
+      showInternal && slot.vehicleModel ? '  <div class="p3d-tooltip-row"><span class="label">Dòng xe:</span><span class="val">' + slot.vehicleModel + '</span></div>' : '',
       '  <div class="p3d-tooltip-row"><span class="label">Tầng:</span><span class="val">' + this.options.floorId + '</span></div>',
       '</div>'
     ].join('');
@@ -2036,7 +2037,7 @@
       this.ceilingGroup.visible = (this.camera.position.y <= 5.5);
     }
 
-    // Hiệu ứng nhấp nháy phát sáng cho ô RESERVED
+    // Hiệu ứng nhấp nháy cho lớp assignment tách khỏi trạng thái vật lý.
     if (this.pulsingSlots.length > 0) {
       var pulse = 0.5 + 0.5 * Math.sin(delta * 4.5);
       for (var i = 0; i < this.pulsingSlots.length; i++) {

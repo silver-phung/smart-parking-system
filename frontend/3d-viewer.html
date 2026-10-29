@@ -211,7 +211,7 @@
         <div class="brand-logo">3D</div>
         <div class="brand-text">
           <h1>SmartPark 3D - Không Gian Hầm Đỗ Xe Ngầm</h1>
-          <small>Mô phỏng kiến trúc Sketchfab · Thang máy & Cầu thang · Chuyển tầng 2, 3, 4 tầng</small>
+          <small>Khung 3D đọc sơ đồ và trạng thái đã lưu từ API</small>
         </div>
       </div>
       <div class="header-actions">
@@ -233,20 +233,12 @@
 
       <!-- Side Controls -->
       <aside class="side-controls">
-        <div class="side-title">3 Bãi Mẫu Tùy Chọn</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="lot-switch-btn active" data-lot="1">
-            <b>Bãi 1: Hầm ngầm FPT Q9 (2 Tầng)</b>
-            <small>Chuẩn DB: 64 slots (B1: 32 ô, B2: 32 ô)</small>
-          </button>
-          <button class="lot-switch-btn" data-lot="2">
-            <b>Bãi 2: Vincom Landmark 81 (3 Tầng)</b>
-            <small>Số slot random: 82 slots (B1, B2, B3)</small>
-          </button>
-          <button class="lot-switch-btn" data-lot="3">
-            <b>Bãi 3: Aeon Mall Mega Hub (4 Tầng)</b>
-            <small>Số slot random: 112 slots (B1, B2, B3, B4)</small>
-          </button>
+        <div class="side-title">Dữ liệu vận hành</div>
+        <div class="sim-card">
+          <h3>Snapshot từ máy chủ</h3>
+          <p style="font-size:12px;color:#94a3b8;margin:0">
+            Trang không tự sinh bãi, slot, xe hoặc biển số. Khi API lỗi, viewer giữ snapshot cuối và báo thời điểm đồng bộ.
+          </p>
         </div>
 
         <div class="sim-card">
@@ -257,16 +249,6 @@
           <div class="sim-btn-row">
             <button class="sim-btn" id="btnQuickElevUp">▲ Lên tầng trên</button>
             <button class="sim-btn" id="btnQuickElevDown">▼ Xuống tầng dưới</button>
-          </div>
-        </div>
-
-        <div class="sim-card">
-          <h3>🎮 Mô phỏng sự kiện Real-time</h3>
-          <div class="sim-btn-row">
-            <button class="sim-btn" id="btnSimPark">🚗 Đỗ ô B1-A12</button>
-            <button class="sim-btn" id="btnSimExit">💨 Rời ô B1-A12</button>
-            <button class="sim-btn" id="btnSimReserve">⏳ Phân ô B1-A03</button>
-            <button class="sim-btn" id="btnSimMaint">🟡 Bảo trì B1-A08</button>
           </div>
         </div>
 
@@ -283,7 +265,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="width:14px;height:14px;border-radius:4px;background:#06b6d4"></span>
-              <b>⏳ Chờ vào (Reserved):</b> Viền nhấp nháy phát sáng
+              <b>⏳ Đã phân ô:</b> Lớp điều phối riêng, physical vẫn Trống
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="width:14px;height:14px;border-radius:4px;background:#f59e0b"></span>
@@ -307,10 +289,6 @@
         <button id="modalCloseBtn" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer">&times;</button>
       </div>
       <div id="modalSlotBody" style="font-size:13px;line-height:1.8;color:#cbd5e1;margin-bottom:16px"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="action-btn" id="modalToggleOccBtn">Đổi thành Có xe</button>
-        <button class="action-btn" id="modalToggleFreeBtn">Đổi thành Trống</button>
-      </div>
     </div>
   </div>
 
@@ -324,21 +302,13 @@
         container: '#parking3DContainer',
         lotId: 1,
         floorId: 'B1',
-        apiEndpoint: '/api/ParkingSlots',
+        apiEndpoint: '/api/v1/parking-floors/{floorId}/slots',
+        lotName: 'Bãi đỗ xe',
+        floors: ['B1'],
+        showInternalDetails: false,
         onSlotClick: function (slot) {
           showSlotDetail(slot);
         }
-      });
-
-      // Chuyển đổi giữa 3 bãi mẫu
-      var lotBtns = document.querySelectorAll('.lot-switch-btn');
-      lotBtns.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          lotBtns.forEach(function (b) { b.classList.remove('active'); });
-          btn.classList.add('active');
-          var lotId = parseInt(btn.getAttribute('data-lot'), 10);
-          viewer.setLot(lotId);
-        });
       });
 
       // Nút gọi thang máy nhanh bên thanh bên
@@ -363,8 +333,7 @@
         document.getElementById('modalSlotBody').innerHTML = [
           '<div><b>Trạng thái:</b> ' + (slot.physicalStatus || 'EMPTY') + '</div>',
           '<div><b>Loại ô:</b> ' + (slot.vehicleType === 'ev' ? '⚡ Ô tô điện' : '🚗 Ô tô 4-7 chỗ') + '</div>',
-          slot.currentCarPlate ? '<div><b>Biển số:</b> <span style="font-family:monospace;color:#38bdf8">' + slot.currentCarPlate + '</span></div>' : '',
-          slot.vehicleModel ? '<div><b>Model:</b> ' + slot.vehicleModel + '</div>' : '',
+          slot.assignmentStatus ? '<div><b>Điều phối:</b> ' + slot.assignmentStatus + '</div>' : '',
           '<div><b>Tọa độ 3D:</b> X: ' + (slot.positionX || 0).toFixed(1) + ', Z: ' + (slot.positionZ || 0).toFixed(1) + '</div>'
         ].join('');
         modal.classList.add('active');
@@ -374,44 +343,6 @@
         modal.classList.remove('active');
       });
 
-      document.getElementById('modalToggleOccBtn').addEventListener('click', function () {
-        if (!currentSelectedSlot) return;
-        viewer.updateSlotStatus(currentSelectedSlot.slotCode, 'OCCUPIED', {
-          carPlate: '51F-888.99',
-          vehicleModel: 'Toyota Vios',
-          vehicleColor: 'white'
-        });
-        modal.classList.remove('active');
-      });
-
-      document.getElementById('modalToggleFreeBtn').addEventListener('click', function () {
-        if (!currentSelectedSlot) return;
-        viewer.updateSlotStatus(currentSelectedSlot.slotCode, 'EMPTY');
-        modal.classList.remove('active');
-      });
-
-      // Mô phỏng sự kiện
-      document.getElementById('btnSimPark').addEventListener('click', function () {
-        viewer.updateSlotStatus('B1-A12', 'OCCUPIED', {
-          carPlate: '51F-123.45',
-          vehicleModel: 'Toyota Vios',
-          vehicleColor: 'white'
-        });
-      });
-
-      document.getElementById('btnSimExit').addEventListener('click', function () {
-        viewer.updateSlotStatus('B1-A12', 'EMPTY');
-      });
-
-      document.getElementById('btnSimReserve').addEventListener('click', function () {
-        viewer.updateSlotStatus('B1-A03', 'RESERVED', {
-          carPlate: '72A-999.88'
-        });
-      });
-
-      document.getElementById('btnSimMaint').addEventListener('click', function () {
-        viewer.updateSlotStatus('B1-A08', 'MAINTENANCE');
-      });
     });
   </script>
 </body>
