@@ -123,7 +123,6 @@ class PlateDetectionData(BaseModel):
     raw_plate_number: str = Field(..., description="Raw text extracted directly from OCR")
     confidence: float = Field(..., description="Average OCR confidence score (0.0 to 1.0)")
     is_legit: bool = Field(..., description="True if format matches standard Vietnamese plate rules")
-    vehicle_type: Optional[str] = Field(None, description="Detected vehicle class: car, bus, truck, motorbike")
     vehicle_confidence: Optional[float] = Field(None, description="Confidence score of vehicle detection")
     vehicle_bbox: Optional[List[int]] = Field(None, description="Vehicle bounding box coordinates [x1, y1, x2, y2]")
     plate_bbox: Optional[List[int]] = Field(None, description="License plate bounding box coordinates [x1, y1, x2, y2]")
@@ -244,7 +243,6 @@ async def detect_license_plate(
                         "raw_plate_number": raw_text,
                         "confidence": round(ocr_conf, 4),
                         "is_legit": is_legit,
-                        "vehicle_type": veh["label"],
                         "vehicle_confidence": round(veh["conf"], 4),
                         "vehicle_bbox": [int(x) for x in veh["bbox"]],
                         "plate_bbox": global_plate_bbox
@@ -281,7 +279,6 @@ async def detect_license_plate(
                             "raw_plate_number": raw_text,
                             "confidence": round(ocr_conf, 4),
                             "is_legit": is_legit,
-                            "vehicle_type": "unknown",
                             "vehicle_confidence": None,
                             "vehicle_bbox": None,
                             "plate_bbox": [int(x) for x in p_xyxy]

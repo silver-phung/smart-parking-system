@@ -815,6 +815,68 @@ namespace SmartParking.Infrastructure.Migrations
                     b.ToTable("staff_lot_assignments", (string)null);
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.StoredImage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("Bytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("bytes");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("format");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer")
+                        .HasColumnName("height");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("url");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer")
+                        .HasColumnName("width");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stored_images");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_stored_images_public_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_stored_images_user_id");
+
+                    b.ToTable("stored_images", (string)null);
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.User", b =>
                 {
                     b.Property<long>("Id")
@@ -1248,6 +1310,18 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.StoredImage", b =>
+                {
+                    b.HasOne("SmartParking.Domain.Entities.User", "User")
+                        .WithMany("StoredImages")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stored_images_user");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.User", b =>
                 {
                     b.HasOne("SmartParking.Domain.Entities.User", "ApprovedByUser")
@@ -1344,6 +1418,8 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Navigation("RevokedStaffAssignments");
 
                     b.Navigation("StaffLotAssignments");
+
+                    b.Navigation("StoredImages");
 
                     b.Navigation("UserTokens");
 
