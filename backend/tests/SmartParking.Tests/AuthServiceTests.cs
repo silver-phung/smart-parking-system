@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Options;
 using SmartParking.Application.DTOs.Auth;
 using SmartParking.Domain.Constants;
@@ -121,4 +122,100 @@ public class AuthServiceTests
         Assert.False(revoked.Succeeded);
         Assert.Equal(401, revoked.StatusCode);
     }
+
+    private class TestEmailService : IEmailService
+    {
+        public string? LastOtpCode { get; private set; }
+        public Task<bool> SendVerificationOtpAsync(string toEmail, string otpCode, CancellationToken cancellationToken = default)
+        {
+            LastOtpCode = otpCode;
+            return Task.FromResult(true);
+        }
+    }
+
+    private class DummyRecaptchaService : IRecaptchaService
+    {
+        public Task<bool> VerifyAsync(string? token, string? remoteIp = null, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    [Fact]
+    public async Task CustomerRegistrationAndOtpVerification_Flow_Succeeds()
+    {
+        using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
+        var secOptions = Options.Create(new SecurityOptions
+        {
+            MaxFailedLoginAttempts = 5,
+            LockoutDurationMinutes = 15,
+            OtpSecretKey = "super-secret-otp-key-for-testing-32-chars-long!"
+        });
+        var testEmail = new TestEmailService();
+        var otpService = new OtpService(secOptions);
+        var testRecaptcha = new DummyRecaptchaService();
+
+        var service = new AuthService(
+            context,
+            _hasher,
+            new TokenService(Options.Create(_jwtOptions)),
+            otpService,
+            testEmail,
+            testRecaptcha,
+            Options.Create(_jwtOptions),
+            secOptions,
+            Options.Create(new RecaptchaOptions { Enabled = false }),
+            NullLogger<AuthService>.Instance);
+
+        // 1. Customer registers
+        var regDto = new RegisterRequestDto
+        {
+            Username = "new_customer",
+            Email = "customer@smartparking.test",
+            Password = "Password123!",
+            FullName = "Nguyễn Văn Khách",
+            PhoneNumber = "0901234567"
+        };
+        var regRes = await service.RegisterAsync(regDto, "127.0.0.1");
+        Assert.True(regRes.Succeeded);
+
+        // Verify user in DB is Customer (Roles.User) and not yet verified
+        var user = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
+            context.Users, u => u.Username == "new_customer");
+        Assert.NotNull(user);
+        Assert.Equal(4, user.RoleId); // Roles.User
+        Assert.False(user.IsEmailVerified);
+        Assert.Equal(ApprovalStatuses.Pending, user.ApprovalStatus);
+
+        // 2. Cannot login before verification
+        var unverifiedLogin = await service.LoginAsync(
+            new LoginRequestDto { Username = "new_customer", Password = "Password123!" }, "Agent", "127.0.0.1");
+        Assert.False(unverifiedLogin.Succeeded);
+        Assert.Equal(403, unverifiedLogin.StatusCode);
+
+        // 3. Extract generated OTP from captured email and verify
+        var generatedOtp = testEmail.LastOtpCode;
+        Assert.NotNull(generatedOtp);
+        Assert.Equal(6, generatedOtp.Length);
+
+        var verifyRes = await service.VerifyEmailAsync(
+            new VerifyEmailRequestDto { Email = "customer@smartparking.test", Code = generatedOtp }, CancellationToken.None);
+        Assert.True(verifyRes.Succeeded);
+
+        // 4. User is now verified and approved
+        await context.Entry(user).ReloadAsync();
+        Assert.True(user.IsEmailVerified);
+        Assert.Equal(ApprovalStatuses.Approved, user.ApprovalStatus);
+        Assert.True(user.IsActive);
+
+        // 5. Customer can now login successfully
+        var loginRes = await service.LoginAsync(
+            new LoginRequestDto { Username = "new_customer", Password = "Password123!" }, "Agent", "127.0.0.1");
+        Assert.True(loginRes.Succeeded);
+        Assert.NotEmpty(loginRes.Data!.AccessToken);
+        Assert.Equal(Roles.User, loginRes.Data.UserProfile.Role);
+
+        // 6. Duplicate registration is rejected
+        var dupRes = await service.RegisterAsync(regDto, "127.0.0.1");
+        Assert.False(dupRes.Succeeded);
+        Assert.Equal(409, dupRes.StatusCode);
+    }
 }
+

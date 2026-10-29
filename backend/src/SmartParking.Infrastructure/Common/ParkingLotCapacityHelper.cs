@@ -18,7 +18,8 @@ public record LotCapacityCalculation(
     string? DiscrepancyNotes,
     int UnassignedSessionsCount = 0,
     int ProposedSafetyBuffer = 5,
-    int UnmatchedPhysicalOccupiedCount = 0
+    int UnmatchedPhysicalOccupiedCount = 0,
+    int MatchedPairsCount = 0
 );
 
 public static class ParkingLotCapacityHelper
@@ -85,11 +86,27 @@ public static class ParkingLotCapacityHelper
             .CountAsync(b => b.LotId == lotId && b.Status == BookingStatuses.Pending, ct);
 
         // 4. Conservative IoT Capacity Guard:
-        // Used = max(ActiveOrPaidSessions, PhysicalOccupiedSlots) + PendingBookingHolds
-        // Available = max(0, UsableCapacity - Used)
-        // Invariant: Chống đếm trùng giữa phiên đã gán ô và cảm biến của chính ô đó,
-        // đồng thời chống bỏ sót sức chứa bị chiếm dụng bởi ô vật lý có xe không rõ danh tính (unmatched physical occupancy).
-        int effectiveOccupied = Math.Max(activeSessionsCount, physicalOccupiedSlots);
+        // Công thức bảo tồn sức chứa không bỏ sót (chống undercount) và không đếm kép (chống double-count):
+        // - Cặp Session-Slot đã ghép và cảm biến báo OCCUPIED (Matched): tính đúng 1 lần.
+        // - Phiên đã check-in nhưng chưa ghép ô (UnassignedSessions): xe đang tìm chỗ/ở luồng di chuyển.
+        // - Ô có cảm biến báo OCCUPIED nhưng chưa ghép phiên (UnmatchedPhysicalOccupied): xe không rõ danh tính hoặc lỗi cảm biến.
+        // EffectiveOccupied = MatchedPairs + UnassignedSessions + UnmatchedPhysicalOccupied
+        //                   = PhysicalOccupiedSlots + UnassignedSessionsCount
+        //                   = ActiveSessionsCount + UnmatchedPhysicalOccupiedCount
+        // Dependency: Phân tách riêng biệt giữa WALK_IN và FIXED phụ thuộc vào schema Zone (Zone entity/ZoneId) do Thức sở hữu;
+        // khi chưa có Zone contract độc lập, áp dụng tính toán bảo thủ trên toàn bãi.
+        int effectiveOccupied;
+        int matchedPairsCount = 0;
+        if (hasConfiguredSlots)
+        {
+            matchedPairsCount = physicalOccupiedSlots - unmatchedPhysicalOccupiedCount;
+            effectiveOccupied = matchedPairsCount + unassignedSessionsCount + unmatchedPhysicalOccupiedCount;
+        }
+        else
+        {
+            effectiveOccupied = activeSessionsCount;
+        }
+
         int totalOccupiedOrReserved = effectiveOccupied + pendingBookingsCount;
         int availableCapacity = Math.Max(0, totalCapacity - totalOccupiedOrReserved);
 
@@ -116,7 +133,8 @@ public static class ParkingLotCapacityHelper
             DiscrepancyNotes: discrepancyNotes,
             UnassignedSessionsCount: unassignedSessionsCount,
             ProposedSafetyBuffer: proposedSafetyBuffer,
-            UnmatchedPhysicalOccupiedCount: unmatchedPhysicalOccupiedCount
+            UnmatchedPhysicalOccupiedCount: unmatchedPhysicalOccupiedCount,
+            MatchedPairsCount: matchedPairsCount
         );
     }
 }

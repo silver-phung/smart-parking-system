@@ -382,10 +382,14 @@ public class ParkingSessionsController : ControllerBase
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         var (success, message, session) = await _sessionService.RecordPaymentClearanceAsync(
-            id, request.AmountPaid, request.TransactionRef, request.PaymentMethod, actorId, actorRole, clientIp, ct);
+            id, request.AmountPaid, request.TransactionRef, request.PaymentMethod, actorId, actorRole, clientIp, isTrustedPaymentServerFlow: false, ct);
 
         if (!success)
         {
+            if (message.Contains("PAYMENT INTEGRATION BLOCKED"))
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { code = "PAYMENT_INTEGRATION_BLOCKED", message });
+            }
             if (message.Contains("không có quyền") || message.Contains("Chỉ Quản trị viên"))
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new { message });

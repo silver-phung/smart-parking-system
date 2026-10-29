@@ -978,13 +978,14 @@ public class BookingAndCapacityTests
             Id = 1051,
             LotId = 105,
             PlateNumber = "51A-10511",
+            CurrentSlotId = slots[0].Id,
             Status = SessionStatuses.Active,
             CheckInTime = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         });
 
-        // 3 physical slots reported OCCUPIED by sensors
+        // 3 physical slots reported OCCUPIED by sensors (1 matched with session above, 2 unmatched)
         slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
         slots[1].PhysicalStatus = SlotPhysicalStatuses.Occupied;
         slots[2].PhysicalStatus = SlotPhysicalStatuses.Occupied;
@@ -1007,7 +1008,7 @@ public class BookingAndCapacityTests
         });
         await context.SaveChangesAsync();
 
-        // Formula: Used = max(Sessions: 1, PhysicalOccupied: 3) + Holds: 1 = 4
+        // Formula: Used = Matched(1) + Unassigned(0) + Unmatched(2) + Holds(1) = 4
         // Available = max(0, 5 - 4) = 1
         var cap = await bookingService.GetLotCapacityAsync(105, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap);
@@ -1028,7 +1029,7 @@ public class BookingAndCapacityTests
         var (bookingService, _, _, context) = await CreateServicesAsync();
         var (_, _, slots) = SeedLotWithSlots(context, 106, "Bãi Sessions > IoT", slotCount: 5, activeSlotsCount: 5);
 
-        // 3 active sessions
+        // 3 active sessions (1 matched to slot 0, 2 unassigned roaming)
         for (int i = 1; i <= 3; i++)
         {
             context.ParkingSessions.Add(new ParkingSession
@@ -1036,6 +1037,7 @@ public class BookingAndCapacityTests
                 Id = 1060 + i,
                 LotId = 106,
                 PlateNumber = $"51A-1060{i}",
+                CurrentSlotId = i == 1 ? slots[0].Id : null,
                 Status = SessionStatuses.Active,
                 CheckInTime = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
@@ -1047,7 +1049,7 @@ public class BookingAndCapacityTests
         slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
         await context.SaveChangesAsync();
 
-        // Formula: Used = max(Sessions: 3, PhysicalOccupied: 1) + Holds: 0 = 3
+        // Formula: Used = Matched(1) + Unassigned(2) + Unmatched(0) + Holds(0) = 3
         // Available = max(0, 5 - 3) = 2
         var cap = await bookingService.GetLotCapacityAsync(106, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(cap);
@@ -1067,7 +1069,7 @@ public class BookingAndCapacityTests
         var (bookingService, _, _, context) = await CreateServicesAsync();
         var (_, _, slots) = SeedLotWithSlots(context, 107, "Bãi Khớp IoT", slotCount: 5, activeSlotsCount: 5);
 
-        // 2 active sessions & 2 physical occupied slots
+        // 2 active sessions matched to 2 physical occupied slots
         for (int i = 1; i <= 2; i++)
         {
             context.ParkingSessions.Add(new ParkingSession
@@ -1075,6 +1077,7 @@ public class BookingAndCapacityTests
                 Id = 1070 + i,
                 LotId = 107,
                 PlateNumber = $"51A-1070{i}",
+                CurrentSlotId = slots[i - 1].Id,
                 Status = SessionStatuses.Active,
                 CheckInTime = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,

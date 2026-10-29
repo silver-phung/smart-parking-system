@@ -30,6 +30,10 @@ public class SecurityOptions
 
     public int MaxFailedLoginAttempts { get; set; } = 5;
     public int LockoutDurationMinutes { get; set; } = 15;
+    public string OtpSecretKey { get; set; } = "SmartParkingSecureOtpHmacSecretKey2026!#";
+    public int OtpLifetimeMinutes { get; set; } = 15;
+    public int ResendCooldownSeconds { get; set; } = 60;
+    public int MaxOtpAttempts { get; set; } = 5;
 }
 
 public class AdminBootstrapOptions
@@ -48,7 +52,7 @@ public class EmailOptions
 {
     public const string SectionName = "Email";
 
-    public string Provider { get; set; } = "Smtp"; // Smtp or Mock
+    public string Provider { get; set; } = "Mock"; // Smtp or Mock
     public string Host { get; set; } = "smtp.gmail.com";
     public int Port { get; set; } = 587;
     public string UserName { get; set; } = string.Empty;
@@ -58,4 +62,16 @@ public class EmailOptions
     public bool EnableSsl { get; set; } = true;
     public int TimeoutSeconds { get; set; } = 10;
 }
+
+public class RecaptchaOptions
+{
+    public const string SectionName = "Recaptcha";
+
+    public bool Enabled { get; set; } = false;
+    public string SecretKey { get; set; } = string.Empty;
+    public string SiteKey { get; set; } = string.Empty;
+    public string VerifyUrl { get; set; } = "https://www.google.com/recaptcha/api/siteverify";
+    public double MinScore { get; set; } = 0.5;
+}
+
 

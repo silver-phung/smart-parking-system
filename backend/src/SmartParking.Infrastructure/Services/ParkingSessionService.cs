@@ -1147,8 +1147,16 @@ public class ParkingSessionService : IParkingSessionService
         long? actorId,
         string actorRole,
         string? ipAddress,
+        bool isTrustedPaymentServerFlow = false,
         CancellationToken ct = default)
     {
+        // 0. Fail-Closed Boundary: Không chấp nhận thanh toán tự khai báo từ client / người dùng / staff / admin.
+        // Bắt buộc phải đến từ luồng Server-to-Server đáng tin cậy (Trusted Server Flow) của module Payment do Nam Anh sở hữu.
+        if (!isTrustedPaymentServerFlow)
+        {
+            return (false, "PAYMENT INTEGRATION BLOCKED: Luồng xác nhận thanh toán phía máy chủ (Server-side Trusted Payment Flow) của Nam Anh chưa được tích hợp. Không chấp nhận yêu cầu thanh toán tự khai báo từ client hoặc tài khoản người dùng/nhân viên/quản trị viên.", null);
+        }
+
         // 1. Phân quyền: Chỉ Quản trị viên (ADMIN) hoặc Dịch vụ Thanh toán hệ thống mới có quyền ghi nhận xác nhận tài chính
         if (actorRole != Roles.Admin)
         {

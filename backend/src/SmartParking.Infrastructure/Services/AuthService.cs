@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartParking.Application.Common.Interfaces;
@@ -15,8 +16,12 @@ public class AuthService : IAuthService
     private readonly IApplicationDbContext _dbContext;
     private readonly IPasswordHasherService _passwordHasher;
     private readonly ITokenService _tokenService;
+    private readonly IOtpService _otpService;
+    private readonly IEmailService _emailService;
+    private readonly IRecaptchaService _recaptchaService;
     private readonly JwtOptions _jwtOptions;
     private readonly SecurityOptions _securityOptions;
+    private readonly RecaptchaOptions _recaptchaOptions;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
@@ -33,6 +38,260 @@ public class AuthService : IAuthService
         _jwtOptions = jwtOptions.Value;
         _securityOptions = securityOptions.Value;
         _logger = logger;
+        _otpService = new OtpService(securityOptions);
+        _emailService = new EmailService(Options.Create(new EmailOptions { Provider = "Mock" }), Microsoft.Extensions.Logging.Abstractions.NullLogger<EmailService>.Instance);
+        _recaptchaOptions = new RecaptchaOptions { Enabled = false };
+        _recaptchaService = null!;
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public AuthService(
+        IApplicationDbContext dbContext,
+        IPasswordHasherService passwordHasher,
+        ITokenService tokenService,
+        IOtpService otpService,
+        IEmailService emailService,
+        IRecaptchaService recaptchaService,
+        IOptions<JwtOptions> jwtOptions,
+        IOptions<SecurityOptions> securityOptions,
+        IOptions<RecaptchaOptions> recaptchaOptions,
+        ILogger<AuthService> logger)
+    {
+        _dbContext = dbContext;
+        _passwordHasher = passwordHasher;
+        _tokenService = tokenService;
+        _otpService = otpService;
+        _emailService = emailService;
+        _recaptchaService = recaptchaService;
+        _jwtOptions = jwtOptions.Value;
+        _securityOptions = securityOptions.Value;
+        _recaptchaOptions = recaptchaOptions.Value;
+        _logger = logger;
+    }
+
+    public async Task<AuthResult<UserProfileDto>> RegisterAsync(RegisterRequestDto request, string? clientIp, CancellationToken cancellationToken = default)
+    {
+        var normalizedUsername = request.Username.Trim().ToLowerInvariant();
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        // 1. Enforce server-side reCAPTCHA verification if enabled
+        if (_recaptchaOptions.Enabled && _recaptchaService != null)
+        {
+            if (string.IsNullOrWhiteSpace(request.RecaptchaToken))
+            {
+                _logger.LogWarning("Registration failed: reCAPTCHA token missing when reCAPTCHA is enabled.");
+                return AuthResult<UserProfileDto>.Failure("Mã xác thực reCAPTCHA là bắt buộc.", 400);
+            }
+
+            var isRecaptchaValid = await _recaptchaService.VerifyAsync(request.RecaptchaToken, clientIp, cancellationToken);
+            if (!isRecaptchaValid)
+            {
+                _logger.LogWarning("Registration failed: reCAPTCHA token verification rejected for IP {ClientIp}.", clientIp);
+                return AuthResult<UserProfileDto>.Failure("Xác thực reCAPTCHA không thành công. Vui lòng thử lại.", 400);
+            }
+        }
+
+        // 2. Uniqueness check for username or email
+        var existingUser = await _dbContext.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Username == normalizedUsername || u.Email == normalizedEmail, cancellationToken);
+
+        if (existingUser != null)
+        {
+            _logger.LogWarning("Registration conflict: username '{Username}' or email '{Email}' already exists.", normalizedUsername, normalizedEmail);
+            return AuthResult<UserProfileDto>.Failure("Tên đăng nhập hoặc Email đã tồn tại trong hệ thống.", 409);
+        }
+
+        // 3. Customer-only self-registration invariant: Default role is USER
+        var userRole = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Code == Roles.User, cancellationToken);
+        if (userRole == null)
+        {
+            _logger.LogError("Critical configuration error: Role {RoleUser} not found in database.", Roles.User);
+            return AuthResult<UserProfileDto>.Failure("Hệ thống chưa được thiết lập vai trò người dùng mặc định.", 500);
+        }
+
+        // 4. Create new customer user entity (Pending until email verified)
+        var newUser = new User
+        {
+            Username = normalizedUsername,
+            Email = normalizedEmail,
+            RoleId = userRole.Id,
+            FullName = request.FullName.Trim(),
+            PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
+            IsActive = true,
+            IsEmailVerified = false,
+            ApprovalStatus = ApprovalStatuses.Pending,
+            FailedLoginAttempts = 0,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        newUser.PasswordHash = _passwordHasher.HashPassword(newUser, request.Password);
+
+        // 5. Generate secure 6-digit OTP and HMAC
+        var otpCode = _otpService.GenerateOtpCode();
+
+        // 6. Save User and UserToken in a transaction
+        await using var transaction = await _dbContext.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            _dbContext.Users.Add(newUser);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var otpHash = _otpService.ComputeOtpHash(newUser.Id, TokenTypes.EmailVerification, otpCode);
+
+            var userToken = new UserToken
+            {
+                UserId = newUser.Id,
+                TokenType = TokenTypes.EmailVerification,
+                TokenHash = otpHash,
+                AttemptsCount = 0,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(_securityOptions.OtpLifetimeMinutes),
+                IsUsed = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            _dbContext.UserTokens.Add(userToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogError(ex, "Database transaction error during registration for user {Username}", normalizedUsername);
+            return AuthResult<UserProfileDto>.Failure("Đăng ký tài khoản thất bại do lỗi hệ thống.", 500);
+        }
+
+        // 7. Send real OTP email outside DB transaction
+        var emailSent = await _emailService.SendVerificationOtpAsync(newUser.Email, otpCode, cancellationToken);
+        var message = emailSent
+            ? "Đăng ký thành công. Vui lòng kiểm tra email để nhận mã xác minh OTP."
+            : "Tài khoản đã tạo thành công nhưng hệ thống gửi email tạm thời gặp sự cố. Vui lòng bấm 'Gửi lại mã' để nhận mã xác minh.";
+
+        var userProfile = new UserProfileDto
+        {
+            Id = newUser.Id,
+            Username = newUser.Username,
+            Email = newUser.Email,
+            FullName = newUser.FullName,
+            PhoneNumber = newUser.PhoneNumber,
+            AvatarUrl = newUser.AvatarUrl,
+            Role = userRole.Code,
+            IsEmailVerified = newUser.IsEmailVerified,
+            ApprovalStatus = newUser.ApprovalStatus,
+            CreatedAt = newUser.CreatedAt
+        };
+
+        return AuthResult<UserProfileDto>.Success(userProfile, message, 201);
+    }
+
+    public async Task<AuthResult<bool>> VerifyEmailAsync(VerifyEmailRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        var user = await _dbContext.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
+
+        if (user == null)
+        {
+            return AuthResult<bool>.Failure("Yêu cầu xác minh không hợp lệ.", 400);
+        }
+
+        if (user.IsEmailVerified)
+        {
+            return AuthResult<bool>.Success(true, "Tài khoản đã được xác minh trước đó. Bạn có thể đăng nhập ngay.", 200);
+        }
+
+        // Find active verification token
+        var activeToken = await _dbContext.UserTokens
+            .Where(t => t.UserId == user.Id && t.TokenType == TokenTypes.EmailVerification && !t.IsUsed)
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (activeToken == null || activeToken.ExpiresAt <= DateTime.UtcNow)
+        {
+            return AuthResult<bool>.Failure("Mã xác minh không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu mã mới.", 400);
+        }
+
+        if (activeToken.AttemptsCount >= _securityOptions.MaxOtpAttempts)
+        {
+            return AuthResult<bool>.Failure("Mã xác minh đã bị hủy do nhập sai quá nhiều lần. Vui lòng bấm 'Gửi lại mã'.", 400);
+        }
+
+        // Verify OTP HMAC-SHA256 with constant-time equality
+        var isOtpValid = _otpService.VerifyOtpHash(user.Id, TokenTypes.EmailVerification, request.Code, activeToken.TokenHash);
+        if (!isOtpValid)
+        {
+            activeToken.AttemptsCount++;
+            if (activeToken.AttemptsCount >= _securityOptions.MaxOtpAttempts)
+            {
+                activeToken.IsUsed = true;
+            }
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return AuthResult<bool>.Failure("Mã xác minh không chính xác hoặc đã hết hạn.", 400);
+        }
+
+        // Mark token used and activate customer user
+        activeToken.IsUsed = true;
+        activeToken.UsedAt = DateTime.UtcNow;
+
+        user.IsEmailVerified = true;
+        user.ApprovalStatus = ApprovalStatuses.Approved;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Email verified successfully for user {UserId} ({Email}). Account activated.", user.Id, user.Email);
+        return AuthResult<bool>.Success(true, "Xác minh email thành công. Tài khoản của bạn đã được kích hoạt.", 200);
+    }
+
+    public async Task<AuthResult<bool>> ResendVerificationAsync(ResendVerificationRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
+
+        const string uniformSuccessMessage = "Nếu email hợp lệ và chưa được xác minh, mã OTP mới đã được gửi tới hộp thư của bạn.";
+
+        if (user == null || user.IsEmailVerified)
+        {
+            return AuthResult<bool>.Success(true, uniformSuccessMessage, 200);
+        }
+
+        // Cooldown check (60 seconds)
+        var latestToken = await _dbContext.UserTokens
+            .Where(t => t.UserId == user.Id && t.TokenType == TokenTypes.EmailVerification)
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latestToken != null && latestToken.CreatedAt.AddSeconds(_securityOptions.ResendCooldownSeconds) > DateTime.UtcNow)
+        {
+            var remainingSeconds = (int)Math.Ceiling((latestToken.CreatedAt.AddSeconds(_securityOptions.ResendCooldownSeconds) - DateTime.UtcNow).TotalSeconds);
+            return AuthResult<bool>.Failure($"Vui lòng chờ {remainingSeconds} giây trước khi yêu cầu gửi lại mã xác minh mới.", 429);
+        }
+
+        var otpCode = _otpService.GenerateOtpCode();
+        var otpHash = _otpService.ComputeOtpHash(user.Id, TokenTypes.EmailVerification, otpCode);
+
+        var userToken = new UserToken
+        {
+            UserId = user.Id,
+            TokenType = TokenTypes.EmailVerification,
+            TokenHash = otpHash,
+            AttemptsCount = 0,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_securityOptions.OtpLifetimeMinutes),
+            IsUsed = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.UserTokens.Add(userToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _emailService.SendVerificationOtpAsync(user.Email, otpCode, cancellationToken);
+
+        return AuthResult<bool>.Success(true, uniformSuccessMessage, 200);
     }
 
     public async Task<AuthResult<AuthResponseDto>> LoginAsync(LoginRequestDto request, string? userAgent, string? clientIp, CancellationToken cancellationToken = default)

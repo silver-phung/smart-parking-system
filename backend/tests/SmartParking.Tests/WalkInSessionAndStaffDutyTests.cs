@@ -589,7 +589,7 @@ public class WalkInSessionAndStaffDutyTests
         Assert.False(prePaymentCheckOut.Success);
         Assert.Contains("chưa hoàn tất tính phí và thanh toán", prePaymentCheckOut.Message);
 
-        // 3. Nam Anh's Payment module calls RecordPaymentClearanceAsync
+        // 3. Nam Anh's Payment module calls RecordPaymentClearanceAsync via trusted server-to-server flow
         var clearanceRes = await sessionService.RecordPaymentClearanceAsync(
             sessionId,
             amountPaid: 35000m,
@@ -597,7 +597,8 @@ public class WalkInSessionAndStaffDutyTests
             paymentMethod: "VNPAY_QR",
             actorId: 1,
             actorRole: Roles.Admin,
-            ipAddress: "127.0.0.1");
+            ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
 
         Assert.True(clearanceRes.Success);
         Assert.Equal(SessionStatuses.Paid, clearanceRes.Data!.Status);
@@ -622,6 +623,26 @@ public class WalkInSessionAndStaffDutyTests
     }
 
     [Fact]
+    public async Task PaymentClearance_UntrustedCaller_FailsClosedWithPaymentIntegrationBlocked()
+    {
+        var (sessionService, _, context) = await CreateServicesAsync();
+        SeedLot(context, 212, "Bãi Untrusted Clearance");
+        var checkInRes = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 212, PlateNumber = "51A-UNTRUSTED-01" },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        var sessionId = checkInRes.Data!.Id;
+
+        // Even with Admin role, untrusted caller without server-side verification must fail-closed
+        var res = await sessionService.RecordPaymentClearanceAsync(
+            sessionId, 20000m, "TX-SELF-DECLARED", "MOCK",
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: false);
+
+        Assert.False(res.Success);
+        Assert.Contains("PAYMENT INTEGRATION BLOCKED", res.Message);
+    }
+
+    [Fact]
     public async Task PaymentClearance_UnauthorizedRole_StaffOrUser_IsRejected()
     {
         var (sessionService, _, context) = await CreateServicesAsync();
@@ -637,14 +658,16 @@ public class WalkInSessionAndStaffDutyTests
         // Staff attempts payment clearance -> 403 Forbidden
         var staffClearance = await sessionService.RecordPaymentClearanceAsync(
             sessionId, 20000m, "TX-STAFF-ATTEMPT", "CASH",
-            actorId: 2131, actorRole: Roles.Staff, ipAddress: "127.0.0.1");
+            actorId: 2131, actorRole: Roles.Staff, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.False(staffClearance.Success);
         Assert.Contains("Dịch vụ Thanh toán", staffClearance.Message);
 
         // User attempts payment clearance -> 403 Forbidden
         var userClearance = await sessionService.RecordPaymentClearanceAsync(
             sessionId, 20000m, "TX-USER-ATTEMPT", "MOCK",
-            actorId: 999, actorRole: Roles.User, ipAddress: "127.0.0.1");
+            actorId: 999, actorRole: Roles.User, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.False(userClearance.Success);
         Assert.Contains("Dịch vụ Thanh toán", userClearance.Message);
     }
@@ -662,13 +685,15 @@ public class WalkInSessionAndStaffDutyTests
         // Amount <= 0 rejected
         var zeroClearance = await sessionService.RecordPaymentClearanceAsync(
             sessionId, 0m, "TX-ZERO", "MOCK",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.False(zeroClearance.Success);
         Assert.Contains("phải lớn hơn 0", zeroClearance.Message);
 
         var negClearance = await sessionService.RecordPaymentClearanceAsync(
             sessionId, -5000m, "TX-NEG", "MOCK",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.False(negClearance.Success);
         Assert.Contains("phải lớn hơn 0", negClearance.Message);
     }
@@ -691,7 +716,8 @@ public class WalkInSessionAndStaffDutyTests
         // Caller attempts to clear payment with only 30,000 VNĐ -> rejected
         var underpaid = await sessionService.RecordPaymentClearanceAsync(
             sessionId, 30000m, "TX-UNDERPAID-01", "VNPAY",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.False(underpaid.Success);
         Assert.Contains("không đủ so với phí gửi xe cần thanh toán", underpaid.Message);
     }
@@ -711,13 +737,15 @@ public class WalkInSessionAndStaffDutyTests
         // Clear session 1 with ref TX-UNIQUE-100
         var c1 = await sessionService.RecordPaymentClearanceAsync(
             s1Res.Data!.Id, 25000m, "TX-UNIQUE-100", "MOMOPAY",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.True(c1.Success);
 
         // Attempt to clear session 2 with SAME ref TX-UNIQUE-100 -> rejected
         var c2 = await sessionService.RecordPaymentClearanceAsync(
             s2Res.Data!.Id, 25000m, "TX-UNIQUE-100", "MOMOPAY",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.False(c2.Success);
         Assert.Contains("đã được sử dụng cho một phiên gửi xe khác", c2.Message);
     }
@@ -735,20 +763,23 @@ public class WalkInSessionAndStaffDutyTests
         // First clearance
         var c1 = await sessionService.RecordPaymentClearanceAsync(
             sessionId, 40000m, "TX-IDEMPOTENT-888", "ZALOPAY",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.True(c1.Success);
 
         // Idempotent retry with identical ref -> returns true
         var retry = await sessionService.RecordPaymentClearanceAsync(
             sessionId, 40000m, "TX-IDEMPOTENT-888", "ZALOPAY",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.True(retry.Success);
         Assert.Contains("đã được ghi nhận thanh toán hợp lệ trước đó", retry.Message);
 
         // Retry on already PAID session with DIFFERENT ref -> rejected
         var diffRef = await sessionService.RecordPaymentClearanceAsync(
             sessionId, 40000m, "TX-ANOTHER-999", "ZALOPAY",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
         Assert.False(diffRef.Success);
         Assert.Contains("đã hoàn tất thanh toán trước đó với một giao dịch khác", diffRef.Message);
     }
@@ -847,7 +878,8 @@ public class WalkInSessionAndStaffDutyTests
         // Clear payment so checkout financial precondition passes
         await sessionService.RecordPaymentClearanceAsync(
             sessionId, 20000m, "TX-PLATE-01", "CASH",
-            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1",
+            isTrustedPaymentServerFlow: true);
 
         // Attempt checkout with wrong plate
         var wrongPlateRes = await sessionService.CheckOutAsync(
@@ -900,13 +932,63 @@ public class WalkInSessionAndStaffDutyTests
         Assert.Equal(2, calc.ActiveSessionsCount);
         // Physical occupied slots: 2 (slots[0] and slots[1])
         Assert.Equal(2, calc.PhysicalOccupiedSlotsCount);
-        // Effective occupied: Max(2 active sessions, 2 physical occupied) = 2
-        Assert.Equal(2, calc.EffectiveOccupied);
-        // Available capacity: 4 - 2 = 2
-        Assert.Equal(2, calc.AvailableCapacity);
+        // Effective occupied: Matched (1) + Unassigned sessions (1) + Unmatched physical (1) = 3 (not undercounted as 2)
+        Assert.Equal(3, calc.EffectiveOccupied);
+        // Available capacity: 4 - 3 = 1
+        Assert.Equal(1, calc.AvailableCapacity);
         // Unmatched physical occupied count: 1 (slots[1])
         Assert.Equal(1, calc.UnmatchedPhysicalOccupiedCount);
         // Unassigned sessions count: 1 (s2)
         Assert.Equal(1, calc.UnassignedSessionsCount);
+    }
+
+    [Fact]
+    public async Task Capacity_ConservativeUndercountGuard_CalculatesExactlySeven()
+    {
+        // Test bắt buộc:
+        // - 2 Session đã ghép IoT Slot
+        // - 2 Session chưa ghép Slot
+        // - 3 Slot OCCUPIED chưa ghép Session
+        // - Expected conservative occupied count = 7, không phải 5.
+        var (sessionService, _, context) = await CreateServicesAsync();
+        var (lot, _, slots) = SeedLot(context, 223, "Bãi Capacity Test 7", slotCount: 10);
+
+        // 2 matched pairs (Session assigned to Slot and Slot is Occupied)
+        var s1 = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 223, PlateNumber = "51A-MATCH-01", SlotId = slots[0].Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        slots[0].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+
+        var s2 = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 223, PlateNumber = "51A-MATCH-02", SlotId = slots[1].Id },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        slots[1].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+
+        // 2 unassigned sessions (Active sessions without slot assigned)
+        var s3 = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 223, PlateNumber = "51A-UNASSIGNED-03", SlotId = null },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        var s4 = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 223, PlateNumber = "51A-UNASSIGNED-04", SlotId = null },
+            actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+
+        // 3 slots OCCUPIED unmatched (no session linked to them)
+        slots[2].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        slots[3].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+        slots[4].PhysicalStatus = SlotPhysicalStatuses.Occupied;
+
+        await context.SaveChangesAsync();
+
+        var calc = await ParkingLotCapacityHelper.CalculateAsync(context, 223, lot);
+
+        Assert.Equal(10, calc.TotalCapacity);
+        Assert.Equal(4, calc.ActiveSessionsCount);
+        Assert.Equal(5, calc.PhysicalOccupiedSlotsCount); // slots 0, 1, 2, 3, 4
+        Assert.Equal(2, calc.MatchedPairsCount);
+        Assert.Equal(2, calc.UnassignedSessionsCount);
+        Assert.Equal(3, calc.UnmatchedPhysicalOccupiedCount);
+        // Conservative occupied count = 2 matched + 2 unassigned + 3 unmatched = 7!
+        Assert.Equal(7, calc.EffectiveOccupied);
+        Assert.Equal(3, calc.AvailableCapacity); // 10 - 7 = 3
     }
 }
