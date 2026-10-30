@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,8 @@ namespace SmartParking.Infrastructure.Services;
 
 public class ParkingManagementService : IParkingManagementService
 {
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> _provisionLocks = new();
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -200,6 +203,7 @@ public class ParkingManagementService : IParkingManagementService
         var lot = await _context.ParkingLots
             .Include(l => l.Floors)
                 .ThenInclude(f => f.Slots)
+                    .ThenInclude(s => s.AssignedDispatches)
             .FirstOrDefaultAsync(l => l.Id == id, ct);
 
         if (lot == null)
@@ -234,7 +238,7 @@ public class ParkingManagementService : IParkingManagementService
         var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
                                               s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
                                               s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
-        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty);
+        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
         var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
         var totalCapacity = usableSlots.Count;
         var availableSlotsCount = (lot.IsActive && hasConfiguredSlots) ? availableCount : 0;
@@ -264,6 +268,7 @@ public class ParkingManagementService : IParkingManagementService
         var lot = await _context.ParkingLots
             .Include(l => l.Floors)
                 .ThenInclude(f => f.Slots)
+                    .ThenInclude(s => s.AssignedDispatches)
             .FirstOrDefaultAsync(l => l.Id == id, ct);
 
         if (lot == null)
@@ -285,7 +290,7 @@ public class ParkingManagementService : IParkingManagementService
         var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
                                               s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
                                               s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
-        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty);
+        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
         var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
         var totalCapacity = usableSlots.Count;
         var availableSlotsCount = (lot.IsActive && hasConfiguredSlots) ? availableCount : 0;
@@ -336,6 +341,118 @@ public class ParkingManagementService : IParkingManagementService
         _logger.LogInformation("ParkingLot {LotId} deleted by Actor {ActorId}", id, actorId);
 
         return (true, "Xóa bãi đỗ xe thành công.");
+    }
+
+
+    /// <summary>
+    /// Cấu hình bố cục chuẩn demo: 3 tầng A/B/C, mỗi tầng 100 ô (A001..A100, B001..B100, C001..C100),
+    /// ConfiguredCapacity = 300. Idempotent: chỉ tạo phần còn thiếu, không đổi trạng thái/IsActive của ô hiện có.
+    /// </summary>
+    public async Task<(bool Success, string Message, ProvisionLotLayoutResultDto? Result)> ProvisionStandardLayoutAsync(int lotId, long? actorId, CancellationToken ct = default)
+    {
+        var semaphore = _provisionLocks.GetOrAdd(lotId, _ => new SemaphoreSlim(1, 1));
+        await semaphore.WaitAsync(ct);
+        try
+        {
+            const int slotsPerFloor = 100;
+            var layout = new[] { (Number: 1, Letter: 'A'), (Number: 2, Letter: 'B'), (Number: 3, Letter: 'C') };
+
+            var lot = await _context.ParkingLots
+                .Include(l => l.Floors).ThenInclude(f => f.Slots)
+                .FirstOrDefaultAsync(l => l.Id == lotId, ct);
+            if (lot == null)
+            {
+                return (false, "Bãi đỗ xe chỉ định không tồn tại.", null);
+            }
+
+            var now = DateTime.UtcNow;
+            int floorsCreated = 0, slotsCreated = 0, slotsExisting = 0;
+
+            foreach (var (number, letter) in layout)
+            {
+                var floorName = $"Tầng {letter}";
+                var floor = lot.Floors.FirstOrDefault(f => f.FloorNumber == number)
+                            ?? lot.Floors.FirstOrDefault(f => string.Equals(f.Name, floorName, StringComparison.OrdinalIgnoreCase));
+                if (floor == null)
+                {
+                    floor = new ParkingFloor { LotId = lotId, FloorNumber = number, Name = floorName, IsActive = true, CreatedAt = now, UpdatedAt = now };
+                    lot.Floors.Add(floor);
+                    floorsCreated++;
+                }
+
+                var existingCodes = floor.Slots.Select(s => s.SlotCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                for (var i = 1; i <= slotsPerFloor; i++)
+                {
+                    var code = $"{letter}{i:D3}";
+                    if (existingCodes.Contains(code)) { slotsExisting++; continue; }
+                    floor.Slots.Add(new ParkingSlot { SlotCode = code, PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true, CreatedAt = now, UpdatedAt = now });
+                    slotsCreated++;
+                }
+                floor.TotalSlots = floor.Slots.Count;
+            }
+
+            var oldCapacity = lot.TotalCapacity;
+            lot.TotalCapacity = layout.Length * slotsPerFloor;
+            if (oldCapacity != lot.TotalCapacity || slotsCreated > 0 || floorsCreated > 0) lot.UpdatedAt = now;
+
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogWarning(ex, "DbUpdateException during provisioning for lot {LotId}", lotId);
+                var reloadedLot = await _context.ParkingLots
+                    .AsNoTracking()
+                    .Include(l => l.Floors).ThenInclude(f => f.Slots)
+                    .FirstOrDefaultAsync(l => l.Id == lotId, ct);
+                if (reloadedLot != null && reloadedLot.Floors.SelectMany(f => f.Slots).Count() >= layout.Length * slotsPerFloor)
+                {
+                    var existingCount = reloadedLot.Floors.SelectMany(f => f.Slots).Count();
+                    var usableCount = reloadedLot.Floors.Where(f => f.IsActive)
+                        .SelectMany(f => f.Slots)
+                        .Count(s => s.IsActive && s.PhysicalStatus != SlotPhysicalStatuses.Maintenance && s.PhysicalStatus != SlotPhysicalStatuses.Unavailable);
+                    return (true, "Bố cục đã đầy đủ, không có thay đổi.", new ProvisionLotLayoutResultDto
+                    {
+                        LotId = reloadedLot.Id,
+                        LotName = reloadedLot.Name,
+                        FloorsCreated = 0,
+                        SlotsCreated = 0,
+                        SlotsAlreadyExisting = existingCount,
+                        PhysicalSlotsCount = existingCount,
+                        ConfiguredCapacity = reloadedLot.TotalCapacity,
+                        OperationalCapacity = usableCount
+                    });
+                }
+                throw;
+            }
+
+            var usable = lot.Floors.Where(f => f.IsActive)
+                .SelectMany(f => f.Slots)
+                .Count(s => s.IsActive && s.PhysicalStatus != SlotPhysicalStatuses.Maintenance && s.PhysicalStatus != SlotPhysicalStatuses.Unavailable);
+            var result = new ProvisionLotLayoutResultDto
+            {
+                LotId = lot.Id,
+                LotName = lot.Name,
+                FloorsCreated = floorsCreated,
+                SlotsCreated = slotsCreated,
+                SlotsAlreadyExisting = slotsExisting,
+                PhysicalSlotsCount = lot.Floors.SelectMany(f => f.Slots).Count(),
+                ConfiguredCapacity = lot.TotalCapacity,
+                OperationalCapacity = usable
+            };
+
+            await LogAuditAsync(actorId, "PROVISION_LOT_LAYOUT", "parking_lots", lot.Id.ToString(),
+                JsonSerializer.Serialize(new { TotalCapacity = oldCapacity }, JsonOptions),
+                JsonSerializer.Serialize(result, JsonOptions), null, ct);
+
+            _logger.LogInformation("Lot {LotId} layout provisioned by Actor {ActorId}: +{Floors} floors, +{Slots} slots", lotId, actorId, floorsCreated, slotsCreated);
+            return (true, slotsCreated == 0 && floorsCreated == 0 ? "Bố cục đã đầy đủ, không có thay đổi." : "Cấu hình bố cục 300 ô thành công.", result);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     #endregion
@@ -464,6 +581,7 @@ public class ParkingManagementService : IParkingManagementService
         var floor = await _context.ParkingFloors
             .Include(f => f.Lot)
             .Include(f => f.Slots)
+                .ThenInclude(s => s.AssignedDispatches)
             .FirstOrDefaultAsync(f => f.Id == id, ct);
 
         if (floor == null)
@@ -530,7 +648,7 @@ public class ParkingManagementService : IParkingManagementService
             FloorNumber = floor.FloorNumber,
             Name = floor.Name,
             TotalSlots = floor.TotalSlots,
-            AvailableSlotsCount = floor.Slots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty),
+            AvailableSlotsCount = floor.Slots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)),
             OccupiedSlotsCount = floor.Slots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
             IsActive = floor.IsActive,
             CreatedAt = floor.CreatedAt,

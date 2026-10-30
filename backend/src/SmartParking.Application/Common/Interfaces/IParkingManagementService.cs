@@ -12,6 +12,7 @@ public interface IParkingManagementService
     Task<(bool Success, string Message, ParkingLotDto? Lot)> UpdateLotAsync(int id, UpdateParkingLotRequestDto request, long? actorId, CancellationToken ct = default);
     Task<(bool Success, string Message, ParkingLotDto? Lot)> UpdateLotStatusAsync(int id, UpdateLotStatusRequestDto request, long? actorId, CancellationToken ct = default);
     Task<(bool Success, string Message)> DeleteLotAsync(int id, long? actorId, CancellationToken ct = default);
+    Task<(bool Success, string Message, ProvisionLotLayoutResultDto? Result)> ProvisionStandardLayoutAsync(int lotId, long? actorId, CancellationToken ct = default);
 
     // Parking Floors
     Task<IReadOnlyList<ParkingFloorDto>> GetFloorsByLotIdAsync(int lotId, bool? isActiveOnly, CancellationToken ct = default);
