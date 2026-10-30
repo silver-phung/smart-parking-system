@@ -101,6 +101,23 @@ public class ParkingLotsController : ControllerBase
     }
 
     /// <summary>
+    /// Cấu hình bố cục chuẩn demo 300 ô (Tầng A/B/C x 100) cho bãi đỗ xe. Idempotent (Chỉ ADMIN).
+    /// </summary>
+    [HttpPost("{id:int}/provision-standard-layout")]
+    [Authorize(Roles = Roles.Admin)]
+    [ProducesResponseType(typeof(ProvisionLotLayoutResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ProvisionStandardLayout(int id, CancellationToken ct)
+    {
+        var (success, message, result) = await _parkingService.ProvisionStandardLayoutAsync(id, GetCurrentUserId(), ct);
+        if (!success)
+        {
+            return NotFound(new { message });
+        }
+        return Ok(new { message, data = result });
+    }
+
+    /// <summary>
     /// Tạo mới một bãi đỗ xe (Chỉ dành cho Quản trị viên hệ thống - ADMIN).
     /// </summary>
     [HttpPost]

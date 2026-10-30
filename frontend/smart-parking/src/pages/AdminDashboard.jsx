@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../services/api.js";
+import { calculateDashboardSummary } from "../services/dashboardSummary.js";
 import RequireRole from "../components/RequireRole.jsx";
 import { Link } from "react-router-dom";
 
@@ -81,31 +82,7 @@ function AdminDashboardContent() {
     void refresh();
   }, [refresh]);
 
-  const summary = useMemo(() => {
-    const capacity = lots.reduce(
-      (sum, lot) => sum + (lot.totalCapacity || 0),
-      0,
-    );
-    const occupied = lots.reduce(
-      (sum, lot) => sum + (lot.occupiedSlotsCount || 0),
-      0,
-    );
-    const available = lots.reduce(
-      (sum, lot) => sum + (lot.availableSlotsCount || 0),
-      0,
-    );
-
-    return {
-      capacity,
-      occupied,
-      available,
-      openLots: lots.filter((lot) => lot.isActive).length,
-      occupancy:
-        capacity > 0
-          ? Math.min(100, Math.round((occupied / capacity) * 100))
-          : 0,
-    };
-  }, [lots]);
+  const summary = useMemo(() => calculateDashboardSummary(lots), [lots]);
 
   return (
     <section className="admin-dashboard container" id="overview">
@@ -165,9 +142,13 @@ function AdminDashboardContent() {
           </small>
         </article>
         <article className="admin-dashboard__metric">
-          <span>Tổng sức chứa</span>
-          <strong>{loading ? "—" : formatNumber(summary.capacity)}</strong>
-          <small>Chỗ đỗ trên các bãi đã tải</small>
+          <span>Tổng số chỗ đã triển khai</span>
+          <strong>{loading ? "—" : formatNumber(summary.physicalSlots)}</strong>
+          <small>
+            {loading
+              ? "Đang tải"
+              : `${formatNumber(summary.configuredCapacity)} công suất thiết kế`}
+          </small>
         </article>
         <article className="admin-dashboard__metric">
           <span>Đang có xe</span>
@@ -179,7 +160,13 @@ function AdminDashboardContent() {
         <article className="admin-dashboard__metric">
           <span>Chỗ còn trống</span>
           <strong>{loading ? "—" : formatNumber(summary.available)}</strong>
-          <small>Số liệu hiện tại từ API bãi đỗ</small>
+          <small>
+            {loading
+              ? "Đang tải"
+              : summary.physicalSlots > 0
+                ? "Trên các bãi đã triển khai slot"
+                : "Số liệu hiện tại từ API bãi đỗ"}
+          </small>
         </article>
         <article className="admin-dashboard__metric">
           <span>Phiên đang hoạt động</span>
@@ -259,6 +246,7 @@ function AdminDashboardContent() {
                     <span>
                       {formatNumber(lot.availableSlotsCount || 0)} trống /{" "}
                       {formatNumber(capacity)} chỗ
+                      {(lot.physicalSlotsCount ?? 0) === 0 && " (Chưa số hóa slot)"}
                     </span>
                   </div>
                 </article>
