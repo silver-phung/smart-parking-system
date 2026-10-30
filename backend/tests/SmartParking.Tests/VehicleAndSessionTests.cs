@@ -363,6 +363,14 @@ public class VehicleAndSessionTests
         context.ParkingLots.Add(lot);
         await context.SaveChangesAsync();
 
+        var floor = new ParkingFloor { LotId = lot.Id, FloorNumber = 1, Name = "Tầng 1", IsActive = true, TotalSlots = 1 };
+        context.ParkingFloors.Add(floor);
+        await context.SaveChangesAsync();
+
+        var slot = new ParkingSlot { FloorId = floor.Id, SlotCode = "C-01", PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true };
+        context.ParkingSlots.Add(slot);
+        await context.SaveChangesAsync();
+
         // Completed session in the past
         context.ParkingSessions.Add(new ParkingSession
         {

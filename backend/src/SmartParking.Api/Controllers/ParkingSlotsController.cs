@@ -56,7 +56,19 @@ public class ParkingSlotsController : ControllerBase
     public async Task<IActionResult> GetSlotById(long id, CancellationToken ct)
     {
         var isAdmin = User.IsInRole(Roles.Admin);
-        var slot = await _parkingService.GetSlotByIdAsync(id, isAdmin, ct);
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+        var hasAssignedAccess = false;
+        if (!isAdmin && actorId.HasValue && (actorRole == Roles.Manager || actorRole == Roles.Staff))
+        {
+            var rawSlot = await _parkingService.GetSlotByIdAsync(id, includeInternalDetails: false, ct);
+            if (rawSlot != null)
+            {
+                hasAssignedAccess = await _authService.HasLotAccessAsync(actorId.Value, actorRole, rawSlot.LotId, ct);
+            }
+        }
+
+        var slot = await _parkingService.GetSlotByIdAsync(id, isAdmin || hasAssignedAccess, ct);
         if (slot == null)
         {
             return NotFound(new { message = $"Không tìm thấy ô đỗ với ID: {id}." });

@@ -553,6 +553,8 @@ public class BookingService : IBookingService
         }
 
         var calc = await ParkingLotCapacityHelper.CalculateAsync(_context, lotId, lot, ct);
+        var physicalSlotsCount = await _context.ParkingSlots.CountAsync(s => s.Floor.LotId == lotId, ct);
+        var availableCapacity = lot.IsActive ? calc.AvailableCapacity : 0;
 
         return new LotCapacityDto
         {
@@ -560,9 +562,11 @@ public class BookingService : IBookingService
             LotName = lot.Name,
             LotAddress = lot.Address,
             TotalCapacity = calc.TotalCapacity,
-            AvailableForWalkIn = calc.AvailableCapacity,
-            AvailableForBooking = calc.AvailableCapacity,
-            IsFull = calc.AvailableCapacity <= 0,
+            AvailableForWalkIn = availableCapacity,
+            AvailableForBooking = availableCapacity,
+            IsFull = !lot.IsActive || availableCapacity <= 0,
+            PhysicalSlotsCount = physicalSlotsCount,
+            ConfiguredCapacity = lot.TotalCapacity,
             ActiveSessionsCount = includeDiagnostics ? calc.ActiveSessionsCount : null,
             ActiveReservationsCount = includeDiagnostics ? calc.PendingBookingsCount : null,
             TotalOccupiedOrReserved = includeDiagnostics ? calc.TotalOccupiedOrReserved : null,

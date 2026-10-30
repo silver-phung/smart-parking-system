@@ -773,13 +773,14 @@ public class BookingAndCapacityTests
 
         var capacity = await bookingService.GetLotCapacityAsync(101, currentUserId: 1, currentUserRole: Roles.Admin);
         Assert.NotNull(capacity);
-        // Fallback permitted when NO slots exist
-        Assert.Equal(20, capacity.TotalCapacity);
+        // Sprint 3 rule: Operational capacity is strictly 0 when no physical slots exist
+        Assert.Equal(0, capacity.TotalCapacity);
+        Assert.Equal(20, capacity.ConfiguredCapacity);
         Assert.Equal(2, capacity.ActiveSessionsCount);
         Assert.Equal(1, capacity.ActiveReservationsCount);
-        // Available = 20 - (2 + 1) = 17
-        Assert.Equal(17, capacity.AvailableForBooking);
-        Assert.Equal(17, capacity.AvailableForWalkIn);
+        Assert.Equal(0, capacity.AvailableForBooking);
+        Assert.Equal(0, capacity.AvailableForWalkIn);
+        Assert.True(capacity.IsFull);
     }
 
     [Fact]
@@ -1332,6 +1333,201 @@ public class BookingAndCapacityTests
         Assert.IsAssignableFrom<IEnumerable<object>>(parameters);
         Assert.Single(parameters);
         Assert.Equal(dummyKey, parameters[0]);
+    }
+
+    [Fact]
+    public async Task BookingAndCheckIn_Lot4Unconfigured_DeactivationGuardsAgainstOverbooking()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+
+        // Lot 4: ConfiguredCapacity 100000, 0 physical slots
+        var lot4 = new ParkingLot
+        {
+            Id = 444,
+            Name = "Lot 4 Test",
+            TotalCapacity = 100000,
+            IsActive = false // Deactivated state
+        };
+        context.ParkingLots.Add(lot4);
+        await context.SaveChangesAsync();
+
+        // 1. When deactivated: Booking MUST be rejected with HTTP 400
+        var bookingReq = new CreateBookingRequestDto
+        {
+            LotId = lot4.Id,
+            PlateNumber = "51A-LOT4-01",
+            StartTime = DateTime.UtcNow.AddMinutes(10),
+            EndTime = DateTime.UtcNow.AddHours(2)
+        };
+        var (bSuccess, bCode, bMsg, _) = await bookingService.CreateBookingAsync(bookingReq, userId: 10, userRole: Roles.User, ipAddress: "127.0.0.1");
+        Assert.False(bSuccess);
+        Assert.Equal(400, bCode);
+        Assert.Contains("tạm ngừng hoạt động", bMsg);
+
+        // 2. When deactivated: Check-in MUST be rejected immediately
+        var checkInReq = new CheckInRequestDto
+        {
+            LotId = lot4.Id,
+            PlateNumber = "51A-LOT4-01"
+        };
+        var (cSuccess, cMsg, _) = await sessionService.CheckInAsync(checkInReq, actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(cSuccess);
+        Assert.Contains("tạm ngừng hoạt động", cMsg);
+
+        // 3. When activated: Zero-slot lot has operational capacity 0 and strictly rejects new Booking and Check-in
+        lot4.IsActive = true;
+        await context.SaveChangesAsync();
+
+        var calc = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot4.Id, lot4);
+        Assert.Equal(0, calc.TotalCapacity);
+        Assert.Equal(0, calc.AvailableCapacity);
+        Assert.Equal(100000, calc.ConfiguredCapacity);
+
+        // Active zero-slot lot rejects Booking
+        var (bActSuccess, bActCode, bActMsg, _) = await bookingService.CreateBookingAsync(bookingReq, userId: 10, userRole: Roles.User, ipAddress: "127.0.0.1");
+        Assert.False(bActSuccess);
+        Assert.Equal(409, bActCode);
+        Assert.Contains("đã hết chỗ khả dụng", bActMsg);
+
+        // Active zero-slot lot rejects Check-in
+        var (cActSuccess, cActMsg, _) = await sessionService.CheckInAsync(checkInReq, actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(cActSuccess);
+        Assert.Contains("đã hết chỗ khả dụng", cActMsg);
+    }
+
+    [Fact]
+    public async Task ClosedLot_RejectsNewAdmissions_AllowsExistingVehiclesToCheckOut()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+
+        var lot = new ParkingLot
+        {
+            Id = 555,
+            Name = "Lot 5 Closure Test",
+            TotalCapacity = 1,
+            IsActive = true
+        };
+        context.ParkingLots.Add(lot);
+        await context.SaveChangesAsync();
+
+        var floor = new ParkingFloor
+        {
+            Id = 5551,
+            LotId = lot.Id,
+            FloorNumber = 1,
+            Name = "Tầng 1",
+            TotalSlots = 1,
+            IsActive = true
+        };
+        context.ParkingFloors.Add(floor);
+        await context.SaveChangesAsync();
+
+        var slot = new ParkingSlot
+        {
+            Id = 5552,
+            FloorId = floor.Id,
+            SlotCode = "C-01",
+            PhysicalStatus = SlotPhysicalStatuses.Empty,
+            IsActive = true
+        };
+        context.ParkingSlots.Add(slot);
+        await context.SaveChangesAsync();
+
+        // 1. Vehicle A checks in while lot is open
+        var checkInA = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = lot.Id, PlateNumber = "51A-INSIDE-1", SlotId = (int)slot.Id },
+            actorId: 1,
+            actorRole: Roles.Admin,
+            ipAddress: "127.0.0.1");
+        Assert.True(checkInA.Success);
+        Assert.NotNull(checkInA.Data);
+        var sessionId = checkInA.Data.Id;
+
+        // 2. Admin closes the lot (IsActive = false)
+        lot.IsActive = false;
+        await context.SaveChangesAsync();
+
+        // 3. New admissions are REJECTED:
+        // Booking rejected
+        var (bSuccess, bCode, bMsg, _) = await bookingService.CreateBookingAsync(
+            new CreateBookingRequestDto
+            {
+                LotId = lot.Id,
+                PlateNumber = "51A-NEW-ADMIT",
+                StartTime = DateTime.UtcNow.AddMinutes(10),
+                EndTime = DateTime.UtcNow.AddHours(2)
+            },
+            userId: 10,
+            userRole: Roles.User,
+            ipAddress: "127.0.0.1");
+        Assert.False(bSuccess);
+        Assert.Equal(400, bCode);
+        Assert.Contains("tạm ngừng hoạt động", bMsg);
+
+        // Check-in rejected
+        var checkInB = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = lot.Id, PlateNumber = "51A-NEW-ADMIT" },
+            actorId: 1,
+            actorRole: Roles.Admin,
+            ipAddress: "127.0.0.1");
+        Assert.False(checkInB.Success);
+        Assert.Contains("tạm ngừng hoạt động", checkInB.Message);
+
+        // 4. Vehicle A already inside CAN check out (subject to clearance rules)
+        var checkOutA = await sessionService.CheckOutAsync(
+            sessionId,
+            new CheckOutRequestDto { ConfirmedPlateNumber = "51A-INSIDE-1", AllowExitWithoutPayment = true, ExemptionReason = "Lot closing clearance" },
+            actorId: 1,
+            actorRole: Roles.Admin,
+            ipAddress: "127.0.0.1");
+        Assert.True(checkOutA.Success);
+        Assert.NotNull(checkOutA.Data);
+        Assert.Equal(SessionStatuses.Completed, checkOutA.Data.Status);
+    }
+
+    [Fact]
+    public async Task ManagerScoping_CannotAccessOrManageUnassignedLot()
+    {
+        var (bookingService, _, authService, context) = await CreateServicesAsync();
+
+        // Lot 1 assigned to managerUser (Id = 2)
+        var lot1 = new ParkingLot { Id = 601, Name = "Lot Assigned", TotalCapacity = 1, IsActive = true };
+        // Lot 2 unassigned to managerUser
+        var lot2 = new ParkingLot { Id = 602, Name = "Lot Unassigned", TotalCapacity = 1, IsActive = true };
+        context.ParkingLots.AddRange(lot1, lot2);
+        await context.SaveChangesAsync();
+
+        var assignment = new StaffLotAssignment
+        {
+            UserId = 2, // manager_booking
+            LotId = lot1.Id,
+            Duty = StaffDuties.Gate,
+            IsActive = true,
+            AssignedAt = DateTime.UtcNow
+        };
+        context.StaffLotAssignments.Add(assignment);
+        await context.SaveChangesAsync();
+
+        // Manager has access to assigned lot 601
+        var hasAccess601 = await authService.HasLotAccessAsync(2, Roles.Manager, lot1.Id);
+        Assert.True(hasAccess601);
+        var canManage601 = await authService.CanManageLotStatusAsync(2, Roles.Manager, lot1.Id);
+        Assert.True(canManage601);
+
+        // Manager does NOT have access to unassigned lot 602
+        var hasAccess602 = await authService.HasLotAccessAsync(2, Roles.Manager, lot2.Id);
+        Assert.False(hasAccess602);
+        var canManage602 = await authService.CanManageLotStatusAsync(2, Roles.Manager, lot2.Id);
+        Assert.False(canManage602);
+
+        // Diagnostic information is omitted for unassigned lot
+        var capAssigned = await bookingService.GetLotCapacityAsync(lot1.Id, 2, Roles.Manager);
+        Assert.NotNull(capAssigned);
+        Assert.NotNull(capAssigned.ActiveSessionsCount); // Present for assigned lot
+
+        var capUnassigned = await bookingService.GetLotCapacityAsync(lot2.Id, 2, Roles.Manager);
+        Assert.NotNull(capUnassigned);
+        Assert.Null(capUnassigned.ActiveSessionsCount); // Omitted for unassigned lot
     }
 
     #endregion
