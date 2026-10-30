@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import RequireRole from "../components/RequireRole.jsx";
+import Viewer3D from "./Viewer3D.jsx";
 import { apiRequest } from "../services/api.js";
 
 const roleDetails = {
@@ -359,6 +360,7 @@ function DashboardContent({ role }) {
           ))}
         </div>
       </div>
+      <Viewer3D embedded />
     </section>
   );
 }

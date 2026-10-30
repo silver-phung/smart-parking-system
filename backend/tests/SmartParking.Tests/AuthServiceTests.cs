@@ -24,8 +24,10 @@ public class AuthServiceTests
 
     private AuthService CreateAuthService(TestSmartParkingDbContext context) => new(
         context, _hasher, new TokenService(Options.Create(_jwtOptions)),
+        null!, null!, null!,
         Options.Create(_jwtOptions),
         Options.Create(new SecurityOptions { MaxFailedLoginAttempts = 5, LockoutDurationMinutes = 15 }),
+        Options.Create(new RecaptchaOptions()),
         NullLogger<AuthService>.Instance);
 
     private async Task<User> SeedAccountAsync(TestSmartParkingDbContext context)

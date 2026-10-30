@@ -514,3 +514,20 @@ section[id] { scroll-margin-top: 16px; }
   .admin-dashboard__lot-meta { flex-direction: column; }
   .admin-dashboard__panel { padding: 16px; }
 }
+
+.viewer3d { padding: 24px 0; display: flex; flex-direction: column; gap: 12px; }
+.viewer3d__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.viewer3d__bar h1 { margin: 0; font-size: 1.4rem; }
+.viewer3d__stage { height: 70vh; min-height: 480px; }
+.viewer3d__canvas { width: 100%; height: 100%; }
+.viewer3d__panel { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.viewer3d__error { color: #b91c1c; margin: 0; }
+.viewer3d__chosen { margin: 0; color: #15803d; }
+
+.viewer3d-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.viewer3d-modal__box { background: #fff; border-radius: 14px; padding: 24px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+.viewer3d-modal__box h2 { margin: 0; font-size: 1.2rem; }
+.viewer3d-modal__sub { margin: 0; color: #64748b; }
+.viewer3d-modal__box label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.viewer3d-modal__box input { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+.viewer3d-modal__actions { display: flex; justify-content: flex-end; gap: 8px; }

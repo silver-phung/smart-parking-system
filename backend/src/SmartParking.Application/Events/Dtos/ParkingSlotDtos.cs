@@ -68,6 +68,13 @@ public class ParkingSlotDto
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public class ReserveSlotRequest
+{
+    public string? CarPlate { get; set; }
+    public string? VehicleModel { get; set; }
+    public string? VehicleColor { get; set; }
+}
+
 public class UpdateSlotStatusRequest
 {
     public string PhysicalStatus { get; set; } = "EMPTY";

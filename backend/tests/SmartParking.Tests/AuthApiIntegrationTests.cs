@@ -19,10 +19,10 @@ public class AuthApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     [InlineData("/api/v1/auth/register")]
     [InlineData("/api/v1/auth/verify-email")]
     [InlineData("/api/v1/auth/resend-verification")]
-    public async Task RemovedAccountCreationEndpoint_ReturnsNotFound(string path)
+    public async Task AccountCreationEndpoint_IsPublic_AndValidatesBody(string path)
     {
         var response = await _client.PostAsJsonAsync(path, new { });
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -71,10 +71,10 @@ public class AuthApiIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
 
-        Assert.DoesNotContain("/api/v1/auth/register", content);
+        Assert.Contains("/api/v1/auth/register", content);
         Assert.Contains("/api/v1/auth/login", content);
-        Assert.DoesNotContain("/api/v1/auth/verify-email", content);
-        Assert.DoesNotContain("/api/v1/auth/resend-verification", content);
+        Assert.Contains("/api/v1/auth/verify-email", content);
+        Assert.Contains("/api/v1/auth/resend-verification", content);
         Assert.Contains("/api/v1/auth/refresh", content);
         Assert.Contains("/api/v1/auth/logout", content);
         Assert.Contains("/api/v1/users/me", content);

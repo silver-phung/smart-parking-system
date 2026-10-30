@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import RequireCustomer from "../components/RequireCustomer.jsx";
+import Viewer3D from "./Viewer3D.jsx";
 import { apiRequest } from "../services/api.js";
 
 function readData(response) {
@@ -260,6 +261,7 @@ function DashboardContent() {
           yêu cầu đặt chỗ. Các chỗ trống trên đây chỉ phản ánh trạng thái hiện tại, chưa được giữ cho bạn.
         </span>
       </div>
+      <Viewer3D embedded />
     </section>
   );
 }

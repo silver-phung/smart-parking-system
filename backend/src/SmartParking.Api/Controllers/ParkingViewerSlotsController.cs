@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Events.Dtos;
@@ -13,6 +14,7 @@ namespace SmartParking.Api.Controllers;
 ///   - /api/v1/parking-viewer/slots (tương thích cấu trúc RESTful của Phụng)
 /// </summary>
 [ApiController]
+[Authorize]
 [Produces("application/json")]
 public class ParkingViewerSlotsController : ControllerBase
 {
@@ -94,6 +96,33 @@ public class ParkingViewerSlotsController : ControllerBase
     }
 
     /// <summary>
+    /// Danh sách bãi và tầng có mô hình 3D: GET /api/ParkingSlots/lots
+    /// </summary>
+    [HttpGet("/api/ParkingSlots/lots")]
+    [HttpGet("/api/v1/parking-viewer/lots")]
+    public IActionResult GetLots()
+    {
+        var lots = _slotStore.Values
+            .GroupBy(s => s.LotId)
+            .OrderBy(g => g.Key)
+            .Select(g => new
+            {
+                lotId = g.Key,
+                lotName = g.Select(s => s.LotName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? $"Bãi {g.Key}",
+                floors = g.GroupBy(s => s.FloorId)
+                    .OrderBy(f => f.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(f => new
+                    {
+                        floorId = f.Key,
+                        floorName = f.Select(s => s.FloorName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? f.Key,
+                        total = f.Count(),
+                        empty = f.Count(s => string.Equals(s.PhysicalStatus.ToString(), "EMPTY", StringComparison.OrdinalIgnoreCase))
+                    })
+            });
+        return Ok(new { success = true, lots });
+    }
+
+    /// <summary>
     /// Lấy danh sách ô đỗ xe theo tầng cụ thể:
     /// GET /api/ParkingSlots/floor/{floorId}
     /// </summary>
@@ -105,9 +134,51 @@ public class ParkingViewerSlotsController : ControllerBase
     }
 
     /// <summary>
+    /// Khách hàng giữ chỗ một ô trống: POST /api/ParkingSlots/{slotCode}/reserve
+    /// </summary>
+    [Authorize(Roles = "USER")]
+    [HttpPost("/api/ParkingSlots/{slotCode}/reserve")]
+    [HttpPost("/api/v1/parking-viewer/slots/{slotCode}/reserve")]
+    public IActionResult ReserveSlot(string slotCode, [FromBody] ReserveSlotRequest request)
+    {
+        var plate = request.CarPlate?.Trim().ToUpperInvariant();
+        var model = request.VehicleModel?.Trim();
+        var color = request.VehicleColor?.Trim();
+        if (string.IsNullOrWhiteSpace(plate) || plate.Length > 15
+            || string.IsNullOrWhiteSpace(model) || model.Length > 50
+            || string.IsNullOrWhiteSpace(color) || color.Length > 30)
+        {
+            return BadRequest(new { success = false, message = "Vui lòng nhập đầy đủ biển số, tên xe và màu xe hợp lệ." });
+        }
+
+        var code = slotCode.Trim();
+        lock (_initLock)
+        {
+            var slot = _slotStore.Values.FirstOrDefault(s => s.SlotCode.Equals(code, StringComparison.OrdinalIgnoreCase));
+            if (slot is null)
+            {
+                return NotFound(new { success = false, message = $"Không tìm thấy ô đỗ có mã {slotCode}." });
+            }
+            if (!slot.PhysicalStatus.Equals("EMPTY", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new { success = false, message = "Ô này không còn trống." });
+            }
+
+            slot.PhysicalStatus = "RESERVED";
+            slot.CurrentCarPlate = plate;
+            slot.VehicleModel = model;
+            slot.VehicleColor = color;
+            slot.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            _logger.LogInformation("Slot {SlotCode} reserved", slot.SlotCode);
+            return Ok(new { success = true, message = $"Đã giữ chỗ ô {slot.SlotCode}.", slot });
+        }
+    }
+
+    /// <summary>
     /// Cập nhật nhanh trạng thái vật lý của một ô đỗ (cho demo tương tác trực tiếp trên 3D):
     /// PATCH /api/ParkingSlots/{slotCode}/status
     /// </summary>
+    [Authorize(Roles = "ADMIN,MANAGER,STAFF")]
     [HttpPatch("/api/ParkingSlots/{slotCode}/status")]
     [HttpPatch("/api/v1/parking-viewer/slots/{slotCode}/status")]
     public IActionResult UpdateSlotStatus(string slotCode, [FromBody] UpdateSlotStatusRequest request)

@@ -329,8 +329,10 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
             context,
             new PasswordHasherService(),
             new TokenService(jwtOptions),
+            null!, null!, null!,
             jwtOptions,
             secOptions,
+            Microsoft.Extensions.Options.Options.Create(new SmartParking.Application.Common.Options.RecaptchaOptions()),
             NullLogger<AuthService>.Instance
         );
 

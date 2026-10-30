@@ -968,9 +968,52 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [InlineData("/api/v1/parking-viewer/floors/B1/slots?lotId=1")]
     public async Task GetViewerAliases_ReturnViewerSlots(string path)
     {
-        var response = await _client.GetAsync(path);
+        var response = await CreateClientForRole(Roles.User).GetAsync(path);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("B1-A01", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task GetViewerSlots_WithoutToken_Returns401()
+    {
+        var response = await _client.GetAsync("/api/ParkingSlots?lotId=1&floorId=B1");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetViewerLots_ReturnsLotsAndFloors()
+    {
+        var response = await CreateClientForRole(Roles.Manager).GetAsync("/api/v1/parking-viewer/lots");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("floors", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ReserveSlot_AsUser_ReservesEmptySlot_ThenConflicts()
+    {
+        var client = CreateClientForRole(Roles.User);
+        var body = new { carPlate = "51f-123.45", vehicleModel = "Vios", vehicleColor = "Trắng" };
+
+        var first = await client.PostAsJsonAsync("/api/ParkingSlots/B1-A05/reserve", body);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Contains("51F-123.45", await first.Content.ReadAsStringAsync());
+
+        var second = await client.PostAsJsonAsync("/api/ParkingSlots/B1-A05/reserve", body);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+
+        var invalid = await client.PostAsJsonAsync("/api/ParkingSlots/B1-A06/reserve", new { carPlate = "" });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        var forbidden = await CreateClientForRole(Roles.Staff).PostAsJsonAsync("/api/ParkingSlots/B1-A06/reserve", body);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchParkingSlotStatus_AsUser_Returns403()
+    {
+        var response = await CreateClientForRole(Roles.User).PatchAsJsonAsync(
+            "/api/ParkingSlots/B1-A02/status", new { physicalStatus = "OCCUPIED" });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
@@ -986,7 +1029,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task GetParkingSlots_Returns200WithSlotsList()
     {
-        var response = await _client.GetAsync("/api/ParkingSlots?lotId=1&floorId=B1");
+        var response = await CreateClientForRole(Roles.Staff).GetAsync("/api/ParkingSlots?lotId=1&floorId=B1");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
         Assert.Contains("slots", content);
@@ -1002,7 +1045,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             carPlate = "51F-999.88"
         };
 
-        var response = await _client.PatchAsJsonAsync("/api/ParkingSlots/B1-A02/status", updateRequest);
+        var response = await CreateClientForRole(Roles.Manager).PatchAsJsonAsync("/api/ParkingSlots/B1-A02/status", updateRequest);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
         Assert.Contains("51F-999.88", content);

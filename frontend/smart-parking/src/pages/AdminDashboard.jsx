@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../services/api.js";
 import RequireRole from "../components/RequireRole.jsx";
+import Viewer3D from "./Viewer3D.jsx";
 
 function getItems(response) {
   const data = response?.data;
@@ -290,6 +291,7 @@ function AdminDashboardContent() {
           </div>
         )}
       </section>
+      <Viewer3D embedded />
     </section>
   );
 }

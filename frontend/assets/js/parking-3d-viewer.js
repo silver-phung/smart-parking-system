@@ -61,6 +61,9 @@
       floorId: options.floorId || 'B1',
       showStats: options.showStats !== false,
       showControls: options.showControls !== false,
+      getHeaders: options.getHeaders || null,
+      onError: options.onError || null,
+      floors: options.floors || null,
       onSlotClick: options.onSlotClick || null,
       onSlotHover: options.onSlotHover || null
     };
@@ -162,6 +165,15 @@
 
       // Event change floor
       var floorSel = this.hudTop.querySelector('#p3dFloorSelect');
+      if (this.options.floors && this.options.floors.length) {
+        floorSel.innerHTML = '';
+        this.options.floors.forEach(function (f) {
+          var opt = document.createElement('option');
+          opt.value = f.floorId;
+          opt.textContent = f.floorName || f.floorId;
+          floorSel.appendChild(opt);
+        });
+      }
       floorSel.value = this.options.floorId;
       floorSel.addEventListener('change', function (e) {
         self.setFloor(e.target.value);
@@ -469,8 +481,15 @@
 
     var url = this.options.apiEndpoint + '?lotId=' + this.options.lotId + '&floorId=' + targetFloor;
 
-    fetch(url)
+    var headers = typeof this.options.getHeaders === 'function' ? this.options.getHeaders() : {};
+
+    fetch(url, { headers: headers })
       .then(function (res) {
+        if (res.status === 401 || res.status === 403) {
+          var authErr = new Error('API returned ' + res.status);
+          authErr.noFallback = true;
+          throw authErr;
+        }
         if (!res.ok) throw new Error('API returned ' + res.status);
         return res.json();
       })
@@ -479,6 +498,11 @@
         self._renderSlots(slotsList);
       })
       .catch(function (err) {
+        if (err.noFallback) {
+          if (self.options.onError) self.options.onError(err);
+          self._renderSlots([]);
+          return;
+        }
         console.warn('[Parking3DViewer] Không thể kết nối API ' + url + ', đang fallback sang dữ liệu mẫu:', err.message);
         self._renderFallbackSlots(targetFloor);
       })
