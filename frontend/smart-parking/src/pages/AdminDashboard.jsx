@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../services/api.js";
+import { calculateDashboardSummary } from "../services/dashboardSummary.js";
 import RequireRole from "../components/RequireRole.jsx";
 import { Link } from "react-router-dom";
 
@@ -81,64 +82,7 @@ function AdminDashboardContent() {
     void refresh();
   }, [refresh]);
 
-  const summary = useMemo(() => {
-    // Chỉ tổng hợp các bãi đang hoạt động (isActive) để phản ánh vận hành thực tế
-    const activeLots = lots.filter((lot) => lot.isActive);
-
-    // Chỗ đỗ vật lý thực tế đã triển khai trong hệ thống (PhysicalSlotsCount)
-    const physicalSlots = activeLots.reduce(
-      (sum, lot) => sum + (lot.physicalSlotsCount ?? 0),
-      0,
-    );
-
-    // Công suất thiết kế danh định đã cấu hình (ConfiguredCapacity)
-    const configuredCapacity = activeLots.reduce(
-      (sum, lot) => sum + (lot.configuredCapacity ?? lot.totalCapacity ?? 0),
-      0,
-    );
-
-    // Sức chứa hiệu lực danh định (TotalCapacity)
-    const capacity = activeLots.reduce(
-      (sum, lot) => sum + (lot.totalCapacity || 0),
-      0,
-    );
-
-    // Xe đang đỗ thực tế
-    const occupied = activeLots.reduce(
-      (sum, lot) => sum + (lot.occupiedSlotsCount || 0),
-      0,
-    );
-
-    // Chỗ còn trống thực tế: ưu tiên số liệu trên các bãi đã triển khai slot vật lý
-    const hasPhysicalLots = activeLots.some(
-      (lot) => (lot.physicalSlotsCount ?? 0) > 0,
-    );
-    const available = hasPhysicalLots
-      ? activeLots.reduce(
-          (sum, lot) =>
-            sum +
-            ((lot.physicalSlotsCount ?? 0) > 0
-              ? lot.availableSlotsCount || 0
-              : 0),
-          0,
-        )
-      : activeLots.reduce((sum, lot) => sum + (lot.availableSlotsCount || 0), 0);
-
-    return {
-      physicalSlots,
-      configuredCapacity,
-      capacity,
-      occupied,
-      available,
-      openLots: activeLots.length,
-      occupancy:
-        physicalSlots > 0
-          ? Math.min(100, Math.round((occupied / physicalSlots) * 100))
-          : capacity > 0
-            ? Math.min(100, Math.round((occupied / capacity) * 100))
-            : 0,
-    };
-  }, [lots]);
+  const summary = useMemo(() => calculateDashboardSummary(lots), [lots]);
 
   return (
     <section className="admin-dashboard container" id="overview">

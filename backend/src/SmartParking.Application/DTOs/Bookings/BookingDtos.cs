@@ -77,6 +77,8 @@ public class LotCapacityDto
     public int AvailableForWalkIn { get; set; }
     public int AvailableForBooking { get; set; }
     public bool IsFull { get; set; }
+    public int PhysicalSlotsCount { get; set; }
+    public int ConfiguredCapacity { get; set; }
 
     // Operational diagnostics (available to STAFF/MANAGER/ADMIN, omitted when null for anonymous public)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

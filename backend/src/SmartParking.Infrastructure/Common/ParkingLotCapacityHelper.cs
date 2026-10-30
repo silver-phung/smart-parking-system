@@ -19,7 +19,8 @@ public record LotCapacityCalculation(
     int UnassignedSessionsCount = 0,
     int ProposedSafetyBuffer = 5,
     int UnmatchedPhysicalOccupiedCount = 0,
-    int MatchedPairsCount = 0
+    int MatchedPairsCount = 0,
+    int ConfiguredCapacity = 0
 );
 
 public static class ParkingLotCapacityHelper
@@ -63,13 +64,16 @@ public static class ParkingLotCapacityHelper
         }
         else
         {
-            // If lot has NO configured ParkingSlot records, allow existing TotalCapacity fallback
-            if (lot == null)
-            {
-                lot = await context.ParkingLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct);
-            }
-            totalCapacity = lot?.TotalCapacity ?? 0;
+            // Sprint 3 Rule: An active lot with zero configured usable physical slots must NOT accept new Booking or Check-in.
+            // Operational capacity is strictly 0. Never fall back to ConfiguredCapacity (e.g. 100000) to authorize vehicles.
+            totalCapacity = 0;
         }
+
+        if (lot == null)
+        {
+            lot = await context.ParkingLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct);
+        }
+        var configuredCapacity = lot?.TotalCapacity ?? 0;
 
         // 2. Active admitted vehicle sessions (vehicles checked in, inside or parking)
         var activeSessionsCount = await context.ParkingSessions
@@ -134,7 +138,8 @@ public static class ParkingLotCapacityHelper
             UnassignedSessionsCount: unassignedSessionsCount,
             ProposedSafetyBuffer: proposedSafetyBuffer,
             UnmatchedPhysicalOccupiedCount: unmatchedPhysicalOccupiedCount,
-            MatchedPairsCount: matchedPairsCount
+            MatchedPairsCount: matchedPairsCount,
+            ConfiguredCapacity: configuredCapacity
         );
     }
 }

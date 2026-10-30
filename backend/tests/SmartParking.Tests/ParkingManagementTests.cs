@@ -41,7 +41,8 @@ public class ParkingManagementTests
         Assert.True(success);
         Assert.NotNull(lot);
         Assert.Equal("Bãi đỗ xe Trung tâm", lot.Name);
-        Assert.Equal(200, lot.TotalCapacity);
+        Assert.Equal(0, lot.TotalCapacity);
+        Assert.Equal(200, lot.ConfiguredCapacity);
         Assert.True(lot.IsActive);
 
         // Verify audit log
@@ -655,18 +656,18 @@ public class ParkingManagementTests
         Assert.Equal(1, lot1Dto.AvailableSlotsCount);
         Assert.Equal(0, lot1Dto.OccupiedSlotsCount);
 
-        // Lot 2: 0 physical slots -> preserves unconfigured capacity fallback (100000)
-        Assert.Equal(100000, lot2Dto.TotalCapacity);
+        // Lot 2: 0 physical slots -> operational capacity is strictly 0 (never authorizes 100000)
+        Assert.Equal(0, lot2Dto.TotalCapacity);
         Assert.Equal(0, lot2Dto.PhysicalSlotsCount);
         Assert.Equal(100000, lot2Dto.ConfiguredCapacity);
-        Assert.Equal(100000, lot2Dto.AvailableSlotsCount);
+        Assert.Equal(0, lot2Dto.AvailableSlotsCount);
         Assert.Equal(0, lot2Dto.OccupiedSlotsCount);
 
         // 1. Dashboard contract verification: "Tổng số chỗ đã triển khai" strictly reflects physical slots
         var activeLots = result.Items.Where(l => l.IsActive).ToList();
-        var deployedPhysicalCapacity = activeLots.Sum(l => l.PhysicalSlotsCount);
+        var deployedPhysicalCapacity = activeLots.Sum(l => l.TotalCapacity);
         var configuredDesignCapacity = activeLots.Sum(l => l.ConfiguredCapacity);
-        var deployedAvailableSlots = activeLots.Where(l => l.PhysicalSlotsCount > 0).Sum(l => l.AvailableSlotsCount);
+        var deployedAvailableSlots = activeLots.Sum(l => l.AvailableSlotsCount);
 
         Assert.Equal(1, deployedPhysicalCapacity);       // Deployed physical spots = 1 (NOT 100001)
         Assert.Equal(100010, configuredDesignCapacity);   // Nominal design capacity = 100010
@@ -680,6 +681,7 @@ public class ParkingManagementTests
         var calc2 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot2.Id, lot2);
         Assert.Equal(lot2Dto.TotalCapacity, calc2.TotalCapacity);
         Assert.Equal(lot2Dto.AvailableSlotsCount, calc2.AvailableCapacity);
+        Assert.Equal(100000, calc2.ConfiguredCapacity);
 
         // 2. Deactivation contract: Deactivating Lot 4 completely excludes it from active Dashboard totals & public API
         var (statusSuccess, _, _) = await service.UpdateLotStatusAsync(lot2.Id, new UpdateLotStatusRequestDto { IsActive = false }, 1);
@@ -713,6 +715,50 @@ public class ParkingManagementTests
 
         var getDeleted = await service.GetLotByIdAsync(lot2.Id, isAdminOrStaff: true);
         Assert.Null(getDeleted);
+    }
+
+    [Fact]
+    public async Task DeactivationSafety_FloorAndSlotWithActiveSession_RejectsDeactivation()
+    {
+        var (service, context) = await CreateServiceAsync();
+
+        var lot = new ParkingLot { Id = 10, Name = "Safety Lot", TotalCapacity = 5, IsActive = true };
+        context.ParkingLots.Add(lot);
+        await context.SaveChangesAsync();
+
+        var floor = new ParkingFloor { Id = 20, LotId = lot.Id, FloorNumber = 1, Name = "Tầng 1", TotalSlots = 1, IsActive = true };
+        context.ParkingFloors.Add(floor);
+        await context.SaveChangesAsync();
+
+        var slot = new ParkingSlot { Id = 30, FloorId = floor.Id, SlotCode = "S-01", PhysicalStatus = SlotPhysicalStatuses.Occupied, IsActive = true };
+        context.ParkingSlots.Add(slot);
+        await context.SaveChangesAsync();
+
+        var session = new ParkingSession
+        {
+            LotId = lot.Id,
+            PlateNumber = "51A-OCCUPIED",
+            CurrentSlotId = slot.Id,
+            Status = SessionStatuses.Active,
+            CheckInTime = DateTime.UtcNow
+        };
+        context.ParkingSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        // 1. Unsafe slot deactivation is rejected
+        var (slotDeactSuccess, slotDeactMsg, _) = await service.UpdateSlotAsync(slot.Id, new UpdateParkingSlotRequestDto { SlotCode = "S-01", IsActive = false }, 1);
+        Assert.False(slotDeactSuccess);
+        Assert.Contains("Không thể vô hiệu hóa ô đỗ khi đang có xe đỗ", slotDeactMsg);
+
+        // 2. Unsafe floor deactivation is rejected
+        var (floorDeactSuccess, floorDeactMsg, _) = await service.UpdateFloorAsync(floor.Id, new UpdateParkingFloorRequestDto { FloorNumber = 1, Name = "Tầng 1", TotalSlots = 1, IsActive = false }, 1);
+        Assert.False(floorDeactSuccess);
+        Assert.Contains("Không thể vô hiệu hóa tầng khi đang có xe đỗ", floorDeactMsg);
+
+        // 3. Unsafe slot physical status to MAINTENANCE is rejected while session is active
+        var (maintSuccess, maintMsg, _) = await service.UpdateSlotPhysicalStatusAsync(slot.Id, new UpdateSlotPhysicalStatusRequestDto { PhysicalStatus = SlotPhysicalStatuses.Maintenance }, 1, Roles.Admin, "127.0.0.1");
+        Assert.False(maintSuccess);
+        Assert.Contains("Không thể chuyển trạng thái ô đỗ đang có xe", maintMsg);
     }
 
     #endregion

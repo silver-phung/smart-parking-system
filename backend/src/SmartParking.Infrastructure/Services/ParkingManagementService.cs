@@ -71,7 +71,8 @@ public class ParkingManagementService : IParkingManagementService
 
             var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
             var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
-            var totalCapacity = hasConfiguredSlots ? usableSlots.Count : l.TotalCapacity;
+            var totalCapacity = usableSlots.Count;
+            var availableSlotsCount = (l.IsActive && hasConfiguredSlots) ? availableCount : 0;
 
             return new ParkingLotDto
             {
@@ -80,7 +81,7 @@ public class ParkingManagementService : IParkingManagementService
                 Address = l.Address,
                 TotalCapacity = totalCapacity,
                 TotalFloors = l.Floors.Count,
-                AvailableSlotsCount = hasConfiguredSlots ? availableCount : l.TotalCapacity,
+                AvailableSlotsCount = availableSlotsCount,
                 OccupiedSlotsCount = occupiedCount,
                 IsActive = l.IsActive,
                 CreatedAt = l.CreatedAt,
@@ -126,7 +127,8 @@ public class ParkingManagementService : IParkingManagementService
         var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
                                               s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
                                               s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
-        var totalCapacity = hasConfiguredSlots ? usableSlots.Count : lot.TotalCapacity;
+        var totalCapacity = usableSlots.Count;
+        var availableSlotsCount = (lot.IsActive && hasConfiguredSlots) ? availableCount : 0;
 
         return new ParkingLotDetailDto
         {
@@ -135,7 +137,7 @@ public class ParkingManagementService : IParkingManagementService
             Address = lot.Address,
             TotalCapacity = totalCapacity,
             TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = hasConfiguredSlots ? availableCount : lot.TotalCapacity,
+            AvailableSlotsCount = availableSlotsCount,
             OccupiedSlotsCount = occupiedCount,
             IsActive = lot.IsActive,
             CreatedAt = lot.CreatedAt,
@@ -178,7 +180,7 @@ public class ParkingManagementService : IParkingManagementService
             Id = lot.Id,
             Name = lot.Name,
             Address = lot.Address,
-            TotalCapacity = lot.TotalCapacity,
+            TotalCapacity = 0,
             TotalFloors = 0,
             AvailableSlotsCount = 0,
             OccupiedSlotsCount = 0,
@@ -234,7 +236,8 @@ public class ParkingManagementService : IParkingManagementService
                                               s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
         var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty);
         var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
-        var totalCapacity = hasConfiguredSlots ? usableSlots.Count : lot.TotalCapacity;
+        var totalCapacity = usableSlots.Count;
+        var availableSlotsCount = (lot.IsActive && hasConfiguredSlots) ? availableCount : 0;
 
         var dto = new ParkingLotDto
         {
@@ -243,7 +246,7 @@ public class ParkingManagementService : IParkingManagementService
             Address = lot.Address,
             TotalCapacity = totalCapacity,
             TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = hasConfiguredSlots ? availableCount : lot.TotalCapacity,
+            AvailableSlotsCount = availableSlotsCount,
             OccupiedSlotsCount = occupiedCount,
             IsActive = lot.IsActive,
             CreatedAt = lot.CreatedAt,
@@ -284,7 +287,8 @@ public class ParkingManagementService : IParkingManagementService
                                               s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
         var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty);
         var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
-        var totalCapacity = hasConfiguredSlots ? usableSlots.Count : lot.TotalCapacity;
+        var totalCapacity = usableSlots.Count;
+        var availableSlotsCount = (lot.IsActive && hasConfiguredSlots) ? availableCount : 0;
 
         var dto = new ParkingLotDto
         {
@@ -293,7 +297,7 @@ public class ParkingManagementService : IParkingManagementService
             Address = lot.Address,
             TotalCapacity = totalCapacity,
             TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = hasConfiguredSlots ? availableCount : lot.TotalCapacity,
+            AvailableSlotsCount = availableSlotsCount,
             OccupiedSlotsCount = occupiedCount,
             IsActive = lot.IsActive,
             CreatedAt = lot.CreatedAt,
@@ -480,6 +484,29 @@ public class ParkingManagementService : IParkingManagementService
         if (nameExists)
         {
             return (false, $"Tên tầng '{trimmedName}' đã trùng với tầng khác trong cùng bãi.", null);
+        }
+
+        // Safety Guard: Cannot deactivate floor when active sessions or dispatches exist on its slots
+        if (!request.IsActive && floor.IsActive)
+        {
+            var floorSlotIds = floor.Slots.Select(s => s.Id).ToList();
+            if (floorSlotIds.Any())
+            {
+                var hasActiveSession = await _context.ParkingSessions
+                    .AnyAsync(s => s.CurrentSlotId != null && floorSlotIds.Contains(s.CurrentSlotId.Value) &&
+                                   (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
+                if (hasActiveSession)
+                {
+                    return (false, "Không thể vô hiệu hóa tầng khi đang có xe đỗ tại các ô thuộc tầng này.", null);
+                }
+
+                var hasActiveDispatch = await _context.ParkingDispatches
+                    .AnyAsync(d => floorSlotIds.Contains(d.AssignedSlotId) && d.Status == DispatchStatuses.Assigned, ct);
+                if (hasActiveDispatch)
+                {
+                    return (false, "Không thể vô hiệu hóa tầng khi đang có lệnh điều phối xe tới các ô thuộc tầng này.", null);
+                }
+            }
         }
 
         var oldValues = JsonSerializer.Serialize(new { floor.FloorNumber, floor.Name, floor.TotalSlots, floor.IsActive });
@@ -749,6 +776,24 @@ public class ParkingManagementService : IParkingManagementService
             return (false, $"Mã ô đỗ '{trimmedCode}' đã trùng với ô đỗ khác trong cùng tầng.", null);
         }
 
+        // Safety Guard: Cannot deactivate slot when active session or dispatch exists on it
+        if (!request.IsActive && slot.IsActive)
+        {
+            var hasActiveSession = await _context.ParkingSessions
+                .AnyAsync(s => s.CurrentSlotId == id && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
+            if (hasActiveSession)
+            {
+                return (false, "Không thể vô hiệu hóa ô đỗ khi đang có xe đỗ trong phiên hoạt động.", null);
+            }
+
+            var hasActiveDispatch = await _context.ParkingDispatches
+                .AnyAsync(d => d.AssignedSlotId == id && d.Status == DispatchStatuses.Assigned, ct);
+            if (hasActiveDispatch)
+            {
+                return (false, "Không thể vô hiệu hóa ô đỗ khi đang có lệnh điều phối xe tới ô này.", null);
+            }
+        }
+
         var oldValues = JsonSerializer.Serialize(new { slot.SlotCode, slot.PositionX, slot.PositionY, slot.PositionZ, slot.IsActive });
 
         slot.SlotCode = trimmedCode;
@@ -820,9 +865,17 @@ public class ParkingManagementService : IParkingManagementService
             }
         }
 
-        // Check if attempting to set to MAINTENANCE or UNAVAILABLE while slot has active dispatch
+        // Check if attempting to set to MAINTENANCE or UNAVAILABLE while slot has active session or dispatch
         if (targetStatus == SlotPhysicalStatuses.Maintenance || targetStatus == SlotPhysicalStatuses.Unavailable)
         {
+            var hasActiveSession = await _context.ParkingSessions
+                .AnyAsync(s => s.CurrentSlotId == id && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
+
+            if (hasActiveSession)
+            {
+                return (false, "Không thể đưa ô đỗ vào bảo trì/ngưng sử dụng khi đang có xe đỗ trong ô.", null);
+            }
+
             var hasActiveDispatch = await _context.ParkingDispatches
                 .AnyAsync(d => d.AssignedSlotId == id && d.Status == DispatchStatuses.Assigned, ct);
 
