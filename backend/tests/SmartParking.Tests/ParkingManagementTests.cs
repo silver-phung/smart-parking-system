@@ -593,5 +593,88 @@ public class ParkingManagementTests
         Assert.Equal(1, detailDto.AvailableSlotsCount);
     }
 
+    [Fact]
+    public async Task GetLots_MultiLotScenario_OneSlotAndZeroSlot100000_VerifiesExactCapacitiesAndConsistency()
+    {
+        var (service, context) = await CreateServiceAsync();
+
+        // Lot 1: ConfiguredCapacity 10, 1 physical slot
+        var lot1 = new ParkingLot
+        {
+            Id = 2,
+            Name = "Lot 1",
+            TotalCapacity = 10,
+            IsActive = true
+        };
+        // Lot 2: ConfiguredCapacity 100000, 0 physical slots
+        var lot2 = new ParkingLot
+        {
+            Id = 4,
+            Name = "Lot 2",
+            TotalCapacity = 100000,
+            IsActive = true
+        };
+        context.ParkingLots.AddRange(lot1, lot2);
+        await context.SaveChangesAsync();
+
+        var floor = new ParkingFloor
+        {
+            Id = 3,
+            LotId = lot1.Id,
+            FloorNumber = 100,
+            Name = "G",
+            TotalSlots = 1,
+            IsActive = true
+        };
+        context.ParkingFloors.Add(floor);
+        await context.SaveChangesAsync();
+
+        var slot = new ParkingSlot
+        {
+            Id = 2,
+            FloorId = floor.Id,
+            SlotCode = "A01",
+            PhysicalStatus = SlotPhysicalStatuses.Empty,
+            IsActive = true
+        };
+        context.ParkingSlots.Add(slot);
+        await context.SaveChangesAsync();
+
+        var result = await service.GetLotsAsync(new ParkingLotFilterDto { PageNumber = 1, PageSize = 10 }, isAdminOrStaff: true);
+
+        var lot1Dto = result.Items.FirstOrDefault(l => l.Id == 2);
+        var lot2Dto = result.Items.FirstOrDefault(l => l.Id == 4);
+
+        Assert.NotNull(lot1Dto);
+        Assert.NotNull(lot2Dto);
+
+        // Lot 1: Authoritative capacity derives from physical slot (1)
+        Assert.Equal(1, lot1Dto.TotalCapacity);
+        Assert.Equal(1, lot1Dto.PhysicalSlotsCount);
+        Assert.Equal(10, lot1Dto.ConfiguredCapacity);
+        Assert.Equal(1, lot1Dto.AvailableSlotsCount);
+        Assert.Equal(0, lot1Dto.OccupiedSlotsCount);
+
+        // Lot 2: 0 physical slots -> preserves unconfigured capacity fallback (100000)
+        Assert.Equal(100000, lot2Dto.TotalCapacity);
+        Assert.Equal(0, lot2Dto.PhysicalSlotsCount);
+        Assert.Equal(100000, lot2Dto.ConfiguredCapacity);
+        Assert.Equal(100000, lot2Dto.AvailableSlotsCount);
+        Assert.Equal(0, lot2Dto.OccupiedSlotsCount);
+
+        // Aggregate capacity calculated on AdminDashboard
+        var totalDashboardCapacity = result.Items.Sum(l => l.TotalCapacity);
+        Assert.Equal(100001, totalDashboardCapacity);
+
+        // Verify mathematical consistency with Booking/Check-in capacity engine
+        var calc1 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot1.Id, lot1);
+        Assert.Equal(lot1Dto.TotalCapacity, calc1.TotalCapacity);
+        Assert.Equal(lot1Dto.AvailableSlotsCount, calc1.AvailableCapacity);
+
+        var calc2 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot2.Id, lot2);
+        Assert.Equal(lot2Dto.TotalCapacity, calc2.TotalCapacity);
+        Assert.Equal(lot2Dto.AvailableSlotsCount, calc2.AvailableCapacity);
+    }
+
     #endregion
 }
