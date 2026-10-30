@@ -14,6 +14,8 @@ public class ParkingLotDto
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public int PhysicalSlotsCount { get; set; }
+    public int ConfiguredCapacity { get; set; }
 }
 
 public class ParkingLotDetailDto : ParkingLotDto

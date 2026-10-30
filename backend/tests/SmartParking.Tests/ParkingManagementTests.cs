@@ -505,5 +505,93 @@ public class ParkingManagementTests
         Assert.NotNull(getByIdAllowAnon);
     }
 
+    [Fact]
+    public async Task GetLots_WhenLotHasPhysicalSlots_ReturnsAuthoritativePhysicalSlotCapacity()
+    {
+        var (service, context) = await CreateServiceAsync();
+        var lot = new ParkingLot
+        {
+            Name = "Bãi 1 Chỗ",
+            TotalCapacity = 10, // Nominal capacity in DB
+            IsActive = true
+        };
+        context.ParkingLots.Add(lot);
+        await context.SaveChangesAsync();
+
+        var floor = new ParkingFloor
+        {
+            LotId = lot.Id,
+            FloorNumber = 1,
+            Name = "Tầng G",
+            TotalSlots = 1,
+            IsActive = true
+        };
+        context.ParkingFloors.Add(floor);
+        await context.SaveChangesAsync();
+
+        var slot = new ParkingSlot
+        {
+            FloorId = floor.Id,
+            SlotCode = "A01",
+            PhysicalStatus = SlotPhysicalStatuses.Empty,
+            IsActive = true
+        };
+        context.ParkingSlots.Add(slot);
+        await context.SaveChangesAsync();
+
+        var result = await service.GetLotsAsync(new ParkingLotFilterDto { PageNumber = 1, PageSize = 10 }, isAdminOrStaff: true);
+        var lotDto = result.Items.FirstOrDefault(l => l.Id == lot.Id);
+
+        Assert.NotNull(lotDto);
+        // Authoritative capacity must derive from physical slots (1), NOT nominal 10
+        Assert.Equal(1, lotDto.TotalCapacity);
+        Assert.Equal(1, lotDto.PhysicalSlotsCount);
+        Assert.Equal(10, lotDto.ConfiguredCapacity);
+        Assert.Equal(1, lotDto.AvailableSlotsCount);
+    }
+
+    [Fact]
+    public async Task GetLotById_WhenLotHasPhysicalSlots_ReturnsAuthoritativePhysicalSlotCapacity()
+    {
+        var (service, context) = await CreateServiceAsync();
+        var lot = new ParkingLot
+        {
+            Name = "Bãi Chi Tiết 1 Chỗ",
+            TotalCapacity = 50, // Nominal capacity in DB
+            IsActive = true
+        };
+        context.ParkingLots.Add(lot);
+        await context.SaveChangesAsync();
+
+        var floor = new ParkingFloor
+        {
+            LotId = lot.Id,
+            FloorNumber = 1,
+            Name = "Tầng 1",
+            TotalSlots = 1,
+            IsActive = true
+        };
+        context.ParkingFloors.Add(floor);
+        await context.SaveChangesAsync();
+
+        var slot = new ParkingSlot
+        {
+            FloorId = floor.Id,
+            SlotCode = "S01",
+            PhysicalStatus = SlotPhysicalStatuses.Empty,
+            IsActive = true
+        };
+        context.ParkingSlots.Add(slot);
+        await context.SaveChangesAsync();
+
+        var detailDto = await service.GetLotByIdAsync(lot.Id, isAdminOrStaff: true);
+
+        Assert.NotNull(detailDto);
+        Assert.Equal(1, detailDto.TotalCapacity);
+        Assert.Equal(1, detailDto.PhysicalSlotsCount);
+        Assert.Equal(50, detailDto.ConfiguredCapacity);
+        Assert.Equal(1, detailDto.AvailableSlotsCount);
+    }
+
     #endregion
 }

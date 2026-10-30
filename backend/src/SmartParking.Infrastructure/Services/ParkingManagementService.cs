@@ -64,21 +64,29 @@ public class ParkingManagementService : IParkingManagementService
         var dtos = lots.Select(l =>
         {
             var allSlots = l.Floors.SelectMany(f => f.Slots).ToList();
+            var hasConfiguredSlots = allSlots.Any();
+            var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
+                                                  s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                                                  s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
+
             var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
             var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
+            var totalCapacity = hasConfiguredSlots ? usableSlots.Count : l.TotalCapacity;
 
             return new ParkingLotDto
             {
                 Id = l.Id,
                 Name = l.Name,
                 Address = l.Address,
-                TotalCapacity = l.TotalCapacity,
+                TotalCapacity = totalCapacity,
                 TotalFloors = l.Floors.Count,
-                AvailableSlotsCount = availableCount,
+                AvailableSlotsCount = hasConfiguredSlots ? availableCount : l.TotalCapacity,
                 OccupiedSlotsCount = occupiedCount,
                 IsActive = l.IsActive,
                 CreatedAt = l.CreatedAt,
-                UpdatedAt = l.UpdatedAt
+                UpdatedAt = l.UpdatedAt,
+                PhysicalSlotsCount = allSlots.Count,
+                ConfiguredCapacity = l.TotalCapacity
             };
         }).ToList();
 
@@ -114,18 +122,26 @@ public class ParkingManagementService : IParkingManagementService
                 IsActive = f.IsActive
             }).ToList();
 
+        var hasConfiguredSlots = allSlots.Any();
+        var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
+                                              s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                                              s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
+        var totalCapacity = hasConfiguredSlots ? usableSlots.Count : lot.TotalCapacity;
+
         return new ParkingLotDetailDto
         {
             Id = lot.Id,
             Name = lot.Name,
             Address = lot.Address,
-            TotalCapacity = lot.TotalCapacity,
+            TotalCapacity = totalCapacity,
             TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = availableCount,
+            AvailableSlotsCount = hasConfiguredSlots ? availableCount : lot.TotalCapacity,
             OccupiedSlotsCount = occupiedCount,
             IsActive = lot.IsActive,
             CreatedAt = lot.CreatedAt,
             UpdatedAt = lot.UpdatedAt,
+            PhysicalSlotsCount = allSlots.Count,
+            ConfiguredCapacity = lot.TotalCapacity,
             Floors = floorSummaries
         };
     }
@@ -168,7 +184,9 @@ public class ParkingManagementService : IParkingManagementService
             OccupiedSlotsCount = 0,
             IsActive = lot.IsActive,
             CreatedAt = lot.CreatedAt,
-            UpdatedAt = lot.UpdatedAt
+            UpdatedAt = lot.UpdatedAt,
+            PhysicalSlotsCount = 0,
+            ConfiguredCapacity = lot.TotalCapacity
         };
 
         _logger.LogInformation("ParkingLot created successfully with ID {LotId} by Actor {ActorId}", lot.Id, actorId);
@@ -210,18 +228,28 @@ public class ParkingManagementService : IParkingManagementService
         await LogAuditAsync(actorId, "UPDATE_PARKING_LOT", "parking_lots", lot.Id.ToString(), oldValues, newValues, null, ct);
 
         var allSlots = lot.Floors.SelectMany(f => f.Slots).ToList();
+        var hasConfiguredSlots = allSlots.Any();
+        var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
+                                              s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                                              s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
+        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty);
+        var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
+        var totalCapacity = hasConfiguredSlots ? usableSlots.Count : lot.TotalCapacity;
+
         var dto = new ParkingLotDto
         {
             Id = lot.Id,
             Name = lot.Name,
             Address = lot.Address,
-            TotalCapacity = lot.TotalCapacity,
+            TotalCapacity = totalCapacity,
             TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty),
-            OccupiedSlotsCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
+            AvailableSlotsCount = hasConfiguredSlots ? availableCount : lot.TotalCapacity,
+            OccupiedSlotsCount = occupiedCount,
             IsActive = lot.IsActive,
             CreatedAt = lot.CreatedAt,
-            UpdatedAt = lot.UpdatedAt
+            UpdatedAt = lot.UpdatedAt,
+            PhysicalSlotsCount = allSlots.Count,
+            ConfiguredCapacity = lot.TotalCapacity
         };
 
         _logger.LogInformation("ParkingLot {LotId} updated successfully by Actor {ActorId}", lot.Id, actorId);
@@ -250,18 +278,28 @@ public class ParkingManagementService : IParkingManagementService
         await LogAuditAsync(actorId, "UPDATE_LOT_STATUS", "parking_lots", lot.Id.ToString(), oldValues, newValues, null, ct);
 
         var allSlots = lot.Floors.SelectMany(f => f.Slots).ToList();
+        var hasConfiguredSlots = allSlots.Any();
+        var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
+                                              s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                                              s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
+        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty);
+        var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
+        var totalCapacity = hasConfiguredSlots ? usableSlots.Count : lot.TotalCapacity;
+
         var dto = new ParkingLotDto
         {
             Id = lot.Id,
             Name = lot.Name,
             Address = lot.Address,
-            TotalCapacity = lot.TotalCapacity,
+            TotalCapacity = totalCapacity,
             TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty),
-            OccupiedSlotsCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
+            AvailableSlotsCount = hasConfiguredSlots ? availableCount : lot.TotalCapacity,
+            OccupiedSlotsCount = occupiedCount,
             IsActive = lot.IsActive,
             CreatedAt = lot.CreatedAt,
-            UpdatedAt = lot.UpdatedAt
+            UpdatedAt = lot.UpdatedAt,
+            PhysicalSlotsCount = allSlots.Count,
+            ConfiguredCapacity = lot.TotalCapacity
         };
 
         var statusText = request.IsActive ? "Mở tiếp nhận xe" : "Đóng tiếp nhận xe";
