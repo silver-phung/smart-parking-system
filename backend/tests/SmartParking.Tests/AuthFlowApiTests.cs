@@ -12,6 +12,38 @@ namespace SmartParking.Tests;
 public class AuthFlowApiTests
 {
     [Fact]
+    public async Task EmailOnlyRegistration_RejectsWrongOtp_ThenAllowsLoginByEmail()
+    {
+        using var baseFactory = new CustomWebApplicationFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.PostConfigure<SmartParking.Application.Common.Options.RecaptchaOptions>(opt => opt.Enabled = false);
+            services.PostConfigure<SmartParking.Application.Common.Options.EmailOptions>(opt => opt.Provider = "Mock");
+            services.Remove(services.Single(d => d.ServiceType == typeof(IOtpService)));
+            services.AddScoped<IOtpService, TestFixedOtpService>();
+        }));
+        using var client = factory.CreateClient();
+        const string email = "email.only@example.invalid";
+        const string password = "Email-only-test-123!";
+        var registration = await client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
+        Assert.Equal(HttpStatusCode.Created, registration.StatusCode);
+        var registered = (await registration.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.False(string.IsNullOrWhiteSpace(registered.GetProperty("username").GetString()));
+        Assert.Equal(Roles.User, registered.GetProperty("role").GetString());
+        var beforeVerification = await client.PostAsJsonAsync("/api/v1/auth/login", new { username = email, password });
+        Assert.False(beforeVerification.IsSuccessStatusCode);
+        var wrongOtp = await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { email, code = "999999" });
+        Assert.Equal(HttpStatusCode.BadRequest, wrongOtp.StatusCode);
+        var verification = await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { email, code = TestFixedOtpService.FixedOtp });
+        Assert.Equal(HttpStatusCode.OK, verification.StatusCode);
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { username = email, password });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var profile = (await login.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("userProfile");
+        Assert.True(profile.GetProperty("isEmailVerified").GetBoolean());
+        Assert.Equal("APPROVED", profile.GetProperty("approvalStatus").GetString());
+    }
+
+    [Fact]
     public async Task ExistingAccount_CanLogin_GetProfile_AndLogout()
     {
         using var factory = new CustomWebApplicationFactory();

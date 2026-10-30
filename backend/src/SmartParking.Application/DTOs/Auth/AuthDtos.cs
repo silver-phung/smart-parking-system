@@ -4,9 +4,9 @@ namespace SmartParking.Application.DTOs.Auth;
 
 public class RegisterRequestDto
 {
-    [Required(ErrorMessage = "Tên đăng nhập không được để trống")]
+    // Tùy chọn: nếu bỏ trống, hệ thống tự sinh từ email.
     [RegularExpression(@"^[a-zA-Z0-9_.]{3,50}$", ErrorMessage = "Tên đăng nhập chỉ gồm 3-50 ký tự chữ cái, số, dấu chấm hoặc gạch dưới")]
-    public string Username { get; set; } = null!;
+    public string? Username { get; set; }
 
     [Required(ErrorMessage = "Email không được để trống")]
     [EmailAddress(ErrorMessage = "Địa chỉ email không đúng định dạng")]
@@ -18,9 +18,8 @@ public class RegisterRequestDto
     [MaxLength(100)]
     public string Password { get; set; } = null!;
 
-    [Required(ErrorMessage = "Họ và tên không được để trống")]
     [MaxLength(100)]
-    public string FullName { get; set; } = null!;
+    public string? FullName { get; set; }
 
     [MaxLength(20)]
     [Phone(ErrorMessage = "Số điện thoại không đúng định dạng")]
