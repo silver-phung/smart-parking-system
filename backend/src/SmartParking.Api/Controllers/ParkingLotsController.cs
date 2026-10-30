@@ -58,7 +58,11 @@ public class ParkingLotsController : ControllerBase
     public async Task<IActionResult> GetLotById(int id, CancellationToken ct)
     {
         var isAdmin = User.IsInRole(Roles.Admin);
-        var lot = await _parkingService.GetLotByIdAsync(id, isAdmin, ct);
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+        var hasAssignedAccess = actorId.HasValue
+            && await _authService.HasLotAccessAsync(actorId.Value, actorRole, id, ct);
+        var lot = await _parkingService.GetLotByIdAsync(id, isAdmin || hasAssignedAccess, ct);
         if (lot == null)
         {
             return NotFound(new { message = $"Không tìm thấy bãi đỗ xe với ID: {id}." });

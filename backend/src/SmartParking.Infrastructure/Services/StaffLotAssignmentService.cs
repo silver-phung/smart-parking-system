@@ -273,7 +273,7 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
         return await _context.StaffLotAssignments
             .AsNoTracking()
             .Include(a => a.Lot)
-            .Where(a => a.UserId == userId && a.IsActive && a.Lot.IsActive)
+            .Where(a => a.UserId == userId && a.IsActive)
             .OrderBy(a => a.Lot.Name)
             .Select(a => new AssignedLotSummaryDto
             {

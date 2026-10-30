@@ -175,25 +175,3 @@
 .workspace-confirm {
   border: 2px solid #b5cbbf;
 }
-@media (max-width: 700px) {
-  .workspace-form,
-  .workspace-detail {
-    grid-template-columns: 1fr;
-  }
-  .workspace-panel {
-    padding: 16px;
-  }
-  .workspace-heading h1 {
-    font-size: 28px;
-  }
-  .workspace-table th,
-  .workspace-table td {
-    padding: 12px 8px;
-  }
-  .workspace-pager {
-    gap: 8px;
-  }
-  .workspace-filters label {
-    min-width: 100%;
-  }
-}
