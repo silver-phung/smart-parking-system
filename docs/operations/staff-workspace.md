@@ -33,7 +33,7 @@ Nút **Làm mới** tải lại số liệu bãi và danh sách của khu chức
 - Nhận diện và xác nhận AI là bản ghi riêng; chưa thể sửa biển số của một session đã check-in qua API verify-slot. Giao diện chỉ chỉnh kết quả nhận diện trước khi tạo session.
 - Xác minh mới giữ nguyên tín hiệu cảm biến. UI hiển thị tín hiệu trống/có xe và cảnh báo khi đối chiếu khác nhau; không tự chuyển trạng thái cảm biến bằng route viewer demo.
 - Kiểm tra ô ở frontend giảm chọn nhầm nhưng không thay constraint/lock backend. Lỗi đồng thời giữa API điều phối cũ và xác minh mới vẫn cần xử lý tại backend.
-- Trang Staff dùng cơ chế đăng nhập hiện có. Khôi phục đăng nhập sau reload và refresh token là phần cải thiện tài khoản chung, chưa nằm trong thay đổi này.
+- Phiên đăng nhập được khôi phục từ sessionStorage khi tải lại cùng tab. Khi API trả 401, client làm mới access token và thử lại một lần; các request đồng thời dùng chung một lần refresh. Đăng xuất xóa phiên đã lưu. Refresh bị thu hồi/hết hạn yêu cầu đăng nhập lại; lỗi mạng/5xx tạm thời không xóa phiên.
 
 ## Kiểm tra
 

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test src/services/api.test.js && vitest run --config vitest.config.js",
+    "test": "node --test src/services/api.test.js src/services/authSession.test.js && vitest run --config vitest.config.js",
     "test:staff": "vitest run --config vitest.config.js",
     "build": "vite build"
   },

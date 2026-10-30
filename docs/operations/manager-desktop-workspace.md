@@ -18,6 +18,8 @@ Open `/app/manager` with a MANAGER account assigned to at least one lot.
 
 The header has a common two-row desktop grid: brand/account actions, then role-specific navigation. Current navigation reflects the query tab. Wrong-role routes return users to their own workspace; unknown routes display a missing-page state. Home anchors use router hash navigation instead of a timer.
 
+Authentication is restored synchronously from sessionStorage before rendering route guards, so F5 retains the current tab's account and route. The client refreshes access tokens after authenticated API 401 responses, shares one refresh across concurrent requests and retries once. Explicit logout removes saved state; rejected refresh tokens clear it. Temporary network/5xx refresh failures retain the session for retry. A late refresh cannot overwrite a different login or revive a signed-out account. Closing the tab ends the saved tab session; this does not implement a persistent “remember me” login. When storage is unavailable, login falls back to memory.
+
 The React application uses a desktop canvas with a minimum width of 1280px and common container maximum of 1440px, including 32px side gutters. Titles, panel padding, form controls, table columns and action rows share alignment rules in `src/desktop.css`. Width-based media queries have been removed from `index.css`, `staff.css` and `workspace.css`; the reduced-motion accessibility query remains. Narrow screens keep the desktop canvas and may scroll horizontally. Mobile layout work is deferred to a later sprint. Standalone legacy/3D pages are unchanged.
 
 ## Validation
