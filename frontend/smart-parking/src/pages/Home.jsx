@@ -2,50 +2,55 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import AnchorLink from "../components/AnchorLink.jsx";
 import { apiRequest } from "../services/api.js";
-import { getAuthSession, subscribeAuthSession } from "../services/authSession.js";
+import {
+  getAuthSession,
+  subscribeAuthSession,
+} from "../services/authSession.js";
+import useScrollReveal from "../components/useScrollReveal.js";
+import "../home.css";
 
 const highlights = [
-  "Biết chỗ đậu xe còn trống trên web, không phải chạy vòng tìm chỗ",
-  "Ra vào bằng thẻ cứng hoặc đặt chỗ trước trên app",
-  "Camera ghi lại biển số và màu xe của mỗi lượt vào bãi",
+  "Xem bãi, tầng và trạng thái ô đỗ trong môi trường demo",
+  "Trải nghiệm quy trình vào bãi và xác minh ô theo vai trò",
+  "Theo dõi phiên gửi xe gắn với phương tiện của tài khoản",
 ];
 
 const methods = [
   {
     id: "the-cung",
-    title: "Quẹt thẻ cứng",
+    title: "Nhân viên vận hành tại bãi",
     icon: "card",
     steps: [
       {
-        title: "Quẹt thẻ tại cổng vào",
-        text: "Đưa thẻ cứng vào đầu đọc để hệ thống ghi nhận lượt vào.",
+        title: "Ghi nhận xe vào",
+        text: "Nhân viên nhập hoặc đối chiếu biển số từ ảnh, sau đó tạo phiên gửi xe thử nghiệm.",
       },
       {
-        title: "Camera lưu thông tin xe",
-        text: "Camera ghi lại biển số và màu xe, lưu cùng dữ liệu của thẻ.",
+        title: "Xác minh vị trí thực tế",
+        text: "Nhân viên được phân công kiểm tra xe và ghép phiên với ô đỗ tương ứng.",
       },
       {
-        title: "Vào bãi và đậu xe",
-        text: "Cổng mở, bạn đậu xe vào vị trí còn trống. Khi ra, quẹt thẻ lần nữa để đối chiếu xe.",
+        title: "Đối chiếu khi xe ra",
+        text: "Quy trình demo kiểm tra biển số và điều kiện phiên trước khi ghi nhận xe rời bãi.",
       },
     ],
   },
   {
     id: "app",
-    title: "Đăng ký chỗ đậu từ app",
+    title: "Khách hàng trải nghiệm trên web",
     icon: "phone",
     steps: [
       {
-        title: "Chọn bãi và chỗ trống",
-        text: "Mở app, xem sơ đồ bãi và chọn vị trí còn trống.",
+        title: "Khám phá bãi đỗ công khai",
+        text: "Xem các bãi, tầng và trạng thái ô mà không cần đăng nhập. Ô trống chưa được giữ cho bạn.",
       },
       {
-        title: "Xác nhận đặt chỗ",
-        text: "Nhập biển số xe và xác nhận. Vị trí đã chọn được giữ cho bạn trên hệ thống.",
+        title: "Tạo tài khoản bằng email OTP",
+        text: "Xác minh email bạn có quyền sử dụng để trải nghiệm khu vực khách hàng.",
       },
       {
-        title: "Đến bãi và đậu đúng chỗ",
-        text: "Camera ghi lại biển số, màu xe ở cổng, rồi bạn đi thẳng tới vị trí đã đặt.",
+        title: "Xem phương tiện và phiên của tôi",
+        text: "Khai báo phương tiện thử nghiệm và xem những phiên liên kết với tài khoản của bạn.",
       },
     ],
   },
@@ -128,16 +133,40 @@ function ParkingIllustration() {
     >
       <rect width="560" height="420" fill="#DDE5EF" />
       <rect y="172" width="560" height="76" fill="#B8C4D4" />
-      <line x1="20" y1="210" x2="540" y2="210" stroke="#fff" strokeWidth="4" strokeDasharray="22 16" />
+      <line
+        x1="20"
+        y1="210"
+        x2="540"
+        y2="210"
+        stroke="#fff"
+        strokeWidth="4"
+        strokeDasharray="22 16"
+      />
       <g fill="none" stroke="#fff" strokeWidth="3">
         {[24, 264].map((y) =>
-          cols.map((x) => <rect key={`${x}-${y}`} x={x} y={y} width="84" height="132" rx="4" />)
+          cols.map((x) => (
+            <rect
+              key={`${x}-${y}`}
+              x={x}
+              y={y}
+              width="84"
+              height="132"
+              rx="4"
+            />
+          )),
         )}
       </g>
       {cars.map((c) => (
         <g key={`${c.x}-${c.y}`}>
           <rect x={c.x} y={c.y} width="60" height="100" rx="16" fill={c.fill} />
-          <rect x={c.x + 7} y={c.y + 22} width="46" height="22" rx="6" fill={c.glass} />
+          <rect
+            x={c.x + 7}
+            y={c.y + 22}
+            width="46"
+            height="22"
+            rx="6"
+            fill={c.glass}
+          />
         </g>
       ))}
       {free.map((f) => (
@@ -172,10 +201,11 @@ function ParkingIllustration() {
 }
 
 export default function Home() {
+  const revealRef = useScrollReveal();
   const session = useSyncExternalStore(
     subscribeAuthSession,
     getAuthSession,
-    getAuthSession
+    getAuthSession,
   );
   const [systemStatus, setSystemStatus] = useState({
     health: null,
@@ -195,8 +225,10 @@ export default function Home() {
     setSystemStatus({
       health: healthResult.status === "fulfilled" ? healthResult.value : null,
       info: infoResult.status === "fulfilled" ? infoResult.value : null,
-      healthError: healthResult.status === "rejected" ? healthResult.reason.message : "",
-      infoError: infoResult.status === "rejected" ? infoResult.reason.message : "",
+      healthError:
+        healthResult.status === "rejected" ? healthResult.reason.message : "",
+      infoError:
+        infoResult.status === "rejected" ? infoResult.reason.message : "",
       loading: false,
       checkedAt: new Date(),
     });
@@ -220,20 +252,38 @@ export default function Home() {
   const formatTimestamp = (value) => {
     if (!value) return "Chưa có dữ liệu";
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "Chưa có dữ liệu" : date.toLocaleString("vi-VN");
+    return Number.isNaN(date.getTime())
+      ? "Chưa có dữ liệu"
+      : date.toLocaleString("vi-VN");
   };
 
   return (
-    <>
+    <div className="home" ref={revealRef}>
+      <div className="container">
+        <div className="home-demo-banner">
+          <div>
+            <span className="home-demo-dot" aria-hidden="true" />
+            <strong>Dự án mô phỏng · OJT</strong>
+            <span>
+              Chỉ phục vụ học tập và trình diễn, không phải dịch vụ giữ xe
+              thương mại.
+            </span>
+          </div>
+          <Link to="/thong-tin/du-an">
+            Tìm hiểu trước khi trải nghiệm <span aria-hidden="true">↗</span>
+          </Link>
+        </div>
+      </div>
       {/* ---------- Giới thiệu ---------- */}
       <section id="gioi-thieu" className="container hero">
-        <div className="hero__text">
-          <span className="tag">Giới thiệu</span>
+        <div className="hero__text" data-scroll-reveal>
+          <span className="tag">Khám phá dự án</span>
           <h1>Smart-Parking là gì?</h1>
           <p className="lead">
-            Smart-Parking (bãi đỗ xe thông minh) là hệ thống quản lý bãi đỗ xe kết hợp thẻ
-            cứng, ứng dụng di động và camera. Camera ghi lại biển số và màu xe của từng lượt
-            ra vào, còn app giúp tài xế xem chỗ trống và đăng ký chỗ đậu trước.
+            Smart-Parking mô phỏng cách quản lý một bãi đỗ thông minh: tiếp nhận
+            xe, đối chiếu biển số, xác minh ô đỗ và theo dõi phiên gửi xe. Trải
+            nghiệm các vai trò trên cùng một hệ thống, từ khách hàng đến nhân
+            viên vận hành.
           </p>
           <ul className="bullets">
             {highlights.map((h) => (
@@ -241,36 +291,45 @@ export default function Home() {
             ))}
           </ul>
           <div className="hero__cta">
-            <AnchorLink id="cach-hoat-dong" className="btn btn--primary btn--lg">
+            <AnchorLink
+              id="cach-hoat-dong"
+              className="btn btn--primary btn--lg"
+            >
               Xem cách thức hoạt động
             </AnchorLink>
             {session?.userProfile.role === "USER" ? (
               <Link to="/customer" className="btn btn--dark-outline btn--lg">
-                Đăng ký bãi đỗ / chọn chỗ đỗ
+                Xem bãi đỗ demo
               </Link>
             ) : !session ? (
-              <Link to="/login" className="btn btn--dark-outline btn--lg">
-                Đăng nhập để chọn bãi đỗ
+              <Link to="/parking" className="btn btn--dark-outline btn--lg">
+                Xem bãi đỗ demo
               </Link>
             ) : null}
           </div>
         </div>
-        <div className="hero__art">
+        <div className="hero__art" data-scroll-reveal>
           <ParkingIllustration />
+          <p className="home-illustration-caption">
+            Minh họa 2D · Không phải dữ liệu camera trực tiếp
+          </p>
         </div>
       </section>
 
       {/* ---------- Cách thức hoạt động ---------- */}
       <section id="cach-hoat-dong" className="band band--white">
-        <div className="container section">
+        <div className="container section" data-scroll-reveal>
           <SectionHead
             tag="Cách thức hoạt động"
-            title="Hai cách để gửi xe"
-            text="Bạn có thể quẹt thẻ cứng ngay tại cổng hoặc đăng ký chỗ đậu trước bằng ứng dụng. Cả hai cách đều được camera ghi lại biển số và màu xe."
+            title="Một quy trình, nhiều vai trò"
+            text="Khám phá hai góc nhìn trong bản demo: người vận hành tại bãi và khách hàng trên website."
           />
           <div className="grid-2">
             {methods.map((m) => (
-              <article key={m.id} className="card card--soft">
+              <article
+                key={m.id}
+                className="card card--soft home-interactive-card"
+              >
                 <div className="card__head">
                   <span className="icon-box icon-box--blue">
                     <Icon name={m.icon} />
@@ -295,56 +354,75 @@ export default function Home() {
       </section>
 
       {/* ---------- Hệ thống ---------- */}
-      <section id="he-thong" className="container section">
+      <section id="he-thong" className="container section" data-scroll-reveal>
         <SectionHead tag="Hệ thống" title="Các thành phần của Smart-Parking" />
         <div className="grid-2">
-          <article className="card card--dark">
+          <article className="card card--dark home-interactive-card">
             <span className="icon-box icon-box--yellow">
               <Icon name="camera" />
             </span>
-            <h3>Camera lưu biển số và màu xe</h3>
+            <h3>Ảnh hỗ trợ đối chiếu biển số</h3>
             <p>
-              Camera đặt tại cổng ra vào chỉ làm một việc: ghi lại biển số xe và màu xe của mỗi
-              lượt vào, ra. Dữ liệu này được lưu cùng thẻ hoặc lượt đặt chỗ trên app để đối chiếu
-              khi xe rời bãi.
+              Nhân viên có thể dùng ảnh để nhận diện và đối chiếu biển số trong
+              quy trình demo. Kết quả AI cần được kiểm tra lại trước khi xác
+              nhận. Hãy dùng ảnh mẫu, tránh tải hình chứa thông tin cá nhân
+              không cần thiết.
             </p>
             <div className="chips-row">
               <div className="chip-box">
-                <small>Lưu lại</small>
-                <strong>Biển số xe</strong>
+                <small>AI hỗ trợ</small>
+                <strong>Gợi ý biển số</strong>
               </div>
               <div className="chip-box">
-                <small>Lưu lại</small>
-                <strong>Màu xe</strong>
+                <small>Nhân viên</small>
+                <strong>Đối chiếu thực tế</strong>
               </div>
             </div>
           </article>
 
-          <article className="card card--white">
+          <article className="card card--white home-interactive-card">
             <span className="icon-box icon-box--blue">
               <Icon name="pin" />
             </span>
             <h3>Trạng thái API hệ thống</h3>
             <p className="muted">
-              Theo dõi tình trạng hoạt động và thông tin môi trường từ các API hiện có của Smart
-              Parking.
+              Theo dõi tình trạng hoạt động và thông tin môi trường từ các API
+              hiện có của Smart Parking.
             </p>
             <div className="api-status-card">
               <div className="api-status-card__heading">
-                <span className={`api-status-card__indicator ${apiOnline ? "is-online" : apiPartiallyOnline ? "is-partial" : ""}`} />
+                <span
+                  className={`api-status-card__indicator ${apiOnline ? "is-online" : apiPartiallyOnline ? "is-partial" : ""}`}
+                />
                 <div>
-                  <strong>{systemStatus.info?.service || "Smart Parking API"}</strong>
-                  <span>{systemStatus.loading ? "Đang kiểm tra kết nối..." : apiStatusLabel}</span>
+                  <strong>
+                    {systemStatus.info?.service || "Smart Parking API"}
+                  </strong>
+                  <span>
+                    {systemStatus.loading
+                      ? "Đang kiểm tra kết nối..."
+                      : apiStatusLabel}
+                  </span>
                 </div>
               </div>
               <dl className="api-status-card__details">
                 <div>
                   <dt>Health check</dt>
-                  <dd>{systemStatus.health?.status || (systemStatus.healthError ? "Không khả dụng" : "Đang kiểm tra")}</dd>
+                  <dd>
+                    {systemStatus.health?.status ||
+                      (systemStatus.healthError
+                        ? "Không khả dụng"
+                        : "Đang kiểm tra")}
+                  </dd>
                 </div>
                 <div>
                   <dt>API hệ thống</dt>
-                  <dd>{systemStatus.info?.status || (systemStatus.infoError ? "Không khả dụng" : "Đang kiểm tra")}</dd>
+                  <dd>
+                    {systemStatus.info?.status ||
+                      (systemStatus.infoError
+                        ? "Không khả dụng"
+                        : "Đang kiểm tra")}
+                  </dd>
                 </div>
                 <div>
                   <dt>Môi trường</dt>
@@ -357,7 +435,9 @@ export default function Home() {
               </dl>
               {(systemStatus.healthError || systemStatus.infoError) && (
                 <div className="api-status-card__error" role="alert">
-                  {[systemStatus.healthError, systemStatus.infoError].filter(Boolean).join(" ")}
+                  {[systemStatus.healthError, systemStatus.infoError]
+                    .filter(Boolean)
+                    .join(" ")}
                 </div>
               )}
               <button
@@ -374,20 +454,26 @@ export default function Home() {
       </section>
 
       {!session && (
-        <section className="container cta-wrap">
+        <section className="container cta-wrap" data-scroll-reveal>
           <div className="cta">
             <div>
-              <h2>Sẵn sàng đậu xe thông minh hơn?</h2>
-              <p>Đăng nhập bằng tài khoản được cấp để đặt chỗ và xem lịch sử gửi xe.</p>
+              <h2>Cùng khám phá cách hệ thống vận hành</h2>
+              <p>
+                Đăng ký hoặc đăng nhập để trải nghiệm. Bản demo không nhận giữ
+                xe, giữ chỗ hay thu tiền thực tế.
+              </p>
             </div>
             <div className="cta__actions">
               <Link to="/login" className="btn btn--white-outline btn--lg">
-                Đăng nhập
+                Trải nghiệm bản demo
+              </Link>
+              <Link to="/thong-tin/dieu-kien" className="home-cta-link">
+                Đọc điều kiện trải nghiệm ↗
               </Link>
             </div>
           </div>
         </section>
       )}
-    </>
+    </div>
   );
 }

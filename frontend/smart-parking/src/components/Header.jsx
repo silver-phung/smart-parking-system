@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AnchorLink from "./AnchorLink.jsx";
 import { apiRequest } from "../services/api.js";
@@ -21,6 +21,27 @@ export function Logo({ small = false }) {
   );
 }
 export default function Header() {
+  const headerRef = useRef(null);
+  useEffect(() => {
+    const updateHeight = () => {
+      const height = headerRef.current?.getBoundingClientRect().height;
+      if (height)
+        document.documentElement.style.setProperty(
+          "--site-header-height",
+          `${height}px`,
+        );
+    };
+    updateHeight();
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(updateHeight)
+        : null;
+    if (headerRef.current) observer?.observe(headerRef.current);
+    return () => {
+      observer?.disconnect();
+      document.documentElement.style.removeProperty("--site-header-height");
+    };
+  }, []);
   const { pathname, search } = useLocation();
   const session = useSyncExternalStore(
     subscribeAuthSession,
@@ -47,7 +68,7 @@ export default function Header() {
     }
   }
   return (
-    <header className="header">
+    <header className="header" ref={headerRef}>
       <div className="container header__inner">
         <Link
           className="header__brand"
@@ -55,6 +76,7 @@ export default function Header() {
           aria-label="Smart-Parking - trang chủ"
         >
           <Logo />
+          <span className="header__demo-badge">Dự án mô phỏng</span>
         </Link>
         <div className="header__actions">
           {session ? (

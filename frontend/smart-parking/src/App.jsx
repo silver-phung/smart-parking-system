@@ -12,6 +12,7 @@ import AdminDashboard from "./pages/AdminDashboard.jsx";
 import StaffWorkspace from "./pages/StaffWorkspace.jsx";
 import AdminPeople from "./pages/AdminPeople.jsx";
 import CustomerSessions from "./pages/CustomerSessions.jsx";
+import ProjectInformation from "./pages/ProjectInformation.jsx";
 
 export default function App() {
   const { pathname, hash } = useLocation();
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/thong-tin/:topic" element={<ProjectInformation />} />
           <Route path="/customer" element={<CustomerDashboard />} />
           <Route path="/parking" element={<CustomerDashboard publicView />} />
           <Route path="/customer/sessions" element={<CustomerSessions />} />

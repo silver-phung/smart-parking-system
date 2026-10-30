@@ -9,7 +9,13 @@ export default function AnchorLink({ id, className, children }) {
         if (pathname === "/" && hash === `#${id}`)
           document
             .getElementById(id)
-            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            ?.scrollIntoView({
+              behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "auto"
+                : "smooth",
+              block: "start",
+            });
       }}
     >
       {children}
