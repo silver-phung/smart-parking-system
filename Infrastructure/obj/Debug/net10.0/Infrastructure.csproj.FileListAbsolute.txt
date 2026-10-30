@@ -1,0 +1,17 @@
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\bin\Debug\net10.0\Infrastructure.deps.json
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\bin\Debug\net10.0\Infrastructure.dll
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\bin\Debug\net10.0\Infrastructure.pdb
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\bin\Debug\net10.0\Application.dll
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\bin\Debug\net10.0\Domain.dll
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\bin\Debug\net10.0\Application.pdb
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\bin\Debug\net10.0\Domain.pdb
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastructure.csproj.AssemblyReference.cache
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastructure.AssemblyInfoInputs.cache
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastructure.AssemblyInfo.cs
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastructure.csproj.CoreCompileInputs.cache
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastr.15EFFBFE.Up2Date
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastructure.dll
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\refint\Infrastructure.dll
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\Infrastructure.pdb
+C:\Users\ACRE\source\PaymentNotificationService\Infrastructure\obj\Debug\net10.0\ref\Infrastructure.dll
