@@ -1,26 +1,24 @@
-import { useLocation, useNavigate } from "react-router-dom";
-
-// Cuộn mượt tới một mục trên trang chủ. Nếu đang ở trang khác
-// thì quay về trang chủ rồi mới cuộn.
+import { Link, useLocation } from "react-router-dom";
 export default function AnchorLink({ id, className, children }) {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-
-  const go = (e) => {
-    e.preventDefault();
-    const scroll = () =>
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (pathname !== "/") {
-      navigate("/");
-      setTimeout(scroll, 80);
-    } else {
-      scroll();
-    }
-  };
-
+  const { pathname, hash } = useLocation();
   return (
-    <a href={`/#${id}`} className={className} onClick={go}>
+    <Link
+      to={`/#${id}`}
+      className={className}
+      onClick={() => {
+        if (pathname === "/" && hash === `#${id}`)
+          document
+            .getElementById(id)
+            ?.scrollIntoView({
+              behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "auto"
+                : "smooth",
+              block: "start",
+            });
+      }}
+    >
       {children}
-    </a>
+    </Link>
   );
 }

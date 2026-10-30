@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import RequireCustomer from "../components/RequireCustomer.jsx";
 import { apiRequest } from "../services/api.js";
+import { collectPages } from "../services/staffApi.js";
+import "../workspace.css";
 
 function readData(response) {
   return response?.data;
@@ -19,7 +21,8 @@ const slotLabels = {
   UNAVAILABLE: "Không khả dụng",
 };
 
-function DashboardContent() {
+function DashboardContent({ publicView = false }) {
+  const [revision, setRevision] = useState(0);
   const [lots, setLots] = useState([]);
   const [selectedLotId, setSelectedLotId] = useState("");
   const [floors, setFloors] = useState([]);
@@ -36,13 +39,20 @@ function DashboardContent() {
     setLotsLoading(true);
     setLotsError("");
     try {
-      const response = await apiRequest("/v1/parking-lots?pageNumber=1&pageSize=100");
-      const items = readItems(response);
+      const items = await collectPages(
+        async (page) =>
+          (
+            await apiRequest(
+              `/v1/parking-lots?pageNumber=${page}&pageSize=100&isActive=true`,
+              { skipAuth: true },
+            )
+          ).data,
+      );
       setLots(items);
       setSelectedLotId((current) =>
         items.some((lot) => String(lot.id) === current)
           ? current
-          : String(items[0]?.id || "")
+          : String(items[0]?.id || ""),
       );
     } catch (error) {
       setLotsError(error.message);
@@ -67,11 +77,13 @@ function DashboardContent() {
     const loadFloors = async () => {
       setFloorsLoading(true);
       setFloorsError("");
+      setFloors([]);
       setSlots([]);
       setSelectedFloorId("");
       try {
         const response = await apiRequest(
-          `/v1/parking-lots/${selectedLotId}/floors?isActiveOnly=true`
+          `/v1/parking-lots/${selectedLotId}/floors?isActiveOnly=true`,
+          { skipAuth: true },
         );
         if (!active) return;
         const items = readItems(response);
@@ -88,7 +100,7 @@ function DashboardContent() {
     return () => {
       active = false;
     };
-  }, [selectedLotId]);
+  }, [selectedLotId, revision]);
 
   useEffect(() => {
     if (!selectedFloorId) {
@@ -101,10 +113,16 @@ function DashboardContent() {
       setSlotsLoading(true);
       setSlotsError("");
       try {
-        const response = await apiRequest(
-          `/v1/parking-floors/${selectedFloorId}/slots?pageNumber=1&pageSize=100`
+        const items = await collectPages(
+          async (page) =>
+            (
+              await apiRequest(
+                `/v1/parking-floors/${selectedFloorId}/slots?pageNumber=${page}&pageSize=100`,
+                { skipAuth: true },
+              )
+            ).data,
         );
-        if (active) setSlots(readItems(response));
+        if (active) setSlots(items);
       } catch (error) {
         if (active) setSlotsError(error.message);
       } finally {
@@ -116,32 +134,41 @@ function DashboardContent() {
     return () => {
       active = false;
     };
-  }, [selectedFloorId]);
+  }, [selectedFloorId, revision]);
 
   const availableCount = slots.filter(
-    (slot) => slot.physicalStatus === "EMPTY" && slot.isAvailable
+    (slot) => slot.physicalStatus === "EMPTY" && slot.isAvailable,
   ).length;
   const maintenanceCount = slots.filter(
-    (slot) => slot.physicalStatus === "MAINTENANCE"
+    (slot) => slot.physicalStatus === "MAINTENANCE",
   ).length;
   const occupiedCount = slots.filter(
-    (slot) => slot.physicalStatus === "OCCUPIED"
+    (slot) => slot.physicalStatus === "OCCUPIED",
   ).length;
   const selectedLot = lots.find((lot) => String(lot.id) === selectedLotId);
-  const selectedFloor = floors.find((floor) => String(floor.id) === selectedFloorId);
+  const selectedFloor = floors.find(
+    (floor) => String(floor.id) === selectedFloorId,
+  );
 
   return (
     <section className="customer-page container">
       <div className="customer-page__heading">
         <div>
-          <span className="tag">Khu vực khách hàng</span>
+          <span className="tag">
+            {publicView ? "Bãi đỗ công khai" : "Khu vực khách hàng"}
+          </span>
           <h1>Bãi đỗ xe</h1>
           <p className="muted">
             Xem sức chứa và trạng thái từng vị trí từ dữ liệu hệ thống.
           </p>
         </div>
-        <Link to="/customer/profile" className="btn btn--primary">
-          Hồ sơ của tôi
+        <Link
+          to={publicView ? "/login" : "/customer/sessions"}
+          className="btn btn--primary"
+        >
+          {publicView
+            ? "Đăng nhập để xem phiên của tôi"
+            : "Phiên gửi xe của tôi"}
         </Link>
       </div>
 
@@ -149,27 +176,47 @@ function DashboardContent() {
         <div className="customer-card__heading">
           <div>
             <h2>Chọn bãi và tầng</h2>
-            <p className="muted">Danh sách chỉ bao gồm các bãi đang hoạt động.</p>
+            <p className="muted">
+              Danh sách chỉ bao gồm các bãi đang hoạt động.
+            </p>
           </div>
-          <button type="button" className="btn btn--outline" onClick={() => void loadLots()} disabled={lotsLoading}>
+          <button
+            type="button"
+            className="btn btn--outline"
+            onClick={() => {
+              void loadLots();
+              setRevision((n) => n + 1);
+            }}
+            disabled={lotsLoading || floorsLoading || slotsLoading}
+          >
             {lotsLoading ? "Đang tải..." : "Làm mới"}
           </button>
         </div>
 
-        {lotsError && <p className="customer-message customer-message--error" role="alert">{lotsError}</p>}
+        {lotsError && (
+          <p className="customer-message customer-message--error" role="alert">
+            {lotsError}
+          </p>
+        )}
 
         {!lotsLoading && !lotsError && lots.length === 0 && (
-          <p className="customer-message">Hiện chưa có bãi đỗ nào đang hoạt động.</p>
+          <p className="customer-message">
+            Hiện chưa có bãi đỗ nào đang hoạt động.
+          </p>
         )}
 
         {lots.length > 0 && (
           <div className="customer-select-grid">
             <label>
               Bãi đỗ xe
-              <select value={selectedLotId} onChange={(event) => setSelectedLotId(event.target.value)}>
+              <select
+                value={selectedLotId}
+                onChange={(event) => setSelectedLotId(event.target.value)}
+              >
                 {lots.map((lot) => (
                   <option value={lot.id} key={lot.id}>
-                    {lot.name}{lot.address ? ` · ${lot.address}` : ""}
+                    {lot.name}
+                    {lot.address ? ` · ${lot.address}` : ""}
                   </option>
                 ))}
               </select>
@@ -191,19 +238,34 @@ function DashboardContent() {
           </div>
         )}
 
-        {floorsLoading && <p className="customer-message">Đang tải danh sách tầng...</p>}
-        {floorsError && <p className="customer-message customer-message--error" role="alert">{floorsError}</p>}
-        {!floorsLoading && !floorsError && selectedLotId && floors.length === 0 && (
-          <p className="customer-message">Bãi này chưa có tầng đang hoạt động.</p>
+        {floorsLoading && (
+          <p className="customer-message">Đang tải danh sách tầng...</p>
         )}
+        {floorsError && (
+          <p className="customer-message customer-message--error" role="alert">
+            {floorsError}
+          </p>
+        )}
+        {!floorsLoading &&
+          !floorsError &&
+          selectedLotId &&
+          floors.length === 0 && (
+            <p className="customer-message">
+              Bãi này chưa có tầng đang hoạt động.
+            </p>
+          )}
       </div>
 
       {selectedLot && selectedFloor && (
         <div className="customer-card">
           <div className="customer-card__heading">
             <div>
-              <h2>{selectedLot.name} · {selectedFloor.name}</h2>
-              <p className="muted">{selectedLot.address || "Chưa có địa chỉ bãi đỗ"}</p>
+              <h2>
+                {selectedLot.name} · {selectedFloor.name}
+              </h2>
+              <p className="muted">
+                {selectedLot.address || "Chưa có địa chỉ bãi đỗ"}
+              </p>
             </div>
           </div>
 
@@ -218,28 +280,57 @@ function DashboardContent() {
             </div>
           </div>
 
-          {slotsError && <p className="customer-message customer-message--error" role="alert">{slotsError}</p>}
+          {slotsError && (
+            <p
+              className="customer-message customer-message--error"
+              role="alert"
+            >
+              {slotsError}
+            </p>
+          )}
           {slotsLoading ? (
             <p className="customer-message">Đang tải tình trạng vị trí...</p>
           ) : !slotsError ? (
             <>
               <div className="customer-stat-grid" aria-label="Tổng quan tầng">
-                <div><strong>{availableCount}</strong><span>Chỗ trống</span></div>
-                <div><strong>{occupiedCount}</strong><span>Đang sử dụng</span></div>
-                <div><strong>{maintenanceCount}</strong><span>Đang bảo trì</span></div>
-                <div><strong>{slots.length}</strong><span>Tổng vị trí</span></div>
+                <div>
+                  <strong>{availableCount}</strong>
+                  <span>Chỗ trống</span>
+                </div>
+                <div>
+                  <strong>{occupiedCount}</strong>
+                  <span>Đang sử dụng</span>
+                </div>
+                <div>
+                  <strong>{maintenanceCount}</strong>
+                  <span>Đang bảo trì</span>
+                </div>
+                <div>
+                  <strong>{slots.length}</strong>
+                  <span>Tổng vị trí</span>
+                </div>
               </div>
 
               {slots.length === 0 ? (
-                <p className="customer-message">Tầng này chưa có dữ liệu vị trí.</p>
+                <p className="customer-message">
+                  Tầng này chưa có dữ liệu vị trí.
+                </p>
               ) : (
-                <ul className="customer-slot-grid" aria-label="Danh sách vị trí đỗ xe">
+                <ul
+                  className="customer-slot-grid"
+                  aria-label="Danh sách vị trí đỗ xe"
+                >
                   {slots.map((slot) => {
-                    const status = slotLabels[slot.physicalStatus] || slot.physicalStatus;
+                    const effectiveStatus =
+                      slot.physicalStatus === "EMPTY" && !slot.isAvailable
+                        ? "UNAVAILABLE"
+                        : slot.physicalStatus;
+                    const status =
+                      slotLabels[effectiveStatus] || effectiveStatus;
                     return (
                       <li
                         key={slot.id}
-                        className={`customer-slot customer-slot--${String(slot.physicalStatus).toLowerCase()}`}
+                        className={`customer-slot customer-slot--${String(effectiveStatus).toLowerCase()}`}
                       >
                         <strong>{slot.slotCode}</strong>
                         <span>{status}</span>
@@ -254,17 +345,18 @@ function DashboardContent() {
       )}
 
       <div className="customer-message customer-message--notice">
-        <strong>Đăng ký giữ chỗ chưa khả dụng</strong>
+        <strong>Tình trạng bãi tại thời điểm cập nhật</strong>
         <span>
-          API hiện tại cho phép xem bãi, tầng và trạng thái vị trí; chưa có API để khách hàng tạo
-          yêu cầu đặt chỗ. Các chỗ trống trên đây chỉ phản ánh trạng thái hiện tại, chưa được giữ cho bạn.
+          Chỗ trống hiển thị chưa được giữ cho bạn. Tình trạng có thể thay đổi
+          khi xe vào hoặc ra bãi.
         </span>
       </div>
     </section>
   );
 }
 
-export default function CustomerDashboard() {
+export default function CustomerDashboard({ publicView = false }) {
+  if (publicView) return <DashboardContent publicView />;
   return (
     <RequireCustomer>
       <DashboardContent />

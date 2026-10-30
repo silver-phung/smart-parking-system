@@ -276,4 +276,22 @@ public class StaffLotAssignmentTests
         Assert.Equal(lot1.Id, myLots[0].LotId);
         Assert.Equal(lot1.Name, myLots[0].LotName);
     }
+
+    [Fact]
+    public async Task GetMyAssignedLots_KeepsClosedLotVisibleForManagerToReopen()
+    {
+        var (service, context, admin, manager, _, _, lot1, _) = await SetupContextAsync();
+        var (success, _, _) = await service.CreateAssignmentAsync(new CreateStaffAssignmentRequestDto
+        {
+            UserId = manager.Id, LotId = lot1.Id, Duty = "BOTH"
+        }, admin.Id, "127.0.0.1");
+        Assert.True(success);
+        lot1.IsActive = false;
+        await context.SaveChangesAsync();
+        var lots = await service.GetMyAssignedLotsAsync(manager.Id);
+        var closed = Assert.Single(lots);
+        Assert.Equal(lot1.Id, closed.LotId);
+        Assert.False(closed.IsActive);
+        Assert.Empty(await service.GetMyAssignedLotsAsync(admin.Id));
+    }
 }

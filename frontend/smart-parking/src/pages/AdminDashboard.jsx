@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../services/api.js";
 import RequireRole from "../components/RequireRole.jsx";
+import { Link } from "react-router-dom";
 
 function getItems(response) {
   const data = response?.data;
@@ -33,11 +34,12 @@ function AdminDashboardContent() {
     setAssignmentsError("");
     setSessionsError("");
 
-    const [lotsResult, assignmentsResult, sessionsResult] = await Promise.allSettled([
-      apiRequest("/v1/parking-lots?pageNumber=1&pageSize=100"),
-      apiRequest("/v1/staff-assignments?page=1&pageSize=100"),
-      apiRequest("/v1/parking-sessions/active?page=1&pageSize=100"),
-    ]);
+    const [lotsResult, assignmentsResult, sessionsResult] =
+      await Promise.allSettled([
+        apiRequest("/v1/parking-lots?pageNumber=1&pageSize=100"),
+        apiRequest("/v1/staff-assignments?page=1&pageSize=100"),
+        apiRequest("/v1/parking-sessions/active?page=1&pageSize=100"),
+      ]);
 
     if (lotsResult.status === "fulfilled") {
       const resultLots = getItems(lotsResult.value);
@@ -52,7 +54,7 @@ function AdminDashboardContent() {
     if (assignmentsResult.status === "fulfilled") {
       const resultAssignments = getItems(assignmentsResult.value);
       setAssignmentCount(
-        assignmentsResult.value?.data?.totalCount ?? resultAssignments.length
+        assignmentsResult.value?.data?.totalCount ?? resultAssignments.length,
       );
     } else {
       setAssignmentCount(0);
@@ -63,7 +65,7 @@ function AdminDashboardContent() {
       const resultSessions = getItems(sessionsResult.value);
       setSessions(resultSessions);
       setSessionCount(
-        sessionsResult.value?.data?.totalCount ?? resultSessions.length
+        sessionsResult.value?.data?.totalCount ?? resultSessions.length,
       );
     } else {
       setSessions([]);
@@ -80,16 +82,28 @@ function AdminDashboardContent() {
   }, [refresh]);
 
   const summary = useMemo(() => {
-    const capacity = lots.reduce((sum, lot) => sum + (lot.totalCapacity || 0), 0);
-    const occupied = lots.reduce((sum, lot) => sum + (lot.occupiedSlotsCount || 0), 0);
-    const available = lots.reduce((sum, lot) => sum + (lot.availableSlotsCount || 0), 0);
+    const capacity = lots.reduce(
+      (sum, lot) => sum + (lot.totalCapacity || 0),
+      0,
+    );
+    const occupied = lots.reduce(
+      (sum, lot) => sum + (lot.occupiedSlotsCount || 0),
+      0,
+    );
+    const available = lots.reduce(
+      (sum, lot) => sum + (lot.availableSlotsCount || 0),
+      0,
+    );
 
     return {
       capacity,
       occupied,
       available,
       openLots: lots.filter((lot) => lot.isActive).length,
-      occupancy: capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0,
+      occupancy:
+        capacity > 0
+          ? Math.min(100, Math.round((occupied / capacity) * 100))
+          : 0,
     };
   }, [lots]);
 
@@ -97,9 +111,17 @@ function AdminDashboardContent() {
     <section className="admin-dashboard container" id="overview">
       <header className="admin-dashboard__header">
         <div>
-          <span className="admin-dashboard__eyebrow">BẢNG ĐIỀU KHIỂN ADMIN</span>
+          <span className="admin-dashboard__eyebrow">
+            BẢNG ĐIỀU KHIỂN ADMIN
+          </span>
           <h1>Tổng quan vận hành</h1>
-          <p>Theo dõi tình trạng các bãi đỗ và hoạt động đang diễn ra trên toàn hệ thống.</p>
+          <Link to="/admin/people" className="btn btn--outline">
+            Quản lý tài khoản & phân công
+          </Link>
+          <p>
+            Theo dõi tình trạng các bãi đỗ và hoạt động đang diễn ra trên toàn
+            hệ thống.
+          </p>
         </div>
         <button
           type="button"
@@ -113,18 +135,34 @@ function AdminDashboardContent() {
 
       <div className="admin-dashboard__meta">
         <span>Phạm vi: toàn hệ thống</span>
-        {lastUpdated && <span>Cập nhật lúc {lastUpdated.toLocaleTimeString("vi-VN")}</span>}
+        {lastUpdated && (
+          <span>Cập nhật lúc {lastUpdated.toLocaleTimeString("vi-VN")}</span>
+        )}
       </div>
 
-      {lotsError && <p className="customer-message customer-message--error" role="alert">{lotsError}</p>}
-      {assignmentsError && <p className="customer-message customer-message--error" role="alert">{assignmentsError}</p>}
-      {sessionsError && <p className="customer-message customer-message--error" role="alert">{sessionsError}</p>}
+      {lotsError && (
+        <p className="customer-message customer-message--error" role="alert">
+          {lotsError}
+        </p>
+      )}
+      {assignmentsError && (
+        <p className="customer-message customer-message--error" role="alert">
+          {assignmentsError}
+        </p>
+      )}
+      {sessionsError && (
+        <p className="customer-message customer-message--error" role="alert">
+          {sessionsError}
+        </p>
+      )}
 
       <div className="admin-dashboard__metrics" aria-label="Chỉ số vận hành">
         <article className="admin-dashboard__metric">
           <span>Tổng số bãi</span>
           <strong>{loading ? "—" : formatNumber(lotCount)}</strong>
-          <small>{loading ? "Đang tải" : `${summary.openLots} bãi đang hoạt động`}</small>
+          <small>
+            {loading ? "Đang tải" : `${summary.openLots} bãi đang hoạt động`}
+          </small>
         </article>
         <article className="admin-dashboard__metric">
           <span>Tổng sức chứa</span>
@@ -134,7 +172,9 @@ function AdminDashboardContent() {
         <article className="admin-dashboard__metric">
           <span>Đang có xe</span>
           <strong>{loading ? "—" : formatNumber(summary.occupied)}</strong>
-          <small>{loading ? "—" : `${summary.occupancy}% công suất hiện tại`}</small>
+          <small>
+            {loading ? "—" : `${summary.occupancy}% công suất hiện tại`}
+          </small>
         </article>
         <article className="admin-dashboard__metric">
           <span>Chỗ còn trống</span>
@@ -154,11 +194,16 @@ function AdminDashboardContent() {
       </div>
 
       <div className="admin-dashboard__columns">
-        <section className="admin-dashboard__panel admin-dashboard__panel--wide" id="parking-lots">
+        <section
+          className="admin-dashboard__panel admin-dashboard__panel--wide"
+          id="parking-lots"
+        >
           <div className="admin-dashboard__panel-heading">
             <div>
               <h2>Tiến độ và công suất bãi đỗ</h2>
-              <p>Tỷ lệ xe đang đỗ so với tổng sức chứa hiện tại của từng bãi.</p>
+              <p>
+                Tỷ lệ xe đang đỗ so với tổng sức chứa hiện tại của từng bãi.
+              </p>
             </div>
             {lotCount > lots.length && (
               <span className="admin-dashboard__hint">
@@ -175,7 +220,10 @@ function AdminDashboardContent() {
             {lots.map((lot) => {
               const capacity = lot.totalCapacity || 0;
               const occupied = lot.occupiedSlotsCount || 0;
-              const percent = capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0;
+              const percent =
+                capacity > 0
+                  ? Math.min(100, Math.round((occupied / capacity) * 100))
+                  : 0;
 
               return (
                 <article className="admin-dashboard__lot" key={lot.id}>
@@ -184,7 +232,13 @@ function AdminDashboardContent() {
                       <h3>{lot.name}</h3>
                       <p>{lot.address || "Chưa cập nhật địa chỉ"}</p>
                     </div>
-                    <span className={lot.isActive ? "admin-dashboard__status is-open" : "admin-dashboard__status"}>
+                    <span
+                      className={
+                        lot.isActive
+                          ? "admin-dashboard__status is-open"
+                          : "admin-dashboard__status"
+                      }
+                    >
                       {lot.isActive ? "Đang mở" : "Đang đóng"}
                     </span>
                   </div>
@@ -199,8 +253,13 @@ function AdminDashboardContent() {
                     <span style={{ width: `${percent}%` }} />
                   </div>
                   <div className="admin-dashboard__lot-meta">
-                    <span>{formatNumber(occupied)} đang đỗ · {percent}% công suất</span>
-                    <span>{formatNumber(lot.availableSlotsCount || 0)} trống / {formatNumber(capacity)} chỗ</span>
+                    <span>
+                      {formatNumber(occupied)} đang đỗ · {percent}% công suất
+                    </span>
+                    <span>
+                      {formatNumber(lot.availableSlotsCount || 0)} trống /{" "}
+                      {formatNumber(capacity)} chỗ
+                    </span>
                   </div>
                 </article>
               );
@@ -235,10 +294,16 @@ function AdminDashboardContent() {
             </div>
           </div>
           <div className="admin-dashboard__chart-empty">
-            <span className="admin-dashboard__chart-placeholder" aria-hidden="true">API BÁO CÁO</span>
+            <span
+              className="admin-dashboard__chart-placeholder"
+              aria-hidden="true"
+            >
+              API BÁO CÁO
+            </span>
             <strong>Chưa thể tạo biểu đồ lịch sử</strong>
             <p>
-              API hiện chỉ trả về phiên đang hoạt động, chưa có lịch sử phiên hoặc báo cáo tổng hợp theo ngày/tháng.
+              API hiện chỉ trả về phiên đang hoạt động, chưa có lịch sử phiên
+              hoặc báo cáo tổng hợp theo ngày/tháng.
             </p>
           </div>
         </section>
@@ -250,12 +315,15 @@ function AdminDashboardContent() {
             <h2>Xe đang gửi tại bãi</h2>
             <p>
               {sessionCount} phiên đang hoạt động.
-              {sessionCount > sessions.length && ` Hiển thị ${sessions.length} phiên gần nhất.`}
+              {sessionCount > sessions.length &&
+                ` Hiển thị ${sessions.length} phiên gần nhất.`}
             </p>
           </div>
         </div>
         {!loading && !sessionsError && sessions.length === 0 && (
-          <p className="customer-message">Hiện không có phiên đỗ xe đang hoạt động.</p>
+          <p className="customer-message">
+            Hiện không có phiên đỗ xe đang hoạt động.
+          </p>
         )}
         {sessions.length > 0 && (
           <div className="admin-dashboard__table-wrap">

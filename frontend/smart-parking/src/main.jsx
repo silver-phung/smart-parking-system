@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import App from "./App.jsx";
 import "./index.css";
+import "./desktop.css";
 
 // Khi chạy trong Claude (artifact) thì không có URL thật, dùng MemoryRouter.
 // Chạy bình thường (npm run dev) vẫn dùng BrowserRouter.
