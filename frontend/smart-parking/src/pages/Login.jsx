@@ -1,5 +1,5 @@
 import { Component } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout.jsx";
 import { apiRequest } from "../services/api.js";
 import { setAuthSession } from "../services/authSession.js";
@@ -52,21 +52,22 @@ class LoginForm extends Component {
 
   render() {
     return (
-      <AuthLayout>
-        <div className="auth-form-wrap">
-          <p className="auth-content__eyebrow">CHÀO MỪNG BẠN TRỞ LẠI</p>
-          <h1>Đăng nhập</h1>
-          <p className="auth-content__description">
-            Đăng nhập để tiếp tục hành trình đỗ xe thuận tiện hơn.
-          </p>
-
+      <AuthLayout
+        title="Đăng nhập"
+        description="Đăng nhập để tiếp tục hành trình đỗ xe thuận tiện hơn."
+      >
           <form className="auth-form" onSubmit={this.onSubmit}>
-            <label htmlFor="login-username">Tên đăng nhập</label>
+            {this.props.notice && (
+              <p className="auth-form__message auth-form__message--success" role="status">
+                {this.props.notice}
+              </p>
+            )}
+            <label htmlFor="login-username">Tên đăng nhập hoặc email</label>
             <input
               id="login-username"
               type="text"
               name="username"
-              placeholder="Tên đăng nhập"
+              placeholder="Tên đăng nhập hoặc email"
               autoComplete="username"
               value={this.state.username}
               onChange={this.onChange}
@@ -97,12 +98,9 @@ class LoginForm extends Component {
               {!this.state.loading && <span aria-hidden="true">→</span>}
             </button>
           </form>
-
-          <p className="auth-switch">Dùng tài khoản đã được cấp để đăng nhập.</p>
-          <p className="auth-terms">
-            Bằng việc tiếp tục, bạn đồng ý với các điều khoản sử dụng của chúng tôi.
+          <p className="auth-switch">
+            Chưa có tài khoản? <Link to="/register">Đăng ký</Link>
           </p>
-        </div>
       </AuthLayout>
     );
   }
@@ -110,5 +108,6 @@ class LoginForm extends Component {
 
 export default function Login() {
   const navigate = useNavigate();
-  return <LoginForm navigate={navigate} />;
+  const { state } = useLocation();
+  return <LoginForm navigate={navigate} notice={state?.notice} />;
 }
