@@ -16,11 +16,7 @@ export default function Footer() {
             <div className="footer-transparency">
               <span className="footer-eyebrow">Trải nghiệm có thông tin</span>
               <h2>Hiểu rõ trước khi bắt đầu.</h2>
-              <p>
-                Đây là một dự án mô phỏng, không phải dịch vụ giữ xe thương mại.
-                Không chuyển tiền, đặt cọc hoặc dùng số liệu demo để đặt chỗ
-                thực tế.
-              </p>
+              <p>Tìm hiểu điều kiện sử dụng, thông tin dữ liệu và cách liên hệ trước khi bắt đầu trải nghiệm.</p>
               <Link to="/thong-tin/chong-gia-mao">
                 Nhận biết yêu cầu giả mạo ↗
               </Link>
@@ -41,7 +37,7 @@ export default function Footer() {
             </nav>
           </div>
           <div className="footer-bottom">
-            <span>Smart-Parking · Bản trình diễn phần mềm</span>
+            <span>Smart-Parking · Thông tin sử dụng</span>
             <span>Không có dịch vụ thu tiền hoặc bảo đảm chỗ đỗ thực tế.</span>
           </div>
         </div>

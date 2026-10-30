@@ -76,7 +76,7 @@ export default function Header() {
           aria-label="Smart-Parking - trang chủ"
         >
           <Logo />
-          <span className="header__demo-badge">Dự án mô phỏng</span>
+
         </Link>
         <div className="header__actions">
           {session ? (

@@ -72,7 +72,7 @@ it("keeps content readable when IntersectionObserver is unavailable", async () =
   await screen.findByText("Đang hoạt động");
   expect(container.querySelector('[data-reveal="pending"]')).toBeNull();
   expect(
-    screen.getByRole("link", { name: "Xem bãi đỗ demo" }).getAttribute("href"),
+    screen.getByRole("link", { name: "Xem bãi đỗ" }).getAttribute("href"),
   ).toBe("/parking");
   expect(screen.queryByText("Xác nhận đặt chỗ")).toBeNull();
 });

@@ -10,7 +10,7 @@ import useScrollReveal from "../components/useScrollReveal.js";
 import "../home.css";
 
 const highlights = [
-  "Xem bãi, tầng và trạng thái ô đỗ trong môi trường demo",
+  "Xem bãi, tầng và trạng thái ô đỗ",
   "Trải nghiệm quy trình vào bãi và xác minh ô theo vai trò",
   "Theo dõi phiên gửi xe gắn với phương tiện của tài khoản",
 ];
@@ -31,7 +31,7 @@ const methods = [
       },
       {
         title: "Đối chiếu khi xe ra",
-        text: "Quy trình demo kiểm tra biển số và điều kiện phiên trước khi ghi nhận xe rời bãi.",
+        text: "Quy trình kiểm tra biển số và điều kiện phiên trước khi ghi nhận xe rời bãi.",
       },
     ],
   },
@@ -259,28 +259,13 @@ export default function Home() {
 
   return (
     <div className="home" ref={revealRef}>
-      <div className="container">
-        <div className="home-demo-banner">
-          <div>
-            <span className="home-demo-dot" aria-hidden="true" />
-            <strong>Dự án mô phỏng · OJT</strong>
-            <span>
-              Chỉ phục vụ học tập và trình diễn, không phải dịch vụ giữ xe
-              thương mại.
-            </span>
-          </div>
-          <Link to="/thong-tin/du-an">
-            Tìm hiểu trước khi trải nghiệm <span aria-hidden="true">↗</span>
-          </Link>
-        </div>
-      </div>
-      {/* ---------- Giới thiệu ---------- */}
+{/* ---------- Giới thiệu ---------- */}
       <section id="gioi-thieu" className="container hero">
         <div className="hero__text" data-scroll-reveal>
-          <span className="tag">Khám phá dự án</span>
+          <span className="tag">Giới thiệu</span>
           <h1>Smart-Parking là gì?</h1>
           <p className="lead">
-            Smart-Parking mô phỏng cách quản lý một bãi đỗ thông minh: tiếp nhận
+            Smart-Parking hỗ trợ quản lý một bãi đỗ thông minh: tiếp nhận
             xe, đối chiếu biển số, xác minh ô đỗ và theo dõi phiên gửi xe. Trải
             nghiệm các vai trò trên cùng một hệ thống, từ khách hàng đến nhân
             viên vận hành.
@@ -299,11 +284,11 @@ export default function Home() {
             </AnchorLink>
             {session?.userProfile.role === "USER" ? (
               <Link to="/customer" className="btn btn--dark-outline btn--lg">
-                Xem bãi đỗ demo
+                Xem bãi đỗ
               </Link>
             ) : !session ? (
               <Link to="/parking" className="btn btn--dark-outline btn--lg">
-                Xem bãi đỗ demo
+                Xem bãi đỗ
               </Link>
             ) : null}
           </div>
@@ -322,7 +307,7 @@ export default function Home() {
           <SectionHead
             tag="Cách thức hoạt động"
             title="Một quy trình, nhiều vai trò"
-            text="Khám phá hai góc nhìn trong bản demo: người vận hành tại bãi và khách hàng trên website."
+            text="Khám phá hai góc nhìn trong hệ thống: người vận hành tại bãi và khách hàng trên website."
           />
           <div className="grid-2">
             {methods.map((m) => (
@@ -364,7 +349,7 @@ export default function Home() {
             <h3>Ảnh hỗ trợ đối chiếu biển số</h3>
             <p>
               Nhân viên có thể dùng ảnh để nhận diện và đối chiếu biển số trong
-              quy trình demo. Kết quả AI cần được kiểm tra lại trước khi xác
+              quy trình vận hành. Kết quả AI cần được kiểm tra lại trước khi xác
               nhận. Hãy dùng ảnh mẫu, tránh tải hình chứa thông tin cá nhân
               không cần thiết.
             </p>
@@ -459,13 +444,12 @@ export default function Home() {
             <div>
               <h2>Cùng khám phá cách hệ thống vận hành</h2>
               <p>
-                Đăng ký hoặc đăng nhập để trải nghiệm. Bản demo không nhận giữ
-                xe, giữ chỗ hay thu tiền thực tế.
+                Đăng ký hoặc đăng nhập để xem phương tiện và theo dõi phiên gửi xe của bạn.
               </p>
             </div>
             <div className="cta__actions">
               <Link to="/login" className="btn btn--white-outline btn--lg">
-                Trải nghiệm bản demo
+                Đăng nhập
               </Link>
               <Link to="/thong-tin/dieu-kien" className="home-cta-link">
                 Đọc điều kiện trải nghiệm ↗
