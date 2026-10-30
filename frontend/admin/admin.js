@@ -285,7 +285,10 @@
           container: target,
           lotId: l.id === 'L1' ? 1 : (l.id === 'L2' ? 2 : 3),
           lotName: l.name,
-          floorId: l.floors[0] ? l.floors[0].id : 'B1'
+          floorId: l.floors[0] ? l.floors[0].id : 'B1',
+          floors: l.floors.map(function (floor) { return floor.id; }),
+          apiEndpoint: '/api/v1/parking-floors/{floorId}/slots',
+          showInternalDetails: false
         });
       }
     }, 50);

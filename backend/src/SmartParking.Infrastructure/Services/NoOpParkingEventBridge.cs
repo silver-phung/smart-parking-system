@@ -5,11 +5,7 @@ using SmartParking.Application.Events.Dtos;
 namespace SmartParking.Infrastructure.Services;
 
 /// <summary>
-/// No-op bridge – không làm gì, chỉ ghi log.
-/// Dùng trong Sprint 3 khi Phụng's DB module chưa được merge vào nhánh này.
-///
-/// TODO (sau merge feature/phung-database → develop):
-///   Thay bằng <see cref="LiveParkingEventBridge"/> trong DependencyInjection.cs
+/// No-op an toàn: không giả vờ đã đồng bộ sang DB core.
 /// </summary>
 public class NoOpParkingEventBridge : IParkingEventBridge
 {
@@ -20,27 +16,15 @@ public class NoOpParkingEventBridge : IParkingEventBridge
         _logger = logger;
     }
 
-    public Task OnVehicleEnteredAsync(IngestEventRequest request, string sessionId, CancellationToken ct = default)
+    public Task OnParkingVerifiedAsync(
+        IngestEventRequest request,
+        string sessionId,
+        string authenticatedActorId,
+        CancellationToken ct = default)
     {
-        _logger.LogDebug(
-            "[Bridge NoOp] VehicleEntered – plate={Plate} session={Session} (chưa sync sang DB Phụng)",
-            request.CarPlate, sessionId);
-        return Task.CompletedTask;
-    }
-
-    public Task OnSlotParkedAsync(IngestEventRequest request, string sessionId, CancellationToken ct = default)
-    {
-        _logger.LogDebug(
-            "[Bridge NoOp] SlotParked – slot={Slot} session={Session} (chưa sync sang DB Phụng)",
-            request.SlotCode, sessionId);
-        return Task.CompletedTask;
-    }
-
-    public Task OnVehicleExitedAsync(IngestEventRequest request, string sessionId, CancellationToken ct = default)
-    {
-        _logger.LogDebug(
-            "[Bridge NoOp] VehicleExited – plate={Plate} session={Session} (chưa sync sang DB Phụng)",
-            request.CarPlate, sessionId);
+        _logger.LogWarning(
+            "Parking verification chưa được đồng bộ sang core: session={Session} slot={Slot} actor={Actor}",
+            sessionId, request.SlotCode, authenticatedActorId);
         return Task.CompletedTask;
     }
 }

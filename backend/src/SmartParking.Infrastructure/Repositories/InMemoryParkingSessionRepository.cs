@@ -29,9 +29,20 @@ public class InMemoryParkingSessionRepository : IParkingSessionRepository
         var normalized = carPlate.Trim().ToUpperInvariant();
         var session = _bySessionId.Values.FirstOrDefault(s =>
             s.CarPlate.Equals(normalized, StringComparison.OrdinalIgnoreCase) &&
-            (s.Status == ParkingSessionStatus.PendingSlot ||
-             s.Status == ParkingSessionStatus.Parked));
+            (s.Status == ParkingSessionStatus.WaitingVerification ||
+             s.Status == ParkingSessionStatus.Parked ||
+             s.Status == ParkingSessionStatus.ExitProcessing));
 
+        return Task.FromResult(session);
+    }
+
+    public Task<EventParkingSession?> FindActiveBySlotAsync(
+        int parkingLotId, string slotCode, CancellationToken ct = default)
+    {
+        var session = _bySessionId.Values.FirstOrDefault(s =>
+            s.ParkingLotId == parkingLotId &&
+            s.Status == ParkingSessionStatus.Parked &&
+            string.Equals(s.SlotCode, slotCode, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(session);
     }
 
@@ -58,8 +69,9 @@ public class InMemoryParkingSessionRepository : IParkingSessionRepository
         IReadOnlyList<EventParkingSession> result = _bySessionId.Values
             .Where(s =>
                 s.ParkingLotId == parkingLotId &&
-                (s.Status == ParkingSessionStatus.PendingSlot ||
-                 s.Status == ParkingSessionStatus.Parked))
+                (s.Status == ParkingSessionStatus.WaitingVerification ||
+                 s.Status == ParkingSessionStatus.Parked ||
+                 s.Status == ParkingSessionStatus.ExitProcessing))
             .OrderBy(s => s.EnteredAtUtc)
             .ToList();
 

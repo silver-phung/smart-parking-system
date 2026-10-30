@@ -803,7 +803,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     // ─── Sprint 3 Day 5: Event Ingestion API smoke tests ─────────────────────
 
     /// <summary>
-    /// Xe vào cổng → tạo phiên pending_slot thành công.
+    /// Camera cổng vào tạo projection waiting_verification; OCR chưa là biển số chính thức.
     /// </summary>
     [Fact]
     public async Task PostEvent_VehicleEntered_Returns200WithAccepted()
@@ -830,7 +830,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.NotNull(result);
         Assert.True(result.Success);
         Assert.Equal(EventProcessingStatus.Accepted, result.ProcessingStatus);
-        Assert.Equal(ParkingSessionStatus.PendingSlot, result.SessionStatus);
+        Assert.Equal(ParkingSessionStatus.WaitingVerification, result.SessionStatus);
         Assert.False(string.IsNullOrEmpty(result.SessionId));
     }
 
@@ -865,10 +865,10 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     /// <summary>
-    /// Full lifecycle: VehicleEntered → SlotParked → VehicleExited.
+    /// Body không được tự khai TriggeredBy để xác nhận đỗ.
     /// </summary>
     [Fact]
-    public async Task PostEvent_FullLifecycle_Returns200AtEveryStep()
+    public async Task PostEvent_SlotParkedWithoutAuthenticatedActor_Returns400()
     {
         var plate = "72F-IntTest03";
 
@@ -889,25 +889,12 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             EventId = Guid.NewGuid().ToString(), SessionId = sessionId,
             ParkingLotId = 1, SlotCode = "A1-012", CarPlate = plate,
             EventType = ParkingEventType.SlotParked,
-            Source = "ZoneStaff", TriggeredBy = "zone_staff_01"
+            Source = "ZoneStaff"
         });
-        Assert.Equal(HttpStatusCode.OK, parkRes.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, parkRes.StatusCode);
         var parkDto = await parkRes.Content.ReadFromJsonAsync<IngestEventResponse>();
         Assert.NotNull(parkDto);
-        Assert.Equal(ParkingSessionStatus.Parked, parkDto.SessionStatus);
-
-        // Step 3: Exit
-        var exitRes = await _client.PostAsJsonAsync("/api/events", new IngestEventRequest
-        {
-            EventId = Guid.NewGuid().ToString(), SessionId = sessionId,
-            ParkingLotId = 1, CarPlate = plate,
-            EventType = ParkingEventType.VehicleExited,
-            Source = "GateStaff", TriggeredBy = "gate_staff_01"
-        });
-        Assert.Equal(HttpStatusCode.OK, exitRes.StatusCode);
-        var exitDto = await exitRes.Content.ReadFromJsonAsync<IngestEventResponse>();
-        Assert.NotNull(exitDto);
-        Assert.Equal(ParkingSessionStatus.Exited, exitDto.SessionStatus);
+        Assert.Equal(EventProcessingStatus.Rejected, parkDto.ProcessingStatus);
     }
 
     /// <summary>
@@ -931,10 +918,10 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     /// <summary>
-    /// SlotParked không có session → phải trả 400 với pending_verification.
+    /// SlotParked không có session → nhận để xác minh (202), không giả vờ thành công.
     /// </summary>
     [Fact]
-    public async Task PostEvent_SlotParked_WithUnknownSession_ReturnsBadRequestWithPendingVerification()
+    public async Task PostEvent_SlotParked_WithUnknownSession_Returns202WithPendingVerification()
     {
         var request = new IngestEventRequest
         {
@@ -944,20 +931,19 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             SlotCode     = "B2-005",
             CarPlate     = "99A-IntTest",
             EventType    = ParkingEventType.SlotParked,
-            Source       = "ZoneStaff",
-            TriggeredBy  = "zone_staff_01"
+            Source       = "ZoneStaff"
         };
 
         var response = await _client.PostAsJsonAsync("/api/events", request);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<IngestEventResponse>();
         Assert.NotNull(result);
         Assert.False(result.Success);
         Assert.Equal(EventProcessingStatus.PendingVerification, result.ProcessingStatus);
     }
 
-    // ─── Sprint 3 Day 6-9: 3D Visualization / ParkingSlots API smoke tests ───
+    // ─── 3D viewer: legacy mock routes must not be an operational source ───
 
     [Theory]
     [InlineData("/3d-viewer.html", "text/html", "Parking3DViewer")]
@@ -992,17 +978,16 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
-    public async Task GetParkingSlots_Returns200WithSlotsList()
+    public async Task GetLegacyParkingSlots_ReturnsGoneWithoutSampleData()
     {
         var response = await _client.GetAsync("/api/ParkingSlots?lotId=1&floorId=B1");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
-        Assert.Contains("slots", content);
-        Assert.Contains("B1-A01", content);
+        Assert.DoesNotContain("B1-A01", content);
     }
 
     [Fact]
-    public async Task PatchParkingSlotStatus_UpdatesPhysicalStatus()
+    public async Task PatchLegacyParkingSlotStatus_ReturnsGone()
     {
         var updateRequest = new
         {
@@ -1011,9 +996,16 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         };
 
         var response = await _client.PatchAsJsonAsync("/api/ParkingSlots/B1-A02/status", updateRequest);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetLegacyParkingLots_DoesNotInventThreeLots()
+    {
+        var response = await _client.GetAsync("/api/ParkingSlots/lots");
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
         var content = await response.Content.ReadAsStringAsync();
-        Assert.Contains("51F-999.88", content);
-        Assert.Contains("OCCUPIED", content);
+        Assert.DoesNotContain("Vincom Landmark 81", content);
+        Assert.DoesNotContain("Aeon Mall", content);
     }
 }

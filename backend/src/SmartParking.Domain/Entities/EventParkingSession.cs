@@ -14,6 +14,9 @@ public class EventParkingSession
     /// <summary>Biển số xe, ví dụ: "51F-67890". Đã chuẩn hóa thành chữ HOA.</summary>
     public string CarPlate { get; set; } = string.Empty;
 
+    /// <summary>Biển số OCR tạm; không dùng làm định danh cho đến khi Staff xác nhận.</summary>
+    public string? RecognizedPlate { get; set; }
+
     public int ParkingLotId { get; set; }
 
     /// <summary>
@@ -45,6 +48,9 @@ public class EventParkingSession
     /// <summary>Loại nhiên liệu Gemini nhận diện: "gasoline" | "electric" | "unknown".</summary>
     public string? FuelType { get; set; }
 
+    /// <summary>Gợi ý nhiên liệu từ AI, chưa được Staff xác nhận.</summary>
+    public string? RecognizedFuelType { get; set; }
+
     /// <summary>Màu xe Gemini nhận diện, ví dụ: "white", "black", "silver".</summary>
     public string? CarColor { get; set; }
 
@@ -60,6 +66,8 @@ public class EventParkingSession
     public DateTimeOffset EnteredAtUtc { get; set; }
     public DateTimeOffset? ParkedAtUtc { get; set; }
     public DateTimeOffset? ExitedAtUtc { get; set; }
+    /// <summary>Event occurred-at cuối cùng đã cập nhật projection.</summary>
+    public DateTimeOffset LastAppliedEventAtUtc { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -68,7 +76,9 @@ public class EventParkingSession
 public static class ParkingSessionStatus
 {
     public const string PendingSlot = "pending_slot";
+    public const string WaitingVerification = "waiting_verification";
     public const string Parked      = "parked";
+    public const string ExitProcessing = "exit_processing";
     public const string Exited      = "exited";
 }
 

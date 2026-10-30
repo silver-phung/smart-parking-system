@@ -2,24 +2,13 @@ using Microsoft.AspNetCore.Mvc;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Events;
 using SmartParking.Application.Events.Dtos;
+using SmartParking.Domain.Entities;
 
 namespace SmartParking.Api.Controllers;
 
 /// <summary>
-/// API tiếp nhận sự kiện từ Camera AI (cổng vào/ra) và IoT cảm biến siêu âm (tại ô đỗ).
-///
-/// Luồng Free Parking (thực tế Việt Nam – không cần camera tại từng ô):
-///   1. Camera tại cổng vào chụp ảnh → Gemini 2.5 Pro phân tích (biển số, màu, hãng, xăng/điện)
-///      → Staff cổng xác nhận → POST /api/events  { eventType: "VehicleEntered", ... }
-///
-///   2. Xe tự chọn ô trống, cảm biến siêu âm tại ô A1-012 phát hiện
-///      → POST /api/events  { eventType: "SensorTriggered", slotCode: "A1-012", ... }
-///
-///   3. Staff khu vực đến xác nhận, bấm gán xe vào ô trên màn hình mobile
-///      → POST /api/events  { eventType: "SlotParked", sessionId: "...", slotCode: "A1-012", ... }
-///
-///   4. Xe ra cổng, Staff đối chiếu ảnh Gemini và thu tiền
-///      → POST /api/events  { eventType: "VehicleExited", sessionId: "...", ... }
+/// API nhận event envelope. OCR/cảm biến là bằng chứng; chỉ thao tác Staff đã xác thực
+/// mới được chốt biển số và actual slot. Event cổng ra không tự đóng phiên.
 /// </summary>
 [ApiController]
 [Route("api/events")]
@@ -58,21 +47,26 @@ public class ParkingEventController : ControllerBase
             request.EventId, request.EventType, request.CarPlate,
             request.ParkingLotId, request.SlotCode);
 
-        var response = await _eventService.IngestAsync(request, ct);
+        var actorId = User.Identity?.IsAuthenticated == true
+            ? User.FindFirst("sub")?.Value ?? User.Identity.Name
+            : null;
+        var response = await _eventService.IngestAsync(request, actorId, ct);
 
         if (!response.Success)
         {
             _logger.LogWarning(
                 "Event rejected: EventId={EventId} Reason={Reason}",
                 request.EventId, response.Message);
-            return BadRequest(response);
+            return response.ProcessingStatus == EventProcessingStatus.PendingVerification
+                ? Accepted(response)
+                : BadRequest(response);
         }
 
         return Ok(response);
     }
 
     /// <summary>
-    /// Lấy danh sách phiên đang hoạt động (pending_slot + parked) tại một bãi đỗ.
+    /// Lấy danh sách projection đang hoạt động tại một bãi đỗ.
     /// Dùng cho màn hình điều phối Staff khu vực – hiển thị xe đang chờ gán slot.
     /// </summary>
     [HttpGet("sessions/active")]
@@ -90,6 +84,7 @@ public class ParkingEventController : ControllerBase
         {
             SessionId     = s.SessionId,
             CarPlate      = s.CarPlate,
+            RecognizedPlate = s.RecognizedPlate,
             ParkingLotId  = s.ParkingLotId,
             SlotCode      = s.SlotCode,
             Status        = s.Status,
@@ -134,6 +129,7 @@ public class ParkingEventController : ControllerBase
             EventType         = l.EventType,
             Source            = l.Source,
             TriggeredBy       = l.TriggeredBy,
+            PayloadVersion    = l.PayloadVersion,
             ProcessingStatus  = l.ProcessingStatus,
             RejectReason      = l.RejectReason,
             EventTimestampUtc = l.EventTimestampUtc,

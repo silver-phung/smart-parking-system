@@ -9,10 +9,14 @@ public interface IParkingSessionRepository
     Task<EventParkingSession?> FindBySessionIdAsync(string sessionId, CancellationToken ct = default);
 
     /// <summary>
-    /// Tìm phiên đang mở (pending_slot hoặc parked) theo biển số xe.
-    /// Dùng để chặn check-in trùng: cùng biển số không thể có 2 phiên mở.
+    /// Tìm phiên đang mở theo biển số đã được Staff xác nhận.
+    /// OCR tạm ở cổng không được dùng để chặn phiên khác.
     /// </summary>
     Task<EventParkingSession?> FindActiveByCarPlateAsync(string carPlate, CancellationToken ct = default);
+
+    /// <summary>Tìm phiên đã xác nhận đang chiếm actual slot.</summary>
+    Task<EventParkingSession?> FindActiveBySlotAsync(
+        int parkingLotId, string slotCode, CancellationToken ct = default);
 
     /// <summary>Tạo phiên mới (khi xe qua cổng vào).</summary>
     Task AddAsync(EventParkingSession session, CancellationToken ct = default);
