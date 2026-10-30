@@ -82,28 +82,61 @@ function AdminDashboardContent() {
   }, [refresh]);
 
   const summary = useMemo(() => {
-    const capacity = lots.reduce(
-      (sum, lot) => sum + (lot.totalCapacity || 0),
-      0,
-    );
-    const occupied = lots.reduce(
-      (sum, lot) => sum + (lot.occupiedSlotsCount || 0),
-      0,
-    );
-    const available = lots.reduce(
-      (sum, lot) => sum + (lot.availableSlotsCount || 0),
+    // Chỉ tổng hợp các bãi đang hoạt động (isActive) để phản ánh vận hành thực tế
+    const activeLots = lots.filter((lot) => lot.isActive);
+
+    // Chỗ đỗ vật lý thực tế đã triển khai trong hệ thống (PhysicalSlotsCount)
+    const physicalSlots = activeLots.reduce(
+      (sum, lot) => sum + (lot.physicalSlotsCount ?? 0),
       0,
     );
 
+    // Công suất thiết kế danh định đã cấu hình (ConfiguredCapacity)
+    const configuredCapacity = activeLots.reduce(
+      (sum, lot) => sum + (lot.configuredCapacity ?? lot.totalCapacity ?? 0),
+      0,
+    );
+
+    // Sức chứa hiệu lực danh định (TotalCapacity)
+    const capacity = activeLots.reduce(
+      (sum, lot) => sum + (lot.totalCapacity || 0),
+      0,
+    );
+
+    // Xe đang đỗ thực tế
+    const occupied = activeLots.reduce(
+      (sum, lot) => sum + (lot.occupiedSlotsCount || 0),
+      0,
+    );
+
+    // Chỗ còn trống thực tế: ưu tiên số liệu trên các bãi đã triển khai slot vật lý
+    const hasPhysicalLots = activeLots.some(
+      (lot) => (lot.physicalSlotsCount ?? 0) > 0,
+    );
+    const available = hasPhysicalLots
+      ? activeLots.reduce(
+          (sum, lot) =>
+            sum +
+            ((lot.physicalSlotsCount ?? 0) > 0
+              ? lot.availableSlotsCount || 0
+              : 0),
+          0,
+        )
+      : activeLots.reduce((sum, lot) => sum + (lot.availableSlotsCount || 0), 0);
+
     return {
+      physicalSlots,
+      configuredCapacity,
       capacity,
       occupied,
       available,
-      openLots: lots.filter((lot) => lot.isActive).length,
+      openLots: activeLots.length,
       occupancy:
-        capacity > 0
-          ? Math.min(100, Math.round((occupied / capacity) * 100))
-          : 0,
+        physicalSlots > 0
+          ? Math.min(100, Math.round((occupied / physicalSlots) * 100))
+          : capacity > 0
+            ? Math.min(100, Math.round((occupied / capacity) * 100))
+            : 0,
     };
   }, [lots]);
 
@@ -165,9 +198,13 @@ function AdminDashboardContent() {
           </small>
         </article>
         <article className="admin-dashboard__metric">
-          <span>Tổng sức chứa</span>
-          <strong>{loading ? "—" : formatNumber(summary.capacity)}</strong>
-          <small>Chỗ đỗ trên các bãi đã tải</small>
+          <span>Tổng số chỗ đã triển khai</span>
+          <strong>{loading ? "—" : formatNumber(summary.physicalSlots)}</strong>
+          <small>
+            {loading
+              ? "Đang tải"
+              : `${formatNumber(summary.configuredCapacity)} công suất thiết kế`}
+          </small>
         </article>
         <article className="admin-dashboard__metric">
           <span>Đang có xe</span>
@@ -179,7 +216,13 @@ function AdminDashboardContent() {
         <article className="admin-dashboard__metric">
           <span>Chỗ còn trống</span>
           <strong>{loading ? "—" : formatNumber(summary.available)}</strong>
-          <small>Số liệu hiện tại từ API bãi đỗ</small>
+          <small>
+            {loading
+              ? "Đang tải"
+              : summary.physicalSlots > 0
+                ? "Trên các bãi đã triển khai slot"
+                : "Số liệu hiện tại từ API bãi đỗ"}
+          </small>
         </article>
         <article className="admin-dashboard__metric">
           <span>Phiên đang hoạt động</span>
@@ -259,6 +302,7 @@ function AdminDashboardContent() {
                     <span>
                       {formatNumber(lot.availableSlotsCount || 0)} trống /{" "}
                       {formatNumber(capacity)} chỗ
+                      {(lot.physicalSlotsCount ?? 0) === 0 && " (Chưa số hóa slot)"}
                     </span>
                   </div>
                 </article>

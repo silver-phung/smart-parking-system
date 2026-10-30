@@ -1334,6 +1334,54 @@ public class BookingAndCapacityTests
         Assert.Equal(dummyKey, parameters[0]);
     }
 
+    [Fact]
+    public async Task BookingAndCheckIn_Lot4Unconfigured_DeactivationGuardsAgainstOverbooking()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+
+        // Lot 4: ConfiguredCapacity 100000, 0 physical slots
+        var lot4 = new ParkingLot
+        {
+            Id = 444,
+            Name = "Lot 4 Test",
+            TotalCapacity = 100000,
+            IsActive = false // Deactivated state
+        };
+        context.ParkingLots.Add(lot4);
+        await context.SaveChangesAsync();
+
+        // 1. When deactivated: Booking MUST be rejected with HTTP 400
+        var bookingReq = new CreateBookingRequestDto
+        {
+            LotId = lot4.Id,
+            PlateNumber = "51A-LOT4-01",
+            StartTime = DateTime.UtcNow.AddMinutes(10),
+            EndTime = DateTime.UtcNow.AddHours(2)
+        };
+        var (bSuccess, bCode, bMsg, _) = await bookingService.CreateBookingAsync(bookingReq, userId: 10, userRole: Roles.User, ipAddress: "127.0.0.1");
+        Assert.False(bSuccess);
+        Assert.Equal(400, bCode);
+        Assert.Contains("tạm ngừng hoạt động", bMsg);
+
+        // 2. When deactivated: Check-in MUST be rejected immediately
+        var checkInReq = new CheckInRequestDto
+        {
+            LotId = lot4.Id,
+            PlateNumber = "51A-LOT4-01"
+        };
+        var (cSuccess, cMsg, _) = await sessionService.CheckInAsync(checkInReq, actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
+        Assert.False(cSuccess);
+        Assert.Contains("tạm ngừng hoạt động", cMsg);
+
+        // 3. When activated: Preserves unconfigured walk-in/nominal capacity fallback
+        lot4.IsActive = true;
+        await context.SaveChangesAsync();
+
+        var calc = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot4.Id, lot4);
+        Assert.Equal(100000, calc.TotalCapacity);
+        Assert.Equal(100000, calc.AvailableCapacity);
+    }
+
     #endregion
 }
 

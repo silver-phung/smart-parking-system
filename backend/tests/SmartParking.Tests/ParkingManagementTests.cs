@@ -662,9 +662,15 @@ public class ParkingManagementTests
         Assert.Equal(100000, lot2Dto.AvailableSlotsCount);
         Assert.Equal(0, lot2Dto.OccupiedSlotsCount);
 
-        // Aggregate capacity calculated on AdminDashboard
-        var totalDashboardCapacity = result.Items.Sum(l => l.TotalCapacity);
-        Assert.Equal(100001, totalDashboardCapacity);
+        // 1. Dashboard contract verification: "Tổng số chỗ đã triển khai" strictly reflects physical slots
+        var activeLots = result.Items.Where(l => l.IsActive).ToList();
+        var deployedPhysicalCapacity = activeLots.Sum(l => l.PhysicalSlotsCount);
+        var configuredDesignCapacity = activeLots.Sum(l => l.ConfiguredCapacity);
+        var deployedAvailableSlots = activeLots.Where(l => l.PhysicalSlotsCount > 0).Sum(l => l.AvailableSlotsCount);
+
+        Assert.Equal(1, deployedPhysicalCapacity);       // Deployed physical spots = 1 (NOT 100001)
+        Assert.Equal(100010, configuredDesignCapacity);   // Nominal design capacity = 100010
+        Assert.Equal(1, deployedAvailableSlots);         // Available deployed spots = 1
 
         // Verify mathematical consistency with Booking/Check-in capacity engine
         var calc1 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot1.Id, lot1);
@@ -674,6 +680,39 @@ public class ParkingManagementTests
         var calc2 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot2.Id, lot2);
         Assert.Equal(lot2Dto.TotalCapacity, calc2.TotalCapacity);
         Assert.Equal(lot2Dto.AvailableSlotsCount, calc2.AvailableCapacity);
+
+        // 2. Deactivation contract: Deactivating Lot 4 completely excludes it from active Dashboard totals & public API
+        var (statusSuccess, _, _) = await service.UpdateLotStatusAsync(lot2.Id, new UpdateLotStatusRequestDto { IsActive = false }, 1);
+        Assert.True(statusSuccess);
+
+        var resultAfterDeactivate = await service.GetLotsAsync(new ParkingLotFilterDto { PageNumber = 1, PageSize = 10 }, isAdminOrStaff: true);
+        var activeLotsAfterDeactivate = resultAfterDeactivate.Items.Where(l => l.IsActive).ToList();
+
+        Assert.Single(activeLotsAfterDeactivate);
+        Assert.Equal(1, activeLotsAfterDeactivate.Sum(l => l.PhysicalSlotsCount));
+        Assert.Equal(10, activeLotsAfterDeactivate.Sum(l => l.ConfiguredCapacity));   // 100000 excluded!
+        Assert.Equal(1, activeLotsAfterDeactivate.Sum(l => l.TotalCapacity));        // 100000 excluded!
+        Assert.Equal(1, activeLotsAfterDeactivate.Sum(l => l.AvailableSlotsCount));
+
+        // Public API completely hides deactivated Lot 4
+        var publicResult = await service.GetLotsAsync(new ParkingLotFilterDto { PageNumber = 1, PageSize = 10 }, isAdminOrStaff: false);
+        Assert.Single(publicResult.Items);
+        Assert.Equal(2, publicResult.Items[0].Id);
+        Assert.DoesNotContain(publicResult.Items, l => l.Id == 4);
+
+        // 3. DELETE API verification:
+        // Lot 1 contains floors/slots -> DELETE is rejected
+        var (deleteLot1Success, deleteLot1Msg) = await service.DeleteLotAsync(lot1.Id, 1);
+        Assert.False(deleteLot1Success);
+        Assert.Contains("Không thể xóa bãi đỗ xe đang chứa các tầng", deleteLot1Msg);
+
+        // Lot 2 (Lot 4 unconfigured) has 0 floors and 0 sessions -> DELETE API exists and succeeds
+        var (deleteLot2Success, deleteLot2Msg) = await service.DeleteLotAsync(lot2.Id, 1);
+        Assert.True(deleteLot2Success);
+        Assert.Contains("Xóa bãi đỗ xe thành công", deleteLot2Msg);
+
+        var getDeleted = await service.GetLotByIdAsync(lot2.Id, isAdminOrStaff: true);
+        Assert.Null(getDeleted);
     }
 
     #endregion
