@@ -1,0 +1,490 @@
+/* ==========================================================
+   Parking3DViewer Component Styles
+   Sprint 3 - Days 6-9: 3D Visualization (Three.js)
+   Underground Parking Lot Theme (Sketchfab model recreation)
+   ========================================================== */
+
+.p3d-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  background: radial-gradient(circle at 50% 30%, #1e293b 0%, #090d16 100%);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.p3d-canvas-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: grab;
+}
+
+.p3d-canvas-container:active {
+  cursor: grabbing;
+}
+
+/* ---------- HUD Top Bar: Bộ chọn Bãi xe, Tầng & Thống kê ---------- */
+.p3d-hud-top {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.p3d-hud-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+.p3d-lot-select, .p3d-floor-select {
+  background: rgba(30, 41, 59, 0.95);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.p3d-lot-select:hover, .p3d-floor-select:hover {
+  background: #1e293b;
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+/* Thống kê trạng thái */
+.p3d-stats-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.p3d-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.p3d-pill:hover, .p3d-pill.active {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.p3d-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot-free { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+.dot-occ  { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+.dot-res  { background-color: #06b6d4; box-shadow: 0 0 8px #06b6d4; animation: pulse-cyan 1.5s infinite; }
+.dot-blk  { background-color: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+.dot-off  { background-color: #6b7280; }
+
+@keyframes pulse-cyan {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+/* ---------- Bảng điều khiển gọi thang máy nổi (Floating Elevator Call Widget) ---------- */
+.p3d-elevator-widget {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 15;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform: translate(-50%, -100%);
+  margin-top: -15px;
+  transition: opacity 0.2s;
+}
+
+.p3d-elevator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.p3d-elevator-indicator {
+  background: #0284c7;
+  color: #ffffff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.p3d-elevator-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.p3d-elev-btn {
+  background: rgba(30, 41, 59, 0.9);
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.p3d-elev-btn:hover:not(:disabled) {
+  background: #0284c7;
+  border-color: #38bdf8;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.p3d-elev-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.p3d-elev-floors {
+  display: flex;
+  gap: 4px;
+}
+
+.p3d-elev-floor-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.p3d-elev-floor-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  border-color: #38bdf8;
+}
+
+.p3d-elev-floor-btn.active {
+  background: #38bdf8;
+  color: #0f172a;
+  border-color: #38bdf8;
+}
+
+/* Toast thông báo chuyển tầng */
+.p3d-toast {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: fadeInDown 0.3s ease;
+  pointer-events: none;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---------- HUD Bottom Bar: Nút điều khiển (Reset View, v.v.) ---------- */
+.p3d-hud-bottom {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.p3d-btn-group {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.p3d-btn {
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.p3d-btn:hover {
+  background: #1e293b;
+  border-color: #38bdf8;
+  color: #38bdf8;
+  transform: translateY(-2px);
+}
+
+.p3d-btn:active {
+  transform: translateY(0);
+}
+
+.p3d-btn.primary,
+.p3d-btn.active {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+}
+
+.p3d-btn.primary:hover,
+.p3d-btn.active:hover {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.6);
+}
+
+/* Gợi ý điều khiển */
+.p3d-hints {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  display: flex;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.p3d-hints span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- Tooltip chi tiết ô đỗ khi hover/click ---------- */
+.p3d-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-top: -16px;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  padding: 12px 16px;
+  min-width: 210px;
+  pointer-events: auto;
+  z-index: 20;
+  transition: opacity 0.2s, transform 0.2s;
+  display: none;
+}
+
+.p3d-tooltip.visible {
+  display: block;
+}
+
+.p3d-tooltip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.p3d-tooltip-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.p3d-tooltip-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.badge-free { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.4); }
+.badge-occ  { background: rgba(239, 68, 68, 0.2);  color: #f87171; border: 1px solid rgba(248, 113, 113, 0.4); }
+.badge-res  { background: rgba(6, 182, 212, 0.2);  color: #22d3ee; border: 1px solid rgba(34, 211, 238, 0.4); }
+.badge-blk  { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.4); }
+.badge-off  { background: rgba(107, 114, 128, 0.2); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.4); }
+
+.p3d-tooltip-body {
+  font-size: 12px;
+  color: #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.p3d-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.p3d-tooltip-row .label {
+  color: #94a3b8;
+}
+
+.p3d-tooltip-row .val {
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+/* Spinner tải scene */
+.p3d-loader {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.88);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  color: #38bdf8;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 30;
+  transition: opacity 0.4s;
+}
+
+.p3d-data-state {
+  position: absolute;
+  right: 14px;
+  bottom: 70px;
+  z-index: 18;
+  max-width: min(420px, calc(100% - 28px));
+  padding: 7px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #cbd5e1;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.p3d-data-state:empty { display: none; }
+.p3d-data-state.state-fresh { border-color: rgba(16, 185, 129, 0.55); color: #a7f3d0; }
+.p3d-data-state.state-empty { border-color: rgba(148, 163, 184, 0.55); }
+.p3d-data-state.state-error { border-color: rgba(239, 68, 68, 0.65); color: #fecaca; }
+
+.p3d-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(56, 189, 248, 0.2);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: p3d-spin 0.8s linear infinite;
+}
+
+@keyframes p3d-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive Mobile */
+@media (max-width: 640px) {
+  .p3d-wrapper {
+    min-height: 440px;
+  }
+  .p3d-hud-top {
+    flex-direction: column;
+    align-items: flex-start;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+  }
+  .p3d-hud-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+  }
+  .p3d-hints {
+    display: none;
+  }
+}
