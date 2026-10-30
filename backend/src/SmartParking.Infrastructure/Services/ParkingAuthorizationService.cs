@@ -126,7 +126,7 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         return false;
     }
 
-    public async Task<bool> CanOperateSessionOrDispatchAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
+    public async Task<bool> CanOperateGateAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
     {
         var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
         if (effectiveRole == null)
@@ -139,12 +139,55 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
             return true;
         }
 
-        if (effectiveRole == Roles.Manager || effectiveRole == Roles.Staff)
+        if (effectiveRole == Roles.Manager)
         {
             return await _context.StaffLotAssignments
                 .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
         }
 
+        if (effectiveRole == Roles.Staff)
+        {
+            return await _context.StaffLotAssignments
+                .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
+                               (a.Duty == StaffDuties.Gate || a.Duty == StaffDuties.Both), ct);
+        }
+
         return false;
     }
+
+    public async Task<bool> CanOperateSlotVerificationAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
+    {
+        var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
+        if (effectiveRole == null)
+        {
+            return false;
+        }
+
+        if (effectiveRole == Roles.Admin)
+        {
+            return true;
+        }
+
+        if (effectiveRole == Roles.Manager)
+        {
+            return await _context.StaffLotAssignments
+                .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
+        }
+
+        if (effectiveRole == Roles.Staff)
+        {
+            return await _context.StaffLotAssignments
+                .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
+                               (a.Duty == StaffDuties.SlotVerifier || a.Duty == StaffDuties.Both), ct);
+        }
+
+        return false;
+    }
+
+    public async Task<bool> CanOperateSessionOrDispatchAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
+    {
+        return await CanOperateGateAsync(userId, userRole, lotId, ct) ||
+               await CanOperateSlotVerificationAsync(userId, userRole, lotId, ct);
+    }
 }
+

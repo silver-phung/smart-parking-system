@@ -1,3 +1,5 @@
+using SmartParking.Domain.Constants;
+
 namespace SmartParking.Domain.Entities;
 
 public class StaffLotAssignment
@@ -14,6 +16,7 @@ public class StaffLotAssignment
     public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
 
     public bool IsActive { get; set; } = true;
+    public string Duty { get; set; } = StaffDuties.Gate; // Default least-privilege duty: GATE
 
     public long? RevokedBy { get; set; }
     public User? RevokedByUser { get; set; }
