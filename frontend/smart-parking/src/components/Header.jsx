@@ -30,7 +30,7 @@ export default function Header() {
   const session = useSyncExternalStore(
     subscribeAuthSession,
     getAuthSession,
-    getAuthSession
+    getAuthSession,
   );
 
   const logout = async () => {
@@ -50,7 +50,9 @@ export default function Header() {
   };
 
   return (
-    <header className={`header${session?.userProfile.role === "STAFF" ? " header--staff" : ""}`}>
+    <header
+      className={`header${session?.userProfile.role === "STAFF" ? " header--staff" : ""}`}
+    >
       <div className="container header__inner">
         <Link to="/" aria-label="Smart-Parking - trang chủ">
           <Logo />
@@ -60,18 +62,22 @@ export default function Header() {
           {session?.userProfile.role === "ADMIN" ? (
             <>
               <Link to="/admin#overview">Tổng quan</Link>
+              <Link to="/admin/people">Tài khoản</Link>
+              <Link to="/admin/people?view=assignments">Phân công</Link>
               <Link to="/admin#parking-lots">Bãi đỗ</Link>
               <Link to="/admin#active-sessions">Xe đang gửi</Link>
               <Link to="/admin#finance">Tài chính</Link>
             </>
           ) : session?.userProfile.role === "STAFF" ? (
             <>
+              <Link to="/parking">Xem bãi đỗ</Link>
               <Link to="/staff?view=entry">Xe vào</Link>
               <Link to="/staff?view=exit">Xe ra</Link>
               <Link to="/staff?view=verify">Xác minh ô</Link>
             </>
           ) : (
             <>
+              <Link to="/parking">Xem bãi đỗ</Link>
               <AnchorLink id="gioi-thieu">Giới thiệu</AnchorLink>
               <AnchorLink id="cach-hoat-dong">Cách thức hoạt động</AnchorLink>
               <AnchorLink id="he-thong">Hệ thống</AnchorLink>
@@ -83,7 +89,8 @@ export default function Header() {
           {session ? (
             <div className="header__session" key={pathname}>
               <span>
-                {session.userProfile.fullName || session.userProfile.username} · {session.userProfile.role}
+                {session.userProfile.fullName || session.userProfile.username} ·{" "}
+                {session.userProfile.role}
               </span>
               {session.userProfile.role === "USER" ? (
                 <>
@@ -93,16 +100,31 @@ export default function Header() {
                   <NavLink to="/customer/profile" className="btn btn--outline">
                     Hồ sơ
                   </NavLink>
+                  <NavLink to="/customer/sessions" className="btn btn--outline">
+                    Phiên của tôi
+                  </NavLink>
                 </>
               ) : dashboardPaths[session.userProfile.role] ? (
-                <NavLink to={dashboardPaths[session.userProfile.role]} className="btn btn--outline">
+                <NavLink
+                  to={dashboardPaths[session.userProfile.role]}
+                  className="btn btn--outline"
+                >
                   Bảng điều khiển
                 </NavLink>
               ) : null}
-              <button type="button" className="btn btn--outline" onClick={logout} disabled={loggingOut}>
+              <button
+                type="button"
+                className="btn btn--outline"
+                onClick={logout}
+                disabled={loggingOut}
+              >
                 {loggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
               </button>
-              {logoutError && <span className="header__session-error" role="alert">{logoutError}</span>}
+              {logoutError && (
+                <span className="header__session-error" role="alert">
+                  {logoutError}
+                </span>
+              )}
             </div>
           ) : (
             <>
