@@ -53,9 +53,9 @@ public class ParkingDispatchService : IParkingDispatchService
             return (false, $"Chỉ có thể tạo lệnh điều phối cho phiên gửi xe đang hoạt động (ACTIVE). Trạng thái hiện tại: {session.Status}.", null);
         }
 
-        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, session.LotId, ct))
+        if (!await _authService.CanOperateSlotVerificationAsync(actorId ?? 0, actorRole, session.LotId, ct))
         {
-            return (false, "Bạn không có quyền tạo lệnh điều phối tại bãi đỗ xe này.", null);
+            return (false, "Bạn không có quyền thực hiện nghiệp vụ kiểm tra và xác minh ô đỗ (SLOT_VERIFIER) tại bãi đỗ xe này.", null);
         }
 
         // Chống trùng lặp lệnh điều phối đang hiệu lực cho cùng một phiên
@@ -440,9 +440,9 @@ public class ParkingDispatchService : IParkingDispatchService
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.", null);
         }
 
-        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        if (!await _authService.CanOperateSlotVerificationAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
         {
-            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.", null);
+            return (false, "Bạn không có quyền thực hiện nghiệp vụ kiểm tra và xác minh ô đỗ (SLOT_VERIFIER) tại bãi đỗ xe này.", null);
         }
 
         if (dispatch.Status != DispatchStatuses.Pending && dispatch.Status != DispatchStatuses.Assigned)
@@ -557,9 +557,9 @@ public class ParkingDispatchService : IParkingDispatchService
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.", null);
         }
 
-        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        if (!await _authService.CanOperateSlotVerificationAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
         {
-            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.", null);
+            return (false, "Bạn không có quyền thực hiện nghiệp vụ kiểm tra và xác minh ô đỗ (SLOT_VERIFIER) tại bãi đỗ xe này.", null);
         }
 
         if (dispatch.Status != DispatchStatuses.Assigned)
@@ -651,9 +651,9 @@ public class ParkingDispatchService : IParkingDispatchService
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.", null);
         }
 
-        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        if (!await _authService.CanOperateSlotVerificationAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
         {
-            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.", null);
+            return (false, "Bạn không có quyền thực hiện nghiệp vụ kiểm tra và xác minh ô đỗ (SLOT_VERIFIER) tại bãi đỗ xe này.", null);
         }
 
         if (dispatch.Status != DispatchStatuses.Assigned)
@@ -773,9 +773,9 @@ public class ParkingDispatchService : IParkingDispatchService
             return (false, $"Không tìm thấy lệnh điều phối với ID: {dispatchId}.");
         }
 
-        if (!await _authService.CanOperateSessionOrDispatchAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
+        if (!await _authService.CanOperateSlotVerificationAsync(actorId ?? 0, actorRole, dispatch.Session.LotId, ct))
         {
-            return (false, "Bạn không có quyền thao tác điều phối tại bãi đỗ xe này.");
+            return (false, "Bạn không có quyền thực hiện nghiệp vụ kiểm tra và xác minh ô đỗ (SLOT_VERIFIER) tại bãi đỗ xe này.");
         }
 
         if (dispatch.Status != DispatchStatuses.Pending && dispatch.Status != DispatchStatuses.Assigned)

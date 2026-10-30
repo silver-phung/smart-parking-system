@@ -1,0 +1,45 @@
+@gateway = http://localhost:5070
+@accessToken = replace-with-access-token
+
+### Gateway health
+GET {{gateway}}/gateway/health
+
+### Downstream API health
+GET {{gateway}}/health
+
+### System API
+GET {{gateway}}/api/system/info
+
+### Public login route (use valid request body)
+POST {{gateway}}/api/v1/auth/login
+Content-Type: application/json
+
+{}
+
+### Protected API with query string and JWT
+GET {{gateway}}/api/v1/vehicles?page=1&pageSize=10
+Authorization: Bearer {{accessToken}}
+
+### Parking API route
+GET {{gateway}}/api/v1/parking-lots
+Authorization: Bearer {{accessToken}}
+
+### Booking API route
+GET {{gateway}}/api/v1/bookings
+Authorization: Bearer {{accessToken}}
+
+### Image metadata route
+GET {{gateway}}/api/v1/images/1
+Authorization: Bearer {{accessToken}}
+
+### Multipart image upload (replace the file path)
+POST {{gateway}}/api/v1/images
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=ImageBoundary
+
+--ImageBoundary
+Content-Disposition: form-data; name="file"; filename="parking.png"
+Content-Type: image/png
+
+< C:\path\to\parking.png
+--ImageBoundary--

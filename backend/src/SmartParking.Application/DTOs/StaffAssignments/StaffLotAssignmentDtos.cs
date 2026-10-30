@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using SmartParking.Domain.Constants;
 
 namespace SmartParking.Application.DTOs.StaffAssignments;
 
@@ -19,6 +20,7 @@ public class StaffLotAssignmentDto
     public DateTime AssignedAt { get; set; }
 
     public bool IsActive { get; set; }
+    public string Duty { get; set; } = StaffDuties.Gate;
 
     public long? RevokedBy { get; set; }
     public string? RevokedByUsername { get; set; }
@@ -39,6 +41,13 @@ public class CreateStaffAssignmentRequestDto
     [Required(ErrorMessage = "Mã bãi đỗ xe (lotId) là bắt buộc.")]
     [Range(1, int.MaxValue, ErrorMessage = "Mã bãi đỗ xe không hợp lệ.")]
     public int LotId { get; set; }
+
+    /// <summary>
+    /// Nhiệm vụ phân công: Bắt buộc chọn GATE, SLOT_VERIFIER hoặc BOTH (không cấp mặc định).
+    /// </summary>
+    [Required(ErrorMessage = "Nhiệm vụ trực ca (Duty) là bắt buộc. Phải chọn GATE, SLOT_VERIFIER hoặc BOTH.")]
+    [RegularExpression("^(GATE|SLOT_VERIFIER|BOTH)$", ErrorMessage = "Nhiệm vụ trực ca phải là GATE, SLOT_VERIFIER hoặc BOTH.")]
+    public string Duty { get; set; } = string.Empty;
 
     [MaxLength(500, ErrorMessage = "Ghi chú không được vượt quá 500 ký tự.")]
     public string? Notes { get; set; }

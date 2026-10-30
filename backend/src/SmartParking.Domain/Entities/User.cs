@@ -35,4 +35,5 @@ public class User
     public ICollection<StaffLotAssignment> AssignedStaffAssignments { get; set; } = new List<StaffLotAssignment>();
     public ICollection<StaffLotAssignment> RevokedStaffAssignments { get; set; } = new List<StaffLotAssignment>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
+    public ICollection<StoredImage> StoredImages { get; set; } = new List<StoredImage>();
 }

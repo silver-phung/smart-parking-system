@@ -32,10 +32,23 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.SectionName));
         services.Configure<AdminBootstrapOptions>(configuration.GetSection(AdminBootstrapOptions.SectionName));
+        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
+        services.Configure<RecaptchaOptions>(configuration.GetSection(RecaptchaOptions.SectionName));
+        services.Configure<CloudinaryOptions>(options =>
+        {
+            configuration.GetSection(CloudinaryOptions.SectionName).Bind(options);
+            options.Url = configuration["CLOUDINARY_URL"] ?? options.Url;
+            options.CloudName = configuration["CLOUDINARY_CLOUD_NAME"] ?? options.CloudName;
+            options.ApiKey = configuration["CLOUDINARY_API_KEY"] ?? options.ApiKey;
+            options.ApiSecret = configuration["CLOUDINARY_API_SECRET"] ?? options.ApiSecret;
+        });
 
         // 3. Infrastructure & Auth Services
         services.AddScoped<IPasswordHasherService, PasswordHasherService>();
         services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<IOtpService, OtpService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddHttpClient<IRecaptchaService, RecaptchaService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
@@ -47,6 +60,30 @@ public static class DependencyInjection
         services.AddScoped<IStaffLotAssignmentService, StaffLotAssignmentService>();
         services.AddScoped<IAdminUserService, AdminUserService>();
         services.AddScoped<IBookingService, BookingService>();
+        services.AddScoped<IImageService, ImageService>();
+        var aiConnectionString = configuration.GetConnectionString("AiRecognitionConnection");
+        if (!string.IsNullOrWhiteSpace(aiConnectionString))
+        {
+            services.AddDbContext<AiRecognitionDbContext>(options =>
+                options.UseNpgsql(aiConnectionString, b => b
+                    .MigrationsAssembly(typeof(AiRecognitionDbContext).Assembly)
+                    .MigrationsHistoryTable("__AiRecognitionMigrationsHistory")));
+        }
+        else
+        {
+            services.AddDbContext<AiRecognitionDbContext>(options =>
+                options.UseNpgsql(b => b
+                    .MigrationsAssembly(typeof(AiRecognitionDbContext).Assembly)
+                    .MigrationsHistoryTable("__AiRecognitionMigrationsHistory")));
+        }
+        services.AddHttpClient<IStaffDetectionService, StaffDetectionService>((provider, client) =>
+        {
+            var baseUrl = provider.GetRequiredService<IConfiguration>()["AiService:BaseUrl"];
+            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+                throw new InvalidOperationException("AiService:BaseUrl must be a valid absolute URL.");
+            client.BaseAddress = uri.AbsoluteUri.EndsWith('/') ? uri : new Uri(uri, "/");
+            client.Timeout = TimeSpan.FromSeconds(60);
+        });
         var relativePath = configuration["ParkingLots:DataFile"] ?? "Data/parking-lots.json";
         var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
         if (!File.Exists(fullPath))

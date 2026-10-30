@@ -128,7 +128,6 @@ Nhận file ảnh chụp từ camera cổng bãi đỗ xe và trả về thông 
     "raw_plate_number": "51F-123.45",
     "confidence": 0.9412,
     "is_legit": true,
-    "vehicle_type": "car",
     "vehicle_confidence": 0.912,
     "vehicle_bbox": [150, 200, 680, 710],
     "plate_bbox": [320, 510, 480, 565],
