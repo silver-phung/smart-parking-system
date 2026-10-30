@@ -50,7 +50,7 @@ export default function Header() {
   };
 
   return (
-    <header className="header">
+    <header className={`header${session?.userProfile.role === "STAFF" ? " header--staff" : ""}`}>
       <div className="container header__inner">
         <Link to="/" aria-label="Smart-Parking - trang chủ">
           <Logo />
@@ -63,6 +63,12 @@ export default function Header() {
               <Link to="/admin#parking-lots">Bãi đỗ</Link>
               <Link to="/admin#active-sessions">Xe đang gửi</Link>
               <Link to="/admin#finance">Tài chính</Link>
+            </>
+          ) : session?.userProfile.role === "STAFF" ? (
+            <>
+              <Link to="/staff?view=entry">Xe vào</Link>
+              <Link to="/staff?view=exit">Xe ra</Link>
+              <Link to="/staff?view=verify">Xác minh ô</Link>
             </>
           ) : (
             <>

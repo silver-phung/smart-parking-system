@@ -7,16 +7,18 @@ export async function apiRequest(path, options = {}) {
       ? null
       : getAuthSession()?.accessToken;
     const { skipAuth, ...requestOptions } = options;
+    const isMultipart = typeof FormData !== "undefined" && requestOptions.body instanceof FormData;
     response = await fetch(`/api${path}`, {
       ...requestOptions,
       credentials: "same-origin",
       headers: {
-        ...(requestOptions.body ? { "Content-Type": "application/json" } : {}),
+        ...(requestOptions.body && !isMultipart ? { "Content-Type": "application/json" } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...requestOptions.headers,
       },
     });
-  } catch {
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
     throw new Error("Không thể kết nối máy chủ. Hãy kiểm tra backend đang chạy.");
   }
 
@@ -37,6 +39,7 @@ export async function apiRequest(path, options = {}) {
         : "Yêu cầu không thành công. Vui lòng thử lại.");
     const error = new Error(message);
     error.status = response.status;
+    error.code = data?.code;
     throw error;
   }
 
