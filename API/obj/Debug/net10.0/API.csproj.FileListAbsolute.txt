@@ -129,3 +129,4 @@ C:\Users\ACRE\source\PaymentNotificationService\API\obj\Debug\net10.0\ref\API.dl
 C:\Users\ACRE\source\PaymentNotificationService\API\bin\Debug\net10.0\Swashbuckle.AspNetCore.Swagger.dll
 C:\Users\ACRE\source\PaymentNotificationService\API\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\Users\ACRE\source\PaymentNotificationService\API\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerUI.dll
+C:\Users\ACRE\source\PaymentNotificationService\API\obj\Debug\net10.0\API.sourcelink.json

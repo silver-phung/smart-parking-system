@@ -38,16 +38,14 @@ namespace Application.Services
             }
 
             // Tính phí cho lượt (2 giờ đầu) dựa vào thời điểm Check-in
-            decimal totalFee = GetTurnFeeByTimeFrame(session.CheckInTime);
+            decimal baseRate = GetTurnFeeByTimeFrame(session.CheckInTime);
 
-            // Xử lý logic nếu đỗ quá 2 giờ (Ví dụ: Cộng thêm phí block tiếp theo - Tùy chỉnh theo nghiệp vụ cụ thể)
-            if (duration.TotalHours > PricingRules.FirstBlockHours)
-            {
-                // TODO: Triển khai logic tính tiền cho các giờ tiếp theo lũy tiến nếu có.
-                // Tạm thời giữ nguyên mức phí của lượt đầu tiên.
-            }
+            double blockDurationHours = 2.0; 
+            int totalBlocks = (int)Math.Ceiling(duration.TotalHours / blockDurationHours);
 
-            return totalFee;
+            if (totalBlocks == 0) totalBlocks = 1;
+
+            return baseRate * totalBlocks;
         }
 
         // Tính toán chi phí đăng ký vé tháng

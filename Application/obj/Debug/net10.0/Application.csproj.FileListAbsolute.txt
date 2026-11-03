@@ -13,3 +13,4 @@ C:\Users\ACRE\source\PaymentNotificationService\Application\obj\Debug\net10.0\Ap
 C:\Users\ACRE\source\PaymentNotificationService\Application\obj\Debug\net10.0\refint\Application.dll
 C:\Users\ACRE\source\PaymentNotificationService\Application\obj\Debug\net10.0\Application.pdb
 C:\Users\ACRE\source\PaymentNotificationService\Application\obj\Debug\net10.0\ref\Application.dll
+C:\Users\ACRE\source\PaymentNotificationService\Application\obj\Debug\net10.0\Application.sourcelink.json
