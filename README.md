@@ -174,3 +174,9 @@ npm --prefix .\frontend\smart-parking run build
 ```
 
 Kiểm tra phần xử lý API frontend bằng `npm --prefix .\frontend\smart-parking test`.
+
+## 9. Trung tâm giám sát bãi đỗ 3D
+
+Sau khi chạy frontend, mở <http://localhost:5173/app/parking/3d>. Viewer Three.js dựng hầm xe dạng cutaway với booth vào/ra, ô đỗ, xe, thang máy, lối thoát hiểm, PCCC, thông gió và các góc camera vận hành. Khi backend khả dụng, viewer đọc bãi, tầng và trạng thái ô từ API hiện có; nếu không, giao diện ghi rõ chế độ mô phỏng và không ghi dữ liệu giả vào hệ thống.
+
+Xem [hướng dẫn vận hành viewer 3D](docs/operations/3d-parking-monitor.md) để biết phạm vi layout và cách build.

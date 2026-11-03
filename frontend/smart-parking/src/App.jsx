@@ -1,5 +1,5 @@
 import { Link, Routes, Route, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
@@ -14,8 +14,11 @@ import AdminPeople from "./pages/AdminPeople.jsx";
 import CustomerSessions from "./pages/CustomerSessions.jsx";
 import ProjectInformation from "./pages/ProjectInformation.jsx";
 
+const Parking3DViewer = lazy(() => import("./pages/Parking3DViewer.jsx"));
+
 export default function App() {
   const { pathname, hash } = useLocation();
+  const isParkingViewer = pathname === "/parking/3d";
   useEffect(() => {
     if (hash)
       document
@@ -26,7 +29,7 @@ export default function App() {
 
   return (
     <>
-      <Header />
+      {!isParkingViewer && <Header />}
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -35,6 +38,14 @@ export default function App() {
           <Route path="/thong-tin/:topic" element={<ProjectInformation />} />
           <Route path="/customer" element={<CustomerDashboard />} />
           <Route path="/parking" element={<CustomerDashboard publicView />} />
+          <Route
+            path="/parking/3d"
+            element={
+              <Suspense fallback={<section className="p3d-loading">Đang khởi tạo trung tâm giám sát 3D…</section>}>
+                <Parking3DViewer />
+              </Suspense>
+            }
+          />
           <Route path="/customer/sessions" element={<CustomerSessions />} />
           <Route path="/customer/profile" element={<CustomerProfile />} />
           <Route path="/admin" element={<AdminDashboard />} />
@@ -57,7 +68,7 @@ export default function App() {
           />
         </Routes>
       </main>
-      {!pathname.startsWith("/admin") &&
+      {!isParkingViewer && !pathname.startsWith("/admin") &&
         !["/manager", "/staff", "/login", "/register"].includes(pathname) && (
           <Footer />
         )}
