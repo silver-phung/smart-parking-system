@@ -1,6 +1,5 @@
 # Operations and Integration Guides
 
-- [3D viewer integration](3d-viewer-integration.md)
 - [IoT simulator](iot-simulator.md)
 - [Sprint 3 integration](sprint-3-integration.md)
 - [Shared database](shared-database.md)

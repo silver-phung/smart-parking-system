@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SmartParking.Application;
@@ -233,9 +232,6 @@ builder.Services.AddRateLimiter(options =>
 // 5. Configure Swagger / OpenAPI with JWT Bearer
 builder.Services.AddSwaggerGen(options =>
 {
-    // The management API and the 3D viewer each define their own ParkingSlotDto.
-    options.CustomSchemaIds(type => type.FullName?.Replace("+", ".") ?? type.Name);
-
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "Smart Parking API",
@@ -277,14 +273,6 @@ builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var app = builder.Build();
-
-// Linked viewer files are copied to the output wwwroot when building the API.
-var outputWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
-if (Directory.Exists(outputWebRoot))
-{
-    app.Environment.WebRootFileProvider = new CompositeFileProvider(
-        app.Environment.WebRootFileProvider, new PhysicalFileProvider(outputWebRoot));
-}
 
 // Configure the HTTP request pipeline.
 app.UseDefaultFiles();

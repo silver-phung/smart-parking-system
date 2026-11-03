@@ -2,7 +2,7 @@
 
 ## Scope
 
-Parts 2 and 3 of the UI plan are covered here. The 3D viewer is owned by another member and excluded. Existing standalone 3D assets and services are unchanged; no React viewer route or component is added.
+Parts 2 and 3 of the UI plan are covered here. A 3D viewer is outside this workspace's scope; no React viewer route or component is included.
 
 ## Admin
 
