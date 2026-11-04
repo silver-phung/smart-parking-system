@@ -3,6 +3,7 @@ import { createGarageScene } from "./garageScene.js";
 
 export default function ParkingGarageViewport({
   floorLabel,
+  floorContext,
   slots,
   filter,
   cameraMode,
@@ -27,6 +28,7 @@ export default function ParkingGarageViewport({
       scene = createGarageScene({
         canvas,
         floorLabel,
+        floorContext,
         slots,
         onSelect: (slot) => onSelectRef.current?.(slot),
       });
@@ -51,7 +53,7 @@ export default function ParkingGarageViewport({
       scene.destroy();
       sceneRef.current = null;
     };
-  }, [floorLabel]);
+  }, [floorLabel, floorContext]);
 
   useEffect(() => {
     sceneRef.current?.updateSlots(slots, filter);

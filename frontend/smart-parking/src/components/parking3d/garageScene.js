@@ -174,7 +174,7 @@ function createArrow(material) {
   return mesh;
 }
 
-function createBooth() {
+function createBooth(label = "BOOTH CHECK-IN") {
   const group = new THREE.Group();
   const white = new THREE.MeshStandardMaterial({ color: 0xd8dde0, roughness: 0.58, metalness: 0.15 });
   const frame = new THREE.MeshStandardMaterial({ color: 0x11181e, roughness: 0.35, metalness: 0.5 });
@@ -184,8 +184,33 @@ function createBooth() {
   addBox(group, [2.5, 1.5, 0.08], [0, 2.05, -2.08], glass);
   addBox(group, [0.08, 1.5, 2.65], [-1.66, 2.05, 0], glass);
   addBox(group, [1.1, 0.42, 0.24], [0, 3.4, -1.75], new THREE.MeshStandardMaterial({ color: 0xf5c400, emissive: 0xf5c400, emissiveIntensity: 1.2 }));
-  const sign = makeTextSign("AN NINH", 2.2, 0.72, { background: "#0d2533", accent: "#38bdf8" });
+  const sign = makeTextSign(label, 2.75, 0.72, { background: "#0d2533", accent: "#38bdf8" });
   sign.position.set(0, 2.8, -2.25);
+  group.add(sign);
+  return group;
+}
+
+function createRamp(label, direction = "down", accent = "#38bdf8") {
+  const group = new THREE.Group();
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x555d61, roughness: 0.9 });
+  const edge = new THREE.MeshStandardMaterial({ color: 0xf5c400, roughness: 0.62 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.55 });
+  const slope = direction === "down" ? -0.07 : 0.07;
+  const deck = addBox(group, [13.5, 0.34, 6.1], [0, 0.55, 0], concrete);
+  deck.rotation.z = slope;
+  [-3.15, 3.15].forEach((z) => {
+    const guard = addBox(group, [13.8, 0.72, 0.28], [0, 0.82, z], edge);
+    guard.rotation.z = slope;
+  });
+  const centerLine = addBox(group, [11.8, 0.045, 0.16], [0, 0.82, 0], white);
+  centerLine.rotation.z = slope;
+  const arrow = createArrow(white);
+  arrow.position.set(direction === "down" ? 2.2 : -2.2, 0.9, 0);
+  arrow.rotation.z = direction === "down" ? -Math.PI / 2 : Math.PI / 2;
+  group.add(arrow);
+  const sign = makeTextSign(label, 5.8, 1.2, { background: "#111827", accent });
+  sign.position.set(0, 2.75, 0);
+  sign.rotation.y = Math.PI / 2;
   group.add(sign);
   return group;
 }
@@ -247,7 +272,7 @@ function createElevatorCore() {
   return group;
 }
 
-function addArchitecture(scene, layers) {
+function addArchitecture(scene, layers, floorContext) {
   const concrete = new THREE.MeshStandardMaterial({ map: concreteTexture(), color: 0xffffff, roughness: 0.92, metalness: 0.02 });
   const asphalt = new THREE.MeshStandardMaterial({ map: asphaltTexture(), color: 0xe2e5e6, roughness: 0.94 });
   const darkConcrete = new THREE.MeshStandardMaterial({ color: 0x656c70, roughness: 0.9 });
@@ -301,19 +326,70 @@ function addArchitecture(scene, layers) {
 
   const entrance = new THREE.Group();
   entrance.name = "entrance";
-  const booth = createBooth();
-  booth.position.set(-45.5, 0, 0);
-  entrance.add(booth);
-  const entryBarrier = createBarrier("LỐI VÀO");
-  entryBarrier.position.set(-39.5, 0, -5.2);
-  entryBarrier.rotation.y = Math.PI / 2;
-  entrance.add(entryBarrier);
-  const exitBarrier = createBarrier("LỐI RA");
-  exitBarrier.position.set(-39.5, 0, 5.2);
-  exitBarrier.rotation.y = -Math.PI / 2;
-  entrance.add(exitBarrier);
-  addBox(entrance, [16, 0.28, 0.35], [-43, 0.13, -10.3], yellow);
-  addBox(entrance, [16, 0.28, 0.35], [-43, 0.13, 10.3], yellow);
+  const floorNumber = floorContext?.floorNumber || 1;
+  const floorCount = floorContext?.floorCount || Math.max(floorNumber, 2);
+  const isB1 = floorNumber === 1;
+  const divider = new THREE.MeshStandardMaterial({ color: 0xf5c400, roughness: 0.5, metalness: 0.12 });
+  if (isB1) {
+    const groundArrival = createRamp("MẶT ĐẤT → B1", "down", "#38bdf8");
+    groundArrival.position.set(-43, 0, 3.8);
+    entrance.add(groundArrival);
+
+    const booth = createBooth("CHECK-IN XE THÁNG");
+    booth.position.set(-28.5, 0, -10.5);
+    entrance.add(booth);
+    const monthlyBarrier = createBarrier("THẺ THÁNG");
+    monthlyBarrier.position.set(-23.5, 0, -6.2);
+    monthlyBarrier.rotation.y = Math.PI / 2;
+    entrance.add(monthlyBarrier);
+
+    const visitorRamp = createRamp("VÃNG LAI ↓ B2", "down", "#22c55e");
+    visitorRamp.position.set(-25.5, 0, 4.2);
+    entrance.add(visitorRamp);
+
+    const guide = makeTextSign("THÁNG ←   |   VÃNG LAI ↓ B2", 12.8, 1.85, { background: "#0f172a", accent: "#f5c400" });
+    guide.position.set(-35, 4.05, -1.8);
+    guide.rotation.y = Math.PI / 2;
+    entrance.add(guide);
+
+    for (let x = -15; x <= 25; x += 4) addBox(entrance, [2.5, 0.42, 0.32], [x, 0.22, 8.8], divider);
+
+    const monthlyCheckout = createBooth("CHECK-OUT XE THÁNG");
+    monthlyCheckout.scale.setScalar(0.82);
+    monthlyCheckout.position.set(24.5, 0, 13.5);
+    entrance.add(monthlyCheckout);
+
+    const fromB2 = createRamp("B2 ↑ B1", "up", "#22c55e");
+    fromB2.position.set(39, 0, -5.2);
+    entrance.add(fromB2);
+    const toGround = createRamp("B1 ↑ MẶT ĐẤT · 2 LÀN", "up", "#f5c400");
+    toGround.position.set(39, 0, 5.2);
+    entrance.add(toGround);
+  } else {
+    const upRamp = createRamp(`${floorContext?.code || `B${floorNumber}`} ↑ B${floorNumber - 1}`, "up", "#22c55e");
+    upRamp.position.set(39, 0, 6.1);
+    entrance.add(upRamp);
+    if (floorNumber < floorCount) {
+      const downRamp = createRamp(`${floorContext?.code || `B${floorNumber}`} ↓ B${floorNumber + 1}`, "down", "#38bdf8");
+      downRamp.position.set(39, 0, -6.1);
+      entrance.add(downRamp);
+    }
+    const endSign = makeTextSign(floorNumber < floorCount ? `CUỐI TUYẾN · ↑ B${floorNumber - 1}  |  ↓ B${floorNumber + 1}` : `CUỐI TUYẾN · ↑ B${floorNumber - 1}`, 11.5, 1.65, { background: "#0f172a", accent: "#f5c400" });
+    endSign.position.set(30.5, 3.75, 0);
+    endSign.rotation.y = -Math.PI / 2;
+    entrance.add(endSign);
+    if (floorNumber === 2) {
+      const visitorCheckout = createBooth("CHECK-OUT VÃNG LAI");
+      visitorCheckout.scale.setScalar(0.82);
+      visitorCheckout.position.set(23.5, 0, 11.8);
+      entrance.add(visitorCheckout);
+      const checkoutBarrier = createBarrier("QUẸT THẺ RA");
+      checkoutBarrier.scale.setScalar(0.86);
+      checkoutBarrier.position.set(29, 0, 6.1);
+      checkoutBarrier.rotation.y = -Math.PI / 2;
+      entrance.add(checkoutBarrier);
+    }
+  }
   scene.add(entrance);
   layers.entrance = entrance;
 
@@ -373,7 +449,7 @@ function addArchitecture(scene, layers) {
   layers.lights = lights;
 }
 
-function createSlotLayout() {
+function createSlotLayout(slotCount = 32) {
   const slots = [];
   const rows = [
     { z: -31.5, rotation: 0, prefix: "A" },
@@ -381,11 +457,15 @@ function createSlotLayout() {
     { z: 20.2, rotation: 0, prefix: "C" },
     { z: 31.5, rotation: Math.PI, prefix: "D" },
   ];
+  const boundedCount = Math.max(1, Math.min(slotCount, 48));
+  const perRow = Math.ceil(boundedCount / rows.length);
+  const spacing = Math.min(8.4, 70 / Math.max(perRow - 1, 1));
+  const startX = -((perRow - 1) * spacing) / 2;
   rows.forEach((row) => {
-    for (let index = 0; index < 12; index += 1) {
+    for (let index = 0; index < perRow && slots.length < boundedCount; index += 1) {
       slots.push({
         key: `${row.prefix}-${String(index + 1).padStart(2, "0")}`,
-        x: -35.2 + index * 6.35,
+        x: startX + index * spacing,
         z: row.z,
         rotation: row.rotation,
       });
@@ -426,7 +506,7 @@ function normalizeSlot(raw, index, fallbackKey) {
   };
 }
 
-export function createGarageScene({ canvas, floorLabel, slots = [], onSelect }) {
+export function createGarageScene({ canvas, floorLabel, floorContext, slots = [], onSelect }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -462,19 +542,20 @@ export function createGarageScene({ canvas, floorLabel, slots = [], onSelect }) 
   scene.add(sun);
 
   const layers = {};
-  addArchitecture(scene, layers);
+  addArchitecture(scene, layers, floorContext);
 
   const parking = new THREE.Group();
   parking.name = "parking";
   const clickable = [];
   const slotRoots = new Map();
-  const layout = createSlotLayout();
+  const layout = createSlotLayout(Math.max(slots.length, floorContext?.slotCount || 32));
   layout.forEach((slot) => parking.add(createSlotBase(slot, clickable, slotRoots)));
   scene.add(parking);
   layers.parking = parking;
 
   const zoneSigns = new THREE.Group();
-  [["KHU A", -34, -35.6], ["KHU B", 23, -35.6], ["KHU C", -34, 35.6], ["KHU D", 23, 35.6]].forEach(([text, x, z]) => {
+  const zonePrefix = floorContext?.parkingType === "MONTHLY" ? "THÁNG" : "VÃNG LAI";
+  [[`${zonePrefix} A`, -34, -35.6], [`${zonePrefix} B`, 23, -35.6], [`${zonePrefix} C`, -34, 35.6], [`${zonePrefix} D`, 23, 35.6]].forEach(([text, x, z]) => {
     const sign = makeTextSign(`${floorLabel} · ${text}`, 6.2, 1.5, { background: "#111827", accent: "#f5c400" });
     sign.position.set(x, 3.25, z > 0 ? z - 0.3 : z + 0.3);
     sign.rotation.y = z > 0 ? Math.PI : 0;
@@ -606,7 +687,9 @@ export function createGarageScene({ canvas, floorLabel, slots = [], onSelect }) 
       overview: { position: [55, 43, 54], target: [0, 1.2, 0] },
       top: { position: [0, 91, 0.01], target: [0, 0, 0] },
       drive: { position: [-30, 2.35, -5.2], target: [24, 1.05, -5.2] },
-      entrance: { position: [-33, 3.15, 17], target: [-44, 1.45, 0] },
+      entrance: floorContext?.floorNumber === 1
+        ? { position: [-8, 3.15, 14], target: [-30, 1.2, 0] }
+        : { position: [14, 3.15, -14], target: [39, 1.2, 0] },
       elevator: { position: [37.5, 3.15, -4], target: [45, 1.75, 8] },
     };
     const view = views[mode] || views.overview;

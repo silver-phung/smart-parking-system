@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ParkingGarageViewport from "../components/parking3d/ParkingGarageViewport.jsx";
+import {
+  createDemoSlots,
+  DEMO_PARKING_LOTS,
+  findDemoFloor,
+  findDemoLot,
+  inferFloorContext,
+} from "../components/parking3d/parkingProfiles.js";
 import { apiRequest } from "../services/api.js";
 import { collectPages } from "../services/staffApi.js";
 import "../parking-3d.css";
@@ -17,36 +24,18 @@ function readItems(response) {
   return Array.isArray(data) ? data : data?.items || [];
 }
 
-function demoSlots() {
-  return Array.from({ length: 48 }, (_, index) => {
-    const row = String.fromCharCode(65 + Math.floor(index / 12));
-    const physicalStatus = index % 7 === 1 || index % 11 === 4
-      ? "OCCUPIED"
-      : index % 19 === 7
-        ? "MAINTENANCE"
-        : index % 23 === 13
-          ? "UNAVAILABLE"
-          : "EMPTY";
-    return {
-      id: `demo-${index}`,
-      slotCode: `${row}-${String((index % 12) + 1).padStart(2, "0")}`,
-      physicalStatus,
-      isAvailable: physicalStatus === "EMPTY",
-      zone: row,
-    };
-  });
-}
-
 function Icon({ children }) {
   return <span className="p3d-icon" aria-hidden="true">{children}</span>;
 }
 
 export default function Parking3DViewer() {
-  const [lots, setLots] = useState([]);
-  const [floors, setFloors] = useState([]);
-  const [lotId, setLotId] = useState("");
-  const [floorId, setFloorId] = useState("");
-  const [slots, setSlots] = useState(() => demoSlots());
+  const defaultLot = DEMO_PARKING_LOTS[0];
+  const defaultFloor = defaultLot.floors[0];
+  const [lots, setLots] = useState(DEMO_PARKING_LOTS);
+  const [floors, setFloors] = useState(defaultLot.floors);
+  const [lotId, setLotId] = useState(defaultLot.id);
+  const [floorId, setFloorId] = useState(defaultFloor.id);
+  const [slots, setSlots] = useState(() => createDemoSlots(defaultFloor));
   const [dataMode, setDataMode] = useState("loading");
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -74,10 +63,15 @@ export default function Parking3DViewer() {
       const items = await collectPages(async (page) => (
         await apiRequest(`/v1/parking-lots?pageNumber=${page}&pageSize=100&isActive=true`, { skipAuth: true })
       ).data);
-      setLots(items);
-      setLotId((current) => items.some((lot) => String(lot.id) === current) ? current : String(items[0]?.id || ""));
-      if (!items.length) setDataMode("demo");
+      if (items.length) {
+        setLots(items);
+        setLotId((current) => items.some((lot) => String(lot.id) === current) ? current : String(items[0].id));
+      } else {
+        setLots(DEMO_PARKING_LOTS);
+        setDataMode("demo");
+      }
     } catch (requestError) {
+      setLots(DEMO_PARKING_LOTS);
       setDataMode("demo");
       setError("Backend chưa sẵn sàng — đang hiển thị dữ liệu mô phỏng an toàn.");
     }
@@ -89,6 +83,13 @@ export default function Parking3DViewer() {
 
   useEffect(() => {
     if (!lotId) return undefined;
+    const demoLot = findDemoLot(lotId);
+    if (demoLot) {
+      setFloors(demoLot.floors);
+      setFloorId((current) => demoLot.floors.some((floor) => floor.id === current) ? current : demoLot.floors[0].id);
+      setDataMode("demo");
+      return undefined;
+    }
     let active = true;
     apiRequest(`/v1/parking-lots/${lotId}/floors?isActiveOnly=true`, { skipAuth: true })
       .then((response) => {
@@ -107,8 +108,16 @@ export default function Parking3DViewer() {
   }, [lotId]);
 
   const loadSlots = useCallback(async ({ silent = false } = {}) => {
+    const demoFloor = findDemoFloor(floorId);
+    if (demoFloor) {
+      setSlots(createDemoSlots(demoFloor));
+      setDataMode("demo");
+      setLastUpdated(new Date());
+      return;
+    }
+    const currentFloor = floors.find((floor) => String(floor.id) === floorId);
     if (!floorId) {
-      setSlots(demoSlots());
+      setSlots(createDemoSlots(defaultFloor));
       setDataMode("demo");
       return;
     }
@@ -117,16 +126,16 @@ export default function Parking3DViewer() {
       const items = await collectPages(async (page) => (
         await apiRequest(`/v1/parking-floors/${floorId}/slots?pageNumber=${page}&pageSize=100`, { skipAuth: true })
       ).data);
-      setSlots(items.length ? items.slice(0, 48) : demoSlots());
+      setSlots(items.length ? items.slice(0, 48) : createDemoSlots(inferFloorContext(currentFloor, currentFloor?.name)));
       setDataMode(items.length ? "live" : "demo");
       setError(items.length ? "" : "Tầng chưa có dữ liệu vị trí — đang dùng layout mô phỏng.");
       setLastUpdated(new Date());
     } catch (requestError) {
-      setSlots(demoSlots());
+      setSlots(createDemoSlots(inferFloorContext(currentFloor, currentFloor?.name)));
       setDataMode("demo");
       setError("Không tải được trạng thái vị trí — đang hiển thị dữ liệu mô phỏng.");
     }
-  }, [floorId]);
+  }, [floorId, floors]);
 
   useEffect(() => {
     void loadSlots();
@@ -137,6 +146,10 @@ export default function Parking3DViewer() {
   const selectedLot = lots.find((lot) => String(lot.id) === lotId);
   const selectedFloor = floors.find((floor) => String(floor.id) === floorId);
   const floorLabel = selectedFloor?.name || "Tầng B1";
+  const floorContext = useMemo(() => {
+    const inferred = inferFloorContext(selectedFloor, floorLabel);
+    return { ...inferred, floorCount: selectedFloor?.floorCount || floors.length || inferred.floorCount };
+  }, [selectedFloor, floorLabel, floors.length]);
   const normalizedSlots = useMemo(() => slots.map((slot) => ({
     ...slot,
     physicalStatus: slot.physicalStatus === "EMPTY" && slot.isAvailable === false ? "UNAVAILABLE" : slot.physicalStatus,
@@ -176,8 +189,9 @@ export default function Parking3DViewer() {
 
       <div className="p3d-stage">
         <ParkingGarageViewport
-          key={floorLabel}
+          key={`${lotId}-${floorId || floorLabel}`}
           floorLabel={floorLabel}
+          floorContext={floorContext}
           slots={normalizedSlots}
           filter={filter}
           cameraMode={cameraMode}
@@ -204,6 +218,11 @@ export default function Parking3DViewer() {
               {floors.length ? floors.map((floor) => <option key={floor.id} value={floor.id}>{floor.name}</option>) : <><option value="">Tầng B1</option><option value="B2">Tầng B2</option></>}
             </select>
           </label>
+          <div className={`p3d-flow-card p3d-flow-card--${floorContext.parkingType?.toLowerCase()}`}>
+            <span>{floorContext.code} · PHÂN LUỒNG</span>
+            <strong>{floorContext.parkingType === "MONTHLY" ? "KHU GỬI XE THÁNG" : "KHU GỬI XE VÃNG LAI"}</strong>
+            <small>{floorContext.floorNumber === 1 ? "Xe vãng lai đi làn riêng xuống B2" : floorContext.floorNumber === 2 ? "Checkout vãng lai trước dốc lên" : "Dốc một chiều đặt cuối hành trình"}</small>
+          </div>
           <div className="p3d-meter">
             <div><span>Mức sử dụng</span><strong>{occupancy}%</strong></div>
             <div className="p3d-meter__track"><span style={{ width: `${occupancy}%` }} /></div>
