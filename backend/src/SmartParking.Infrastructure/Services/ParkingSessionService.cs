@@ -63,6 +63,8 @@ public class ParkingSessionService : IParkingSessionService
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng (GATE) tại bãi đỗ xe này.", null);
         }
 
+        if (await _context.ParkingZones.AnyAsync(z => z.LotId == request.LotId, ct))
+            return (false, "Bãi đã có khu. Tiếp nhận bằng vé/EventId qua API operations/entries.", null);
         // Anti-Passback check: Biển số xe không được phép có phiên ACTIVE hoặc PAID đang mở
         var hasActiveSession = await _context.ParkingSessions
             .AnyAsync(s => s.PlateNumber == normalizedPlate && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
@@ -195,6 +197,7 @@ public class ParkingSessionService : IParkingSessionService
                     LotId = lot.Id,
                     VehicleId = vehicle.Id,
                     BookingId = booking?.Id,
+                    PolicyId = booking?.PolicyId ?? (await ParkingPolicyResolver.ResolveAsync(_context, lot.Id, null, DateTime.UtcNow, ct))?.Id,
                     PlateNumber = normalizedPlate,
                     CheckInTime = DateTime.UtcNow,
                     CurrentSlotId = slot?.Id,
@@ -375,6 +378,20 @@ public class ParkingSessionService : IParkingSessionService
                 }
 
                 var oldStatus = session.Status;
+                // Ticketed admissions cannot exit before slot verification and a valid ticket check.
+                if (session.EntryEventId.HasValue)
+                {
+                    if (session.VerificationStatus != "VERIFIED" || !PlateNumberHelper.IsMatch(request.ConfirmedPlateNumber, session.PlateNumber))
+                        return (false, "Cần xác minh xe tại ô và đối chiếu biển số trước khi ra bãi.", null);
+                    var exitTicket = await _context.ParkingTickets.FirstOrDefaultAsync(t => t.SessionId == session.Id && t.Status == "ISSUED", ct);
+                    if (exitTicket == null || exitTicket.Code != request.TicketCode?.Trim().ToUpperInvariant())
+                        return (false, "Vé thiếu, mất, sai hoặc đã thu hồi. Cần xử lý vé trước khi cho xe ra.", null);
+                    exitTicket.Status = "REVOKED";
+                    exitTicket.ClosedBy = actorId;
+                    exitTicket.ClosedAt = DateTime.UtcNow;
+                    exitTicket.Reason = "Thu hồi sau khi xác nhận xe thực sự ra bãi.";
+                    session.Revision++;
+                }
                 session.CheckOutTime = DateTime.UtcNow;
                 session.Status = SessionStatuses.Completed;
                 if (!string.IsNullOrWhiteSpace(request.CheckOutImageUrl))
@@ -398,11 +415,11 @@ public class ParkingSessionService : IParkingSessionService
                 }
 
                 // Giải phóng đúng ô đỗ mà xe thực sự đỗ nếu trước đó ô đỗ đã được ghi nhận OCCUPIED
-                var slotToRelease = session.CurrentSlot;
-                if (slotToRelease == null && session.CurrentSlotId.HasValue)
-                {
-                    slotToRelease = await _context.ParkingSlots.FirstOrDefaultAsync(s => s.Id == session.CurrentSlotId.Value, ct);
-                }
+                var slotToRelease = session.CurrentSlotId.HasValue
+                    ? await _context.ParkingSlots.FirstOrDefaultAsync(s => s.Id == session.CurrentSlotId.Value, ct)
+                    : null;
+                if (slotToRelease != null && _context is DbContext slotContext)
+                    await slotContext.Entry(slotToRelease).ReloadAsync(ct);
 
                 if (slotToRelease != null && slotToRelease.PhysicalStatus == SlotPhysicalStatuses.Occupied)
                 {
@@ -788,6 +805,8 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Không tìm thấy phiên gửi xe với ID: {sessionId}.", null);
         }
 
+        if (session.EntryEventId.HasValue)
+            return (false, "Lượt có vé phải dùng API operations để xác minh xe, nhiên liệu và ô thực tế.", null);
         if (session.Status != SessionStatuses.Active)
         {
             return (false, $"Chỉ có thể xác minh ô đỗ cho phiên gửi xe đang hoạt động (ACTIVE). Trạng thái hiện tại: {session.Status}.", null);
@@ -953,6 +972,8 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Không tìm thấy phiên gửi xe với ID: {sessionId}.", null);
         }
 
+        if (session.EntryEventId.HasValue)
+            return (false, "Lượt có vé phải dùng API operations để xác minh xe, nhiên liệu và ô thực tế.", null);
         if (session.Status != SessionStatuses.Active)
         {
             return (false, $"Chỉ có thể báo sai ô đỗ cho phiên gửi xe đang hoạt động (ACTIVE). Trạng thái hiện tại: {session.Status}.", null);
@@ -1124,6 +1145,10 @@ public class ParkingSessionService : IParkingSessionService
             VehicleId = session.VehicleId,
             BookingId = session.BookingId,
             PlateNumber = session.PlateNumber,
+            VerificationStatus = session.VerificationStatus,
+            ZoneId = session.ZoneId,
+            PolicyId = session.PolicyId,
+            Revision = session.Revision,
             CheckInTime = session.CheckInTime,
             CheckOutTime = session.CheckOutTime,
             CurrentSlotId = session.CurrentSlotId,

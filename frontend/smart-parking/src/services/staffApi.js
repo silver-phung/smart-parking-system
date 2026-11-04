@@ -1,4 +1,5 @@
 import { apiRequest } from "./api.js";
+import { operationsApi } from "./operationsApi.js";
 
 export const normalizePlate = (value = "") =>
   value.trim().toUpperCase().replace(/\s+/g, " ");
@@ -184,7 +185,11 @@ export const staffApi = {
   },
   async findSession(lotId, value, mode = "plate", signal) {
     let session;
-    if (mode === "id") {
+    if (mode === "ticket") {
+      const match = await operationsApi(lotId, `tickets/${encodeURIComponent(value.trim())}`, null, null, signal);
+      if (match.ticketStatus !== "ISSUED") throw new Error("Vé mất, đã thay hoặc thu hồi. Cần quản lý đối chiếu và xử lý vé.");
+      session = { ...await staffApi.session(match.id, signal), ticketCode: match.ticketCode };
+    } else if (mode === "id") {
       if (!/^\d+$/.test(value.trim()) || Number(value) < 1)
         throw new Error("Nhập mã phiên là số nguyên dương.");
       session = await staffApi.session(value.trim(), signal);
@@ -234,7 +239,7 @@ export const staffApi = {
       plateNumber: validatePlate(plateNumber),
       ...(imageUrl ? { checkInImageUrl: imageUrl } : {}),
     }),
-  async checkOut(sessionId, lotId, plateNumber, imageUrl) {
+  async checkOut(sessionId, lotId, plateNumber, imageUrl, ticketCode) {
     const fresh = await staffApi.session(sessionId);
     if (!fresh || fresh.lotId !== Number(lotId))
       throw new Error("Phiên xe không thuộc bãi đang chọn.");
@@ -249,6 +254,7 @@ export const staffApi = {
       );
     return post(`/v1/parking-sessions/${sessionId}/check-out`, {
       confirmedPlateNumber: plate,
+      ...(ticketCode ? { ticketCode: ticketCode.trim().toUpperCase() } : {}),
       ...(imageUrl ? { checkOutImageUrl: imageUrl } : {}),
     });
   },

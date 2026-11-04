@@ -11,6 +11,7 @@ public class ParkingSlot
     public decimal? PositionY { get; set; }
     public decimal? PositionZ { get; set; }
     public bool IsActive { get; set; } = true;
+    public string AllowedFuelType { get; set; } = "ANY"; // ANY, PETROL, ELECTRIC, HYBRID
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

@@ -20,7 +20,9 @@ public record LotCapacityCalculation(
     int ProposedSafetyBuffer = 5,
     int UnmatchedPhysicalOccupiedCount = 0,
     int MatchedPairsCount = 0,
-    int ConfiguredCapacity = 0
+    int ConfiguredCapacity = 0,
+    long? PolicyId = null,
+    int? NearFullThreshold = null
 );
 
 public static class ParkingLotCapacityHelper
@@ -29,10 +31,19 @@ public static class ParkingLotCapacityHelper
         IApplicationDbContext context,
         int lotId,
         ParkingLot? lot = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int? zoneId = null)
     {
+        // Legacy floors without a zone remain transient until backfilled. Fixed zones never sell walk-in capacity.
+        var slots = context.ParkingSlots.Where(s => s.Floor.LotId == lotId &&
+            (!zoneId.HasValue || s.Floor.ZoneId == zoneId) &&
+            (s.Floor.Zone == null || s.Floor.Zone.Type == "TRANSIENT"));
+        var sessions = context.ParkingSessions.Where(s => s.LotId == lotId &&
+            (!zoneId.HasValue || s.ZoneId == zoneId || (s.ZoneId == null && s.CurrentSlot != null && s.CurrentSlot.Floor.ZoneId == zoneId)) &&
+            (s.Zone == null || s.Zone.Type == "TRANSIENT") &&
+            (s.CurrentSlot == null || s.CurrentSlot.Floor.Zone == null || s.CurrentSlot.Floor.Zone.Type == "TRANSIENT"));
         // 1. Check if lot has configured ParkingSlot records
-        var hasConfiguredSlots = await context.ParkingSlots
+        var hasConfiguredSlots = await slots
             .AnyAsync(s => s.Floor.LotId == lotId, ct);
 
         int totalCapacity;
@@ -45,19 +56,20 @@ public static class ParkingLotCapacityHelper
             // Authoritative capacity derives from eligible/usable physical slots on active floors.
             // MAINTENANCE, UNAVAILABLE, and inactive slots/floors must not count as usable capacity.
             // When all slots are maintenance/unavailable, totalCapacity is 0 (NO fallback to lot.TotalCapacity).
-            totalCapacity = await context.ParkingSlots
+            totalCapacity = await slots
                 .CountAsync(s => s.Floor.LotId == lotId && s.IsActive && s.Floor.IsActive &&
+                                 (s.Floor.Zone == null || s.Floor.Zone.IsActive) &&
                                  s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
                                  s.PhysicalStatus != SlotPhysicalStatuses.Unavailable, ct);
 
-            physicalOccupiedSlots = await context.ParkingSlots
+            physicalOccupiedSlots = await slots
                 .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Occupied, ct);
 
-            physicalEmptySlots = await context.ParkingSlots
-                .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Empty && s.IsActive && s.Floor.IsActive, ct);
+            physicalEmptySlots = await slots
+                .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Empty && s.IsActive && s.Floor.IsActive && (s.Floor.Zone == null || s.Floor.Zone.IsActive), ct);
 
             // Ô đỗ có cảm biến báo OCCUPIED nhưng chưa có phiên đỗ xe ACTIVE/PAID gắn vào
-            unmatchedPhysicalOccupiedCount = await context.ParkingSlots
+            unmatchedPhysicalOccupiedCount = await slots
                 .CountAsync(s => s.Floor.LotId == lotId &&
                                  s.PhysicalStatus == SlotPhysicalStatuses.Occupied &&
                                  !s.CurrentSessions.Any(sess => sess.Status == SessionStatuses.Active || sess.Status == SessionStatuses.Paid), ct);
@@ -76,11 +88,11 @@ public static class ParkingLotCapacityHelper
         var configuredCapacity = lot?.TotalCapacity ?? 0;
 
         // 2. Active admitted vehicle sessions (vehicles checked in, inside or parking)
-        var activeSessionsCount = await context.ParkingSessions
+        var activeSessionsCount = await sessions
             .CountAsync(s => s.LotId == lotId && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
 
         // 2b. Admitted sessions whose vehicles do NOT yet occupy a verified physical OCCUPIED slot (in queue / looking for slot)
-        var unassignedSessionsCount = await context.ParkingSessions
+        var unassignedSessionsCount = await sessions
             .CountAsync(s => s.LotId == lotId &&
                              (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid) &&
                              (s.CurrentSlotId == null || s.CurrentSlot!.PhysicalStatus != SlotPhysicalStatuses.Occupied), ct);
@@ -97,8 +109,7 @@ public static class ParkingLotCapacityHelper
         // EffectiveOccupied = MatchedPairs + UnassignedSessions + UnmatchedPhysicalOccupied
         //                   = PhysicalOccupiedSlots + UnassignedSessionsCount
         //                   = ActiveSessionsCount + UnmatchedPhysicalOccupiedCount
-        // Dependency: Phân tách riêng biệt giữa WALK_IN và FIXED phụ thuộc vào schema Zone (Zone entity/ZoneId) do Thức sở hữu;
-        // khi chưa có Zone contract độc lập, áp dụng tính toán bảo thủ trên toàn bãi.
+        // Session admission and physical slots are scoped to transient zones, optionally one zone.
         int effectiveOccupied;
         int matchedPairsCount = 0;
         if (hasConfiguredSlots)
@@ -113,6 +124,7 @@ public static class ParkingLotCapacityHelper
 
         int totalOccupiedOrReserved = effectiveOccupied + pendingBookingsCount;
         int availableCapacity = Math.Max(0, totalCapacity - totalOccupiedOrReserved);
+        var policy = await ParkingPolicyResolver.ResolveAsync(context, lotId, zoneId, DateTime.UtcNow, ct);
 
         // Proposed safety buffer (proposal only, non-blocking until Owner approves enforcement)
         const int proposedSafetyBuffer = 5;
@@ -139,7 +151,9 @@ public static class ParkingLotCapacityHelper
             ProposedSafetyBuffer: proposedSafetyBuffer,
             UnmatchedPhysicalOccupiedCount: unmatchedPhysicalOccupiedCount,
             MatchedPairsCount: matchedPairsCount,
-            ConfiguredCapacity: configuredCapacity
+            ConfiguredCapacity: configuredCapacity,
+            PolicyId: policy?.Id,
+            NearFullThreshold: policy?.NearFullThreshold
         );
     }
 }

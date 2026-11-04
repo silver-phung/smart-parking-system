@@ -54,8 +54,14 @@ public class BookingService : IBookingService
             return (false, 400, $"Bãi đỗ xe '{lot.Name}' hiện đang đóng cửa hoặc tạm ngừng hoạt động.", null);
         }
 
+        var bookingPolicy = await ParkingPolicyResolver.ResolveAsync(_context, lot.Id, null, DateTime.UtcNow, ct);
+        if (bookingPolicy == null && await _context.ParkingZones.AnyAsync(z => z.LotId == lot.Id, ct))
+            return (false, 409, "Chưa có chính sách đặt chỗ được duyệt có hiệu lực cho bãi.", null);
+
         var startTime = request.StartTime == default ? DateTime.UtcNow : request.StartTime;
-        if (request.StartTime != default && request.StartTime < DateTime.UtcNow.AddMinutes(-15))
+        // Existing unzoned data retains its legacy tolerance. Configured sites read the approved source.
+        var pastTolerance = bookingPolicy == null ? 15 : 0;
+        if (request.StartTime != default && (DateTime.UtcNow - request.StartTime).TotalMinutes > pastTolerance)
         {
             return (false, 400, "Thời gian bắt đầu đặt chỗ không được ở quá khứ.", null);
         }
@@ -176,6 +182,7 @@ public class BookingService : IBookingService
                 var booking = new Booking
                 {
                     LotId = lot.Id,
+                    PolicyId = bookingPolicy?.Id,
                     UserId = userId,
                     VehicleId = vehicle.Id,
                     PlateNumber = normalizedPlate,
@@ -408,6 +415,14 @@ public class BookingService : IBookingService
                     ? (currentUserRole == Roles.User ? "Người dùng yêu cầu hủy đặt chỗ." : "Nhân sự quản lý hủy đặt chỗ theo yêu cầu vận hành.")
                     : request.Reason.Trim();
 
+                if (lockedBooking.PolicyId.HasValue)
+                {
+                    var appliedPolicy = await _context.ParkingPolicies.AsNoTracking().FirstOrDefaultAsync(p => p.Id == lockedBooking.PolicyId, ct);
+                    if (appliedPolicy == null || appliedPolicy.CancellationAction == "DENY" ||
+                        (appliedPolicy.CancellationNoticeMinutes.HasValue && (lockedBooking.StartTime - DateTime.UtcNow).TotalMinutes < appliedPolicy.CancellationNoticeMinutes.Value))
+                        return (false, 409, "Không được hủy theo phiên bản chính sách đã áp dụng cho lượt đặt này.", null);
+                }
+
                 lockedBooking.Status = BookingStatuses.Cancelled;
                 lockedBooking.CancelledAt = DateTime.UtcNow;
                 lockedBooking.CancellationReason = reason;
@@ -558,6 +573,9 @@ public class BookingService : IBookingService
 
         return new LotCapacityDto
         {
+            PolicyId = calc.PolicyId,
+            NearFullThreshold = calc.NearFullThreshold,
+            IsNearFull = calc.NearFullThreshold.HasValue ? availableCapacity <= calc.NearFullThreshold.Value : null,
             LotId = lot.Id,
             LotName = lot.Name,
             LotAddress = lot.Address,
@@ -601,6 +619,7 @@ public class BookingService : IBookingService
         return new BookingDto
         {
             Id = b.Id,
+            PolicyId = b.PolicyId,
             LotId = b.LotId,
             LotName = lotName,
             LotAddress = lotAddress,
@@ -626,6 +645,7 @@ public class BookingService : IBookingService
         return new BookingDetailDto
         {
             Id = b.Id,
+            PolicyId = b.PolicyId,
             LotId = b.LotId,
             LotName = b.Lot?.Name ?? string.Empty,
             LotAddress = b.Lot?.Address,

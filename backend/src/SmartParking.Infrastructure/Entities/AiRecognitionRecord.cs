@@ -4,6 +4,7 @@ public sealed class AiRecognitionRecord
 {
     public long Id { get; set; }
     public long StaffUserId { get; set; }
+    public string? ContentSha256 { get; set; }
     public string? PlateNumber { get; set; }
     public string? RawPlateNumber { get; set; }
     public string? FailureReason { get; set; }

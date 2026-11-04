@@ -64,6 +64,8 @@ public class ParkingSlotConfiguration : IEntityTypeConfiguration<ParkingSlot>
             .HasColumnName("is_active")
             .HasDefaultValue(true)
             .IsRequired();
+        builder.Property(s => s.AllowedFuelType).HasMaxLength(20).HasDefaultValue("ANY");
+        builder.Property(s => s.UpdatedAt).IsConcurrencyToken();
 
         builder.Property(s => s.CreatedAt)
             .HasColumnName("created_at")

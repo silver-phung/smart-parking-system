@@ -32,6 +32,8 @@ public class Booking
     public string? CancellationReason { get; set; }
 
     public string? Notes { get; set; }
+    public long? PolicyId { get; set; }
+    public ParkingPolicy? Policy { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

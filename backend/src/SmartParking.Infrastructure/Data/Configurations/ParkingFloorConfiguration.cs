@@ -24,6 +24,9 @@ public class ParkingFloorConfiguration : IEntityTypeConfiguration<ParkingFloor>
             .HasColumnName("lot_id")
             .IsRequired();
 
+        builder.HasOne(f => f.Zone).WithMany().HasForeignKey(f => new { f.ZoneId, f.LotId })
+            .HasPrincipalKey(z => new { z.Id, z.LotId }).OnDelete(DeleteBehavior.Restrict);
+
         builder.HasOne(f => f.Lot)
             .WithMany(l => l.Floors)
             .HasForeignKey(f => f.LotId)

@@ -366,6 +366,10 @@ public class ParkingManagementService : IParkingManagementService
             }
 
             var now = DateTime.UtcNow;
+            var transientZoneId = await _context.ParkingZones.Where(z => z.LotId == lotId && z.Type == "TRANSIENT" && z.IsActive)
+                .OrderBy(z => z.Id).Select(z => (int?)z.Id).FirstOrDefaultAsync(ct);
+            if (!transientZoneId.HasValue && await _context.ParkingZones.AnyAsync(z => z.LotId == lotId, ct))
+                return (false, "Cần một khu vãng lai đang hoạt động trước khi tạo bố cục chuẩn.", null);
             int floorsCreated = 0, slotsCreated = 0, slotsExisting = 0;
 
             foreach (var (number, letter) in layout)
@@ -375,10 +379,13 @@ public class ParkingManagementService : IParkingManagementService
                             ?? lot.Floors.FirstOrDefault(f => string.Equals(f.Name, floorName, StringComparison.OrdinalIgnoreCase));
                 if (floor == null)
                 {
-                    floor = new ParkingFloor { LotId = lotId, FloorNumber = number, Name = floorName, IsActive = true, CreatedAt = now, UpdatedAt = now };
+                    floor = new ParkingFloor { LotId = lotId, ZoneId = transientZoneId, FloorNumber = number, Name = floorName, IsActive = true, CreatedAt = now, UpdatedAt = now };
                     lot.Floors.Add(floor);
                     floorsCreated++;
                 }
+                if (floor.ZoneId.HasValue && floor.ZoneId != transientZoneId)
+                    return (false, "Tầng thuộc khu khác; không tự đổi khu để tạo bố cục chuẩn.", null);
+                floor.ZoneId ??= transientZoneId;
 
                 var existingCodes = floor.Slots.Select(s => s.SlotCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 for (var i = 1; i <= slotsPerFloor; i++)
@@ -540,9 +547,15 @@ public class ParkingManagementService : IParkingManagementService
             return (false, $"Tên tầng '{trimmedName}' đã tồn tại trong bãi xe này.", null);
         }
 
+        if (request.ZoneId.HasValue && !await _context.ParkingZones.AnyAsync(z => z.Id == request.ZoneId && z.LotId == lotId && z.IsActive, ct))
+            return (false, "Khu phải hoạt động và thuộc đúng bãi.", null);
+        if (!request.ZoneId.HasValue && await _context.ParkingZones.AnyAsync(z => z.LotId == lotId, ct))
+            return (false, "Cần chọn khu sở hữu cho tầng mới.", null);
+
         var floor = new ParkingFloor
         {
             LotId = lotId,
+            ZoneId = request.ZoneId,
             FloorNumber = request.FloorNumber,
             Name = trimmedName,
             TotalSlots = request.TotalSlots,

@@ -90,6 +90,7 @@ public sealed class ImageService : IImageService
         var storedImage = new StoredImage
         {
             UserId = userId,
+            ContentSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(imageStream.ToArray())),
             PublicId = upload.PublicId,
             Url = upload.SecureUrl.ToString(),
             Format = upload.Format ?? expectedFormat,
@@ -144,6 +145,10 @@ public sealed class ImageService : IImageService
             return ImageDeleteResult.NotFound;
 
         if (!isAdmin && image.UserId != userId)
+            return ImageDeleteResult.Forbidden;
+
+        // Preserve linked evidence before making any destructive call to Cloudinary.
+        if (await _dbContext.ParkingSessions.AnyAsync(s => s.EntryImageId == id, cancellationToken))
             return ImageDeleteResult.Forbidden;
 
         var cloudinary = CreateCloudinaryClient();

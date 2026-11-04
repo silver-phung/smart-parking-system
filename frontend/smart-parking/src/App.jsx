@@ -9,6 +9,7 @@ import CustomerDashboard from "./pages/CustomerDashboard.jsx";
 import CustomerProfile from "./pages/CustomerProfile.jsx";
 import ManagerWorkspace from "./pages/ManagerWorkspace.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
+import AdminParkingSettings from "./pages/AdminParkingSettings.jsx";
 import StaffWorkspace from "./pages/StaffWorkspace.jsx";
 import AdminPeople from "./pages/AdminPeople.jsx";
 import CustomerSessions from "./pages/CustomerSessions.jsx";
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/customer/sessions" element={<CustomerSessions />} />
           <Route path="/customer/profile" element={<CustomerProfile />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/parking-settings" element={<AdminParkingSettings />} />
           <Route path="/admin/people" element={<AdminPeople />} />
           <Route path="/manager" element={<ManagerWorkspace />} />
           <Route path="/staff" element={<StaffWorkspace />} />

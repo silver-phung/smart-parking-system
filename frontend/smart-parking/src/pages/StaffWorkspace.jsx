@@ -1,12 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
-import { StaffEntry, StaffExit } from "../components/staff/StaffGate.jsx";
+import { StaffExit } from "../components/staff/StaffGate.jsx";
 import {
   StaffDispatches,
   StaffSessions,
 } from "../components/staff/StaffLists.jsx";
-import StaffVerification from "../components/staff/StaffVerification.jsx";
+import { TicketEntry, TicketVerification, TicketLookup } from "../components/staff/TicketOperations.jsx";
+import "../operations.css";
 import {
   Notice,
   StaffError,
@@ -19,6 +20,7 @@ import "../staff.css";
 const views = [
   { id: "entry", name: "Xe vào", description: "Tiếp nhận xe vãng lai" },
   { id: "exit", name: "Xe ra", description: "Đối chiếu tại cổng ra" },
+  { id: "tickets", name: "Tra vé", description: "Tra cứu và báo mất vé" },
   {
     id: "verify",
     name: "Xác minh ô",
@@ -240,7 +242,7 @@ function StaffContent() {
             key={`${lotId}-${view.id}`}
           >
             {view.id === "entry" && (
-              <StaffEntry {...props} capacity={currentCapacity?.value} />
+              <TicketEntry {...props} />
             )}
             {view.id === "exit" && (
               <StaffExit
@@ -249,11 +251,12 @@ function StaffContent() {
               />
             )}
             {view.id === "verify" && (
-              <StaffVerification
+              <TicketVerification
                 {...props}
                 initialSessionId={params.get("sessionId")}
               />
             )}
+            {view.id === "tickets" && <TicketLookup {...props} />}
             {view.id === "sessions" && (
               <StaffSessions {...props} onOpen={open} />
             )}

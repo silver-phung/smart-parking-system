@@ -24,6 +24,20 @@ public class ParkingSession
     public string? CheckOutImageUrl { get; set; }
     public long? BookingId { get; set; }
     public Booking? Booking { get; set; }
+    public int? ZoneId { get; set; }
+    public ParkingZone? Zone { get; set; }
+    public long? PolicyId { get; set; }
+    public ParkingPolicy? Policy { get; set; }
+    public Guid? EntryEventId { get; set; }
+    public string? EntryRequestHash { get; set; }
+    public long? RecognitionId { get; set; }
+    public string? TemporaryPlateNumber { get; set; }
+    public long? EntryImageId { get; set; }
+    public string VerificationStatus { get; set; } = "LEGACY";
+    public string? FuelType { get; set; }
+    public long? VerifiedBy { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public long Revision { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

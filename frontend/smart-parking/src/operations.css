@@ -1,0 +1,12 @@
+.operations-fields { border: 0; padding: 0; margin: 16px 0; min-width: 0; display: grid; gap: 14px; }
+.operations-admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 24px; align-items: start; }
+.operations-form-grid, .operations-slot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.operations-session-list { display: grid; gap: 10px; margin: 16px 0; max-height: 480px; overflow-y: auto; }
+.operations-session { text-align: left; display: grid; gap: 5px; padding: 14px; border: 1px solid #dbe3ed; border-radius: 10px; background: #fff; color: #243449; cursor: pointer; overflow-wrap: anywhere; }
+.operations-session.is-selected { border-color: #2563eb; background: #eff6ff; }
+.operations-floor { padding: 14px 0; border-bottom: 1px solid #e2e8f0; }
+.operations-admin-grid details { margin: 12px 0; overflow-wrap: anywhere; }
+.operations-admin-grid dt { font-size: 13px; color: #64748b; }
+.operations-admin-grid dd { margin: 0 0 8px; }
+@media (max-width: 760px) { .operations-admin-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 420px) { .operations-form-grid, .operations-slot-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -65,6 +65,7 @@ public sealed class StaffDetectionService : IStaffDetectionService
         var record = new AiRecognitionRecord
         {
             StaffUserId = staffUserId,
+            ContentSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)),
             PlateNumber = recognized ? data!.PlateNumber : null,
             RawPlateNumber = recognized ? data!.RawPlateNumber : null,
             FailureReason = recognized ? null : result.Message,

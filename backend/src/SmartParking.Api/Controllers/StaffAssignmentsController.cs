@@ -98,6 +98,10 @@ public class StaffAssignmentsController : ControllerBase
         {
             return BadRequest(new { message = exception.Message });
         }
+        catch (AiServiceException exception)
+        {
+            return StatusCode((int)exception.StatusCode, new { message = exception.Message });
+        }
     }
 
     /// <summary>

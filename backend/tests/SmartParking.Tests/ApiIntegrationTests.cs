@@ -960,11 +960,11 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [Theory]
     [InlineData("/api/v1/parking-viewer/slots?lotId=1&floorId=B1")]
     [InlineData("/api/v1/parking-viewer/floors/B1/slots?lotId=1")]
-    public async Task GetViewerAliases_ReturnViewerSlots(string path)
+    public async Task GetViewerAliases_ReturnGoneWithoutSampleSlots(string path)
     {
         var response = await _client.GetAsync(path);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("B1-A01", await response.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
+        Assert.DoesNotContain("B1-A01", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

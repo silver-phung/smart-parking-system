@@ -53,8 +53,24 @@ public class ParkingSessionConfiguration : IEntityTypeConfiguration<ParkingSessi
         // Anti-Passback: No duplicate active/paid sessions for the same vehicle plate
         builder.HasIndex(s => s.PlateNumber)
             .IsUnique()
-            .HasFilter("status IN ('ACTIVE', 'PAID')")
+            .HasFilter("status IN ('ACTIVE', 'PAID') AND \"VerificationStatus\" <> 'WAITING_VERIFICATION'")
             .HasDatabaseName("uq_parking_sessions_active_plate");
+
+        builder.HasAlternateKey(s => new { s.Id, s.LotId });
+        builder.HasOne(s => s.Zone).WithMany().HasForeignKey(s => new { s.ZoneId, s.LotId })
+            .HasPrincipalKey(z => new { z.Id, z.LotId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(s => s.Policy).WithMany().HasForeignKey(s => s.PolicyId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(s => s.EntryEventId).IsUnique();
+        builder.HasIndex(s => s.RecognitionId).IsUnique();
+        builder.HasOne<StoredImage>().WithMany().HasForeignKey(s => s.EntryImageId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(s => s.CurrentSlotId).IsUnique()
+            .HasFilter("status IN ('ACTIVE','PAID') AND \"VerificationStatus\" = 'VERIFIED'")
+            .HasDatabaseName("uq_verified_session_slot");
+        builder.Property(s => s.Revision).IsConcurrencyToken();
+        builder.Property(s => s.VerificationStatus).HasMaxLength(30).HasDefaultValue("LEGACY");
+        builder.Property(s => s.TemporaryPlateNumber).HasMaxLength(64);
+        builder.Property(s => s.EntryRequestHash).HasMaxLength(64);
+        builder.Property(s => s.FuelType).HasMaxLength(20);
 
         builder.Property(s => s.CheckInTime)
             .HasColumnName("check_in_time")

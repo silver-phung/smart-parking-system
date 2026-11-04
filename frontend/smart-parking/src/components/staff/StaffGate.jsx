@@ -164,6 +164,7 @@ export function StaffExit({
   onBusyChange,
 }) {
   const [mode, setMode] = useState("plate");
+  const [exitTicketCode, setExitTicketCode] = useState("");
   const [query, setQuery] = useState("");
   const [session, setSession] = useState(null);
   const lookupId = useRef(initialSessionId || null);
@@ -198,6 +199,7 @@ export function StaffExit({
     return () => controller.abort();
   }, [initialSessionId, lot.lotId, revision]);
   const clearLookup = () => {
+    setExitTicketCode("");
     setSession(null);
     lookupId.current = null;
     setCapture(emptyCapture());
@@ -213,6 +215,7 @@ export function StaffExit({
     onBusyChange(true);
     try {
       const found = await staffApi.findSession(lot.lotId, query, mode);
+      setExitTicketCode(found.ticketCode || "");
       lookupId.current = found.id;
       setSession(found);
     } catch (error) {
@@ -238,6 +241,7 @@ export function StaffExit({
         lot.lotId,
         capture.plate,
         imageUrl,
+        exitTicketCode,
       );
       if (!result?.data?.id)
         throw new Error(
@@ -276,11 +280,12 @@ export function StaffExit({
               }}
             >
               <option value="plate">Biển số xe</option>
+              <option value="ticket">Mã vé</option>
               <option value="id">Mã phiên</option>
             </select>
           </label>
           <label className="staff-field">
-            {mode === "id" ? "Mã phiên" : "Biển số cần tìm"}
+            {mode === "id" ? "Mã phiên" : mode === "ticket" ? "Mã vé" : "Biển số cần tìm"}
             <input
               value={query}
               onChange={(event) => {
@@ -338,6 +343,11 @@ export function StaffExit({
               </div>
               <StaffError error={action.error} />
               <form onSubmit={submit} aria-label="Xác nhận xe ra">
+                {session.verificationStatus && session.verificationStatus !== "LEGACY" && (
+                  <label className="staff-field">Mã vé đã đối chiếu
+                    <input required maxLength={40} disabled={busy} value={exitTicketCode} onChange={event => setExitTicketCode(event.target.value)} />
+                  </label>
+                )}
                 <PlateCapture
                   title="Ảnh tại cổng ra"
                   plateLabel="Biển số thực tế tại cổng ra"

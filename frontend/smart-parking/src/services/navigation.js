@@ -8,6 +8,7 @@ export const dashboardPath = (role) => dashboardPaths[role] || "/";
 export const roleNavigation = {
   ADMIN: [
     ["/admin", "Tổng quan"],
+    ["/admin/parking-settings", "Khu & chính sách"],
     ["/admin/people", "Tài khoản"],
     ["/admin/people?view=assignments", "Phân công"],
     ["/parking", "Xem bãi đỗ"],

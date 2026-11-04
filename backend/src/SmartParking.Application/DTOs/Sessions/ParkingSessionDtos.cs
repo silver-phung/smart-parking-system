@@ -10,6 +10,10 @@ public class ParkingSessionDto
     public long? VehicleId { get; set; }
     public long? BookingId { get; set; }
     public string PlateNumber { get; set; } = string.Empty;
+    public string VerificationStatus { get; set; } = "LEGACY";
+    public int? ZoneId { get; set; }
+    public long? PolicyId { get; set; }
+    public long Revision { get; set; }
     public DateTime CheckInTime { get; set; }
     public DateTime? CheckOutTime { get; set; }
     public long? CurrentSlotId { get; set; }
@@ -42,6 +46,8 @@ public class CheckInRequestDto
 
 public class CheckOutRequestDto
 {
+    [MaxLength(40)]
+    public string? TicketCode { get; set; }
     [MaxLength(500, ErrorMessage = "URL hình ảnh check-out không được vượt quá 500 ký tự.")]
     public string? CheckOutImageUrl { get; set; }
 
