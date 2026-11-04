@@ -11,7 +11,6 @@ export const roleNavigation = {
     ["/admin/people", "Tài khoản"],
     ["/admin/people?view=assignments", "Phân công"],
     ["/parking", "Xem bãi đỗ"],
-    ["/parking/3d", "Giám sát 3D"],
   ],
   MANAGER: [
     ["/manager", "Tổng quan"],
@@ -27,7 +26,6 @@ export const roleNavigation = {
   ],
   USER: [
     ["/customer", "Bãi đỗ"],
-    ["/parking/3d", "Giám sát 3D"],
     ["/customer/sessions", "Phiên gửi xe"],
     ["/customer/profile", "Hồ sơ & xe"],
   ],

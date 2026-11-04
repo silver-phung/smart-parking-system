@@ -162,19 +162,14 @@ function DashboardContent({ publicView = false }) {
             Xem sức chứa và trạng thái từng vị trí từ dữ liệu hệ thống.
           </p>
         </div>
-        <div className="customer-page__actions">
-          <Link to="/parking/3d" className="btn btn--yellow">
-            Mở bản đồ 3D
-          </Link>
-          <Link
-            to={publicView ? "/login" : "/customer/sessions"}
-            className="btn btn--primary"
-          >
-            {publicView
-              ? "Đăng nhập để xem phiên của tôi"
-              : "Phiên gửi xe của tôi"}
-          </Link>
-        </div>
+        <Link
+          to={publicView ? "/login" : "/customer/sessions"}
+          className="btn btn--primary"
+        >
+          {publicView
+            ? "Đăng nhập để xem phiên của tôi"
+            : "Phiên gửi xe của tôi"}
+        </Link>
       </div>
 
       <div className="customer-card">
