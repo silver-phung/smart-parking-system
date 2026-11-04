@@ -11,11 +11,13 @@ export const roleNavigation = {
     ["/admin/people", "Tài khoản"],
     ["/admin/people?view=assignments", "Phân công"],
     ["/parking", "Xem bãi đỗ"],
+    ["/parking-3d", "Sơ đồ 3D"],
   ],
   MANAGER: [
     ["/manager", "Tổng quan"],
     ["/manager?view=slots", "Ô đỗ / bảo trì"],
     ["/manager?view=sessions", "Xe đang gửi"],
+    ["/parking-3d", "Sơ đồ 3D"],
   ],
   STAFF: [
     ["/staff?view=entry", "Xe vào"],
@@ -23,11 +25,13 @@ export const roleNavigation = {
     ["/staff?view=verify", "Xác minh ô"],
     ["/staff?view=sessions", "Xe đang gửi"],
     ["/staff?view=dispatches", "Điều phối"],
+    ["/parking-3d", "Sơ đồ 3D"],
   ],
   USER: [
     ["/customer", "Bãi đỗ"],
     ["/customer/sessions", "Phiên gửi xe"],
     ["/customer/profile", "Hồ sơ & xe"],
+    ["/parking-3d", "Sơ đồ 3D"],
   ],
 };
 export function navIsActive(target, pathname, search) {

@@ -136,6 +136,12 @@ export default function Header() {
               >
                 Xem bãi đỗ
               </Link>
+              <Link
+                to="/parking-3d"
+                className={pathname === "/parking-3d" ? "is-active" : ""}
+              >
+                Sơ đồ 3D
+              </Link>
               <AnchorLink id="gioi-thieu">Giới thiệu</AnchorLink>
               <AnchorLink id="cach-hoat-dong">Cách thức hoạt động</AnchorLink>
               <AnchorLink id="he-thong">Hệ thống</AnchorLink>

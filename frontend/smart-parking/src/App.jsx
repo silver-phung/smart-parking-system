@@ -1,5 +1,5 @@
 import { Link, Routes, Route, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
@@ -13,6 +13,9 @@ import StaffWorkspace from "./pages/StaffWorkspace.jsx";
 import AdminPeople from "./pages/AdminPeople.jsx";
 import CustomerSessions from "./pages/CustomerSessions.jsx";
 import ProjectInformation from "./pages/ProjectInformation.jsx";
+import "./parking-3d.css";
+
+const Parking3DViewer = lazy(() => import("./pages/Parking3DViewer.jsx"));
 
 export default function App() {
   const { pathname, hash } = useLocation();
@@ -35,6 +38,14 @@ export default function App() {
           <Route path="/thong-tin/:topic" element={<ProjectInformation />} />
           <Route path="/customer" element={<CustomerDashboard />} />
           <Route path="/parking" element={<CustomerDashboard publicView />} />
+          <Route
+            path="/parking-3d"
+            element={
+              <Suspense fallback={<section className="parking3d-route-loading">Đang tải mô hình 3D…</section>}>
+                <Parking3DViewer />
+              </Suspense>
+            }
+          />
           <Route path="/customer/sessions" element={<CustomerSessions />} />
           <Route path="/customer/profile" element={<CustomerProfile />} />
           <Route path="/admin" element={<AdminDashboard />} />

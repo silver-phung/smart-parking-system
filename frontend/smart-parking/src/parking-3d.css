@@ -1,0 +1,211 @@
+.parking3d-route-loading {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  color: #0f3e96;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.parking3d-page {
+  min-height: calc(100vh - var(--site-header-height, 84px));
+  padding: 18px;
+  color: #e8f4ff;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(22, 114, 176, 0.22), transparent 38%),
+    linear-gradient(160deg, #07111b, #0b1724 58%, #071019);
+}
+
+.parking3d-shell {
+  width: min(1600px, 100%);
+  margin: 0 auto;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  border-radius: 22px;
+  overflow: hidden;
+  background: #071019;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+}
+
+.parking3d-toolbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(9, 21, 33, 0.98);
+}
+
+.parking3d-title { min-width: 0; }
+.parking3d-title h1 { font-size: clamp(23px, 2.4vw, 34px); line-height: 1.15; }
+.parking3d-title p { margin-top: 4px; color: #9fb4c5; font-size: 13px; }
+.parking3d-kicker { display: block; margin-bottom: 5px; color: #38bdf8; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+
+.parking3d-selectors { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
+.parking3d-selectors label { display: grid; gap: 4px; color: #9fb4c5; font-size: 11px; font-weight: 700; }
+.parking3d-selectors select {
+  min-width: 220px;
+  min-height: 44px;
+  padding: 0 38px 0 13px;
+  border: 1px solid rgba(56, 189, 248, 0.38);
+  border-radius: 10px;
+  color: #e8f4ff;
+  background: #122235;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+.parking3d-selectors label:last-child select { min-width: 140px; }
+
+.parking3d-stage { position: relative; height: clamp(650px, 77vh, 920px); overflow: hidden; background: #071019; }
+.parking3d-viewport, .parking3d-viewport canvas { width: 100%; height: 100%; display: block; }
+.parking3d-viewport canvas { cursor: grab; }
+.parking3d-viewport canvas:active { cursor: grabbing; }
+
+.parking3d-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  color: #bae6fd;
+  background: rgba(4, 12, 20, 0.72);
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.parking3d-summary,
+.parking3d-flow-card,
+.parking3d-vehicle-card,
+.parking3d-elevator-panel {
+  position: absolute;
+  z-index: 8;
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  border-radius: 14px;
+  background: rgba(6, 18, 30, 0.9);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+}
+
+.parking3d-summary { top: 16px; left: 16px; display: grid; gap: 3px; min-width: 220px; padding: 13px 15px; }
+.parking3d-summary > strong { color: #7dd3fc; font-size: 15px; }
+.parking3d-summary > span { color: #b9c8d5; font-size: 12px; }
+.parking3d-summary__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 10px; margin-top: 8px; font-size: 11px; }
+.parking3d-summary__grid span { display: flex; align-items: center; gap: 6px; }
+.parking3d-summary__grid i,
+.parking3d-legend i { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+.parking3d-summary__grid .is-free { background: #15b89a; }
+.parking3d-summary__grid .is-busy { background: #e14c58; }
+.parking3d-summary__grid .is-reserved { background: #f4b942; }
+.parking3d-summary__grid .is-maintenance { background: #f58a36; }
+
+.parking3d-flow-card { top: 16px; right: 16px; width: min(390px, calc(100% - 32px)); padding: 13px 15px; }
+.parking3d-flow-card span { color: #facc15; font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+.parking3d-flow-card p { margin-top: 5px; color: #d9e5ee; font-size: 12px; line-height: 1.5; }
+
+.parking3d-vehicle-card { left: 16px; bottom: 104px; width: 260px; padding: 15px; }
+.parking3d-vehicle-card > button { position: absolute; top: 7px; right: 9px; border: 0; color: #9fb4c5; background: transparent; font-size: 22px; cursor: pointer; }
+.parking3d-vehicle-card > span { display: block; color: #38bdf8; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.parking3d-vehicle-card > strong { display: block; margin: 3px 0 9px; font-size: 21px; }
+.parking3d-vehicle-card dl { display: grid; gap: 6px; margin: 0; }
+.parking3d-vehicle-card dl div { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid rgba(148, 163, 184, 0.16); padding-top: 5px; }
+.parking3d-vehicle-card dt { color: #9fb4c5; font-size: 11px; }
+.parking3d-vehicle-card dd { margin: 0; text-align: right; font-size: 11px; font-weight: 700; }
+.parking3d-vehicle-card small { display: block; margin-top: 9px; color: #facc15; font-size: 10px; line-height: 1.4; }
+
+.parking3d-elevator-panel { right: 16px; bottom: 104px; width: 245px; padding: 14px; text-align: center; }
+.parking3d-elevator-panel > span { display: block; color: #7dd3fc; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.parking3d-elevator-panel > strong { display: block; margin: 5px 0 10px; font-size: 19px; }
+.parking3d-elevator-panel > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.parking3d-elevator-panel button {
+  min-height: 38px;
+  border: 1px solid #38bdf8;
+  border-radius: 9px;
+  color: #e8f4ff;
+  background: rgba(14, 116, 168, 0.32);
+  font-weight: 800;
+  cursor: pointer;
+}
+.parking3d-elevator-panel button:disabled { opacity: .32; cursor: not-allowed; }
+
+.parking3d-view-controls {
+  position: absolute;
+  z-index: 9;
+  bottom: 18px;
+  left: 50%;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 14px;
+  background: rgba(6, 18, 30, 0.9);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+.parking3d-view-controls button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 9px;
+  color: #dcebf6;
+  background: #142438;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.parking3d-view-controls button:hover,
+.parking3d-view-controls button.is-active { border-color: #38bdf8; color: #fff; background: #087fb9; }
+.parking3d-view-controls .parking3d-elevator-shortcut { border-color: rgba(250, 204, 21, 0.5); color: #fde68a; }
+
+.parking3d-help {
+  position: absolute;
+  z-index: 7;
+  right: 16px;
+  bottom: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 14px;
+  max-width: 420px;
+  color: #aebfcd;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.parking3d-legend { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 13px 22px; color: #bbcad6; background: #0b1825; font-size: 11px; }
+.parking3d-legend span { display: flex; align-items: center; gap: 7px; }
+.parking3d-legend .zone-monthly { background: #15b89a; }
+.parking3d-legend .zone-visitor { background: #2f8de4; }
+.parking3d-legend .state-occupied { background: #e14c58; }
+.parking3d-legend .state-reserved { background: #f4b942; }
+.parking3d-legend .state-maintenance { background: #f58a36; }
+.parking3d-legend .state-inactive { background: #58636d; }
+
+@media (max-width: 980px) {
+  .parking3d-page { padding: 0; }
+  .parking3d-shell { border: 0; border-radius: 0; }
+  .parking3d-toolbar { align-items: stretch; flex-direction: column; }
+  .parking3d-selectors { justify-content: stretch; }
+  .parking3d-selectors label { flex: 1 1 220px; }
+  .parking3d-selectors select { width: 100%; min-width: 0; }
+  .parking3d-stage { height: 760px; }
+  .parking3d-help { display: none; }
+  .parking3d-view-controls { left: 10px; right: 10px; overflow-x: auto; transform: none; }
+  .parking3d-view-controls button { flex: 1 0 auto; }
+}
+
+@media (max-width: 620px) {
+  .parking3d-toolbar { padding: 14px; }
+  .parking3d-stage { height: 700px; }
+  .parking3d-summary { top: 10px; left: 10px; min-width: 190px; }
+  .parking3d-flow-card { top: 150px; right: 10px; width: 210px; }
+  .parking3d-flow-card p { font-size: 10px; }
+  .parking3d-vehicle-card { left: 10px; bottom: 102px; width: 225px; }
+  .parking3d-elevator-panel { right: 10px; bottom: 102px; width: 210px; }
+  .parking3d-view-controls .parking3d-elevator-shortcut { display: none; }
+  .parking3d-legend { padding: 11px 14px; gap: 8px 14px; }
+}
