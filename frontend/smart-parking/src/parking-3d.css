@@ -114,21 +114,6 @@ body.p3d-viewer-active { min-width: 0; overflow: hidden; }
 }
 .p3d-field select:focus { outline: 2px solid rgba(245, 196, 0, 0.35); border-color: var(--p3d-yellow); }
 
-.p3d-flow-card {
-  display: grid;
-  gap: 3px;
-  margin: 12px 0;
-  padding: 10px 11px;
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  border-left: 3px solid #38bdf8;
-  border-radius: 7px;
-  background: rgba(15, 23, 42, 0.62);
-}
-.p3d-flow-card--monthly { border-left-color: #f5c400; }
-.p3d-flow-card span { color: #8ba0ad; font-size: 8px; letter-spacing: 0.13em; }
-.p3d-flow-card strong { color: #f8fafc; font-size: 10px; letter-spacing: 0.05em; }
-.p3d-flow-card small { color: #afc0ca; font-size: 9px; line-height: 1.35; }
-
 .p3d-meter { margin: 16px 0 13px; padding-top: 14px; border-top: 1px solid var(--p3d-line); }
 .p3d-meter > div:first-child { display: flex; align-items: center; justify-content: space-between; font-size: 10px; }
 .p3d-meter strong { color: var(--p3d-yellow); font-size: 15px; }

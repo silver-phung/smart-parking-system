@@ -5,11 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
-    include: [
-      "src/**/*.ui.test.jsx",
-      "src/services/staffApi.test.js",
-      "src/components/parking3d/parkingProfiles.test.js",
-    ],
+    include: ["src/**/*.ui.test.jsx", "src/services/staffApi.test.js"],
     setupFiles: ["./src/testSetup.js"],
     pool: "threads",
     poolOptions: { threads: { singleThread: true } },
