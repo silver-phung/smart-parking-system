@@ -1,6 +1,7 @@
 import { Component } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout.jsx";
+import GoogleLoginButton from "../components/GoogleLoginButton.jsx";
 import { apiRequest } from "../services/api.js";
 import { setAuthSession } from "../services/authSession.js";
 
@@ -22,14 +23,22 @@ class LoginForm extends Component {
 
   onSubmit = async (event) => {
     event.preventDefault();
+    await this.signIn("/v1/auth/login", {
+      username: this.state.username.trim(),
+      password: this.state.password,
+    });
+  };
+
+  onGoogleCredential = (credential, nonce) => this.signIn("/v1/auth/google", { credential, nonce });
+
+  signIn = async (path, body) => {
+    if (this.signingIn) return false;
+    this.signingIn = true;
     this.setState({ loading: true, error: "" });
     try {
-      const response = await apiRequest("/v1/auth/login", {
+      const response = await apiRequest(path, {
         method: "POST",
-        body: JSON.stringify({
-          username: this.state.username.trim(),
-          password: this.state.password,
-        }),
+        body: JSON.stringify(body),
         skipAuth: true,
       });
       if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.userProfile) {
@@ -43,9 +52,12 @@ class LoginForm extends Component {
         USER: "/customer",
       };
       this.props.navigate(dashboardPaths[response.data.userProfile.role] || "/");
+      return true;
     } catch (error) {
       this.setState({ error: error.message });
+      return false;
     } finally {
+      this.signingIn = false;
       this.setState({ loading: false });
     }
   };
@@ -98,6 +110,7 @@ class LoginForm extends Component {
               {!this.state.loading && <span aria-hidden="true">→</span>}
             </button>
           </form>
+          <GoogleLoginButton onCredential={this.onGoogleCredential} disabled={this.state.loading} />
           <p className="auth-switch">
             Chưa có tài khoản? <Link to="/register">Đăng ký</Link>
           </p>

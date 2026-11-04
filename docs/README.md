@@ -77,6 +77,6 @@ Các PDF/DOCX trong thư mục `/Users/tim/FPTU/C#/SmartParkingSystem_OJT/Docs` 
 
 ## Bàn giao Sprint 4 của Dương
 
-Xem [hợp đồng API, migration và kiểm thử](handover/SPRINT4_DUONG_HANDOVER.md) cùng [ADR 006](decisions/ADR-006-versioned-parking-operations.md) cho khu bãi, chính sách có phiên bản, vé và xác minh xe tại ô.
+Xem [hợp đồng API, migration và kiểm thử](handover/PARKING_OPERATIONS_HANDOVER.md) cùng [ADR 006](decisions/ADR-006-versioned-parking-operations.md) cho khu bãi, chính sách có phiên bản, vé và xác minh xe tại ô.
 
 Hướng dẫn [khởi tạo Sprint 4 trên Neon](operations/neon-microservices.md) kèm SQL tạo và kiểm tra schema trong `scripts/neon/sql`.

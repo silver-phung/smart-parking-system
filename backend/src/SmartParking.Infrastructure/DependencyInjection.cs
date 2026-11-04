@@ -17,10 +17,10 @@ public static class DependencyInjection
     {
         // 1. Database Context
         var useSprint4 = configuration.GetValue<bool>("Sprint4:Enabled");
-        var connectionString = configuration.GetConnectionString(useSprint4 ? "Sprint4Core" : "DefaultConnection");
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
         if (useSprint4 && (string.IsNullOrWhiteSpace(connectionString) ||
-            new NpgsqlConnectionStringBuilder(connectionString).Database != "smartparking_core_sprint4"))
-            throw new InvalidOperationException("ConnectionStrings:Sprint4Core must select smartparking_core_sprint4.");
+            new NpgsqlConnectionStringBuilder(connectionString).Database != "smartparking"))
+            throw new InvalidOperationException("ConnectionStrings:DefaultConnection must select the existing smartparking database.");
         if (!string.IsNullOrEmpty(connectionString))
         {
             services.AddDbContext<SmartParkingDbContext>(options =>

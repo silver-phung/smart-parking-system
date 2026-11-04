@@ -42,21 +42,22 @@ public class DependencyInjectionTests
     }
 
     [Fact]
-    public void Sprint4_UsesDedicatedCoreDatabaseAndRemoteRecognition()
+    public void Sprint4_UsesExistingCoreDatabaseAndRemoteRecognition()
     {
-        var configuration = Sprint4Configuration("smartparking_core_sprint4");
+        var configuration = Sprint4Configuration("smartparking");
         using var provider = new ServiceCollection().AddInfrastructureServices(configuration).BuildServiceProvider();
         using var scope = provider.CreateScope();
 
         var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
-        Assert.Equal("smartparking_core_sprint4", db.Database.GetDbConnection().Database);
+        Assert.Equal("smartparking", db.Database.GetDbConnection().Database);
         Assert.Null(scope.ServiceProvider.GetService<AiRecognitionDbContext>());
         Assert.IsType<RecognitionServiceClient>(scope.ServiceProvider.GetRequiredService<IStaffDetectionService>());
         Assert.IsType<RecognitionServiceClient>(scope.ServiceProvider.GetRequiredService<IRecognitionEvidenceReader>());
     }
 
     [Theory]
-    [InlineData("smartparking")]
+    [InlineData("smartparking_parking_operations")]
+    [InlineData("smartparking_core_sprint4")]
     [InlineData("smartparking_identity")]
     [InlineData("smartparking_recognition")]
     public void Sprint4_RejectsOtherDatabasesForCore(string database)
@@ -71,8 +72,8 @@ public class DependencyInjectionTests
             ["Sprint4:Enabled"] = "true",
             ["Sprint4:RecognitionUrl"] = "http://127.0.0.1:5296/",
             ["Sprint4:RecognitionKey"] = new string('x', 32),
-            ["ConnectionStrings:Sprint4Core"] = $"Host=localhost;Database={database};Username=test",
-            ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=smartparking;Username=test",
+            ["ConnectionStrings:Sprint4Core"] = "Host=localhost;Database=smartparking_parking_operations;Username=test",
+            ["ConnectionStrings:DefaultConnection"] = $"Host=localhost;Database={database};Username=test",
             ["ConnectionStrings:AiRecognitionConnection"] = "Host=localhost;Database=smartparking_recognition;Username=test"
         }).Build();
 }

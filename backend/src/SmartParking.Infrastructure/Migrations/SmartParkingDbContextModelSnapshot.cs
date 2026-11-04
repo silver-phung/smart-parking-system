@@ -229,8 +229,7 @@ namespace SmartParking.Infrastructure.Migrations
                         .HasDefaultValueSql("now()");
 
                     b.Property<string>("Notes")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
+                        .HasColumnType("text")
                         .HasColumnName("notes");
 
                     b.Property<long>("SessionId")

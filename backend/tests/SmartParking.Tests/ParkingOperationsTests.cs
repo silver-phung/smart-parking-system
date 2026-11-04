@@ -141,11 +141,14 @@ public class ParkingOperationsTests
     {
         await using var f = await Create(); var verified = await f.Verify(await f.Enter());
         await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.Move(1, verified.Id, new(2, verified.Revision, false, true, "Chuyển xe"), 1, "ADMIN", default));
-        var moved = await f.Service.Move(1, verified.Id, new(2, verified.Revision, true, true, "Chuyển xe theo yêu cầu"), 1, "ADMIN", default);
+        var reason = new string('a', 500);
+        var moved = await f.Service.Move(1, verified.Id, new(2, verified.Revision, true, true, reason), 1, "ADMIN", default);
         Assert.Equal(verified.Id, moved.Id); Assert.Equal(2L, moved.CurrentSlotId);
         Assert.Equal("EMPTY", (await f.Db.ParkingSlots.FindAsync(1L))!.PhysicalStatus);
         Assert.Equal("OCCUPIED", (await f.Db.ParkingSlots.FindAsync(2L))!.PhysicalStatus);
         Assert.Equal(2, await f.Db.ParkingDispatches.CountAsync());
+        Assert.Equal($"Staff #1: {reason}", await f.Db.ParkingDispatches
+            .Where(d => d.ActualSlotId == 2).Select(d => d.Notes).SingleAsync());
         Assert.Equal("STALE_DATA", (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.Move(1, verified.Id, new(1, verified.Revision, true, true, "Lặp thao tác"), 1, "ADMIN", default))).Code);
     }
     [Fact]
@@ -155,10 +158,12 @@ public class ParkingOperationsTests
         await f.Service.ChangeTicket(1, "VE-001", new("LOST", null, "Khách báo mất"), 2, "STAFF", default);
         Assert.Equal("LOST", (await f.Service.Lookup(1, "VE-001", 1, "ADMIN", default)).TicketStatus);
         await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.ChangeTicket(1, "VE-001", new("REPLACE", "VE-NEW", "Đối chiếu"), 2, "STAFF", default));
-        await f.Service.ChangeTicket(1, "VE-001", new("REPLACE", "VE-NEW", "Quản lý đối chiếu"), 1, "ADMIN", default);
+        var reason = new string('a', 500);
+        await f.Service.ChangeTicket(1, "VE-001", new("REPLACE", "VE-NEW", reason), 1, "ADMIN", default);
         Assert.Equal(entry.Id, (await f.Service.Lookup(1, "VE-NEW", 1, "ADMIN", default)).Id);
         Assert.Single(await f.Db.ParkingSessions.ToListAsync());
-        Assert.Single(await f.Db.ParkingTickets.Where(t => t.Status == "ISSUED").ToListAsync());
+        var replacement = await f.Db.ParkingTickets.SingleAsync(t => t.Status == "ISSUED");
+        Assert.Equal(reason, replacement.Reason);
         Assert.Equal("REPLACED", (await f.Service.Lookup(1, "VE-001", 1, "ADMIN", default)).TicketStatus);
         Assert.Equal(404, (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.Lookup(2, "VE-NEW", 1, "ADMIN", default))).Status);
     }

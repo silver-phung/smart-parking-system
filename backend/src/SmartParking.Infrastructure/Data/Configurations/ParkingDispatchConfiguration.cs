@@ -87,7 +87,7 @@ public class ParkingDispatchConfiguration : IEntityTypeConfiguration<ParkingDisp
 
         builder.Property(d => d.Notes)
             .HasColumnName("notes")
-            .HasMaxLength(255);
+            .HasColumnType("text");
 
         builder.Property(d => d.CreatedAt)
             .HasColumnName("created_at")

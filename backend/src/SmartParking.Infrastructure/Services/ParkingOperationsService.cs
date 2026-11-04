@@ -301,15 +301,16 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
             if (r.Action == "LOST") Require(ticket.Status == "ISSUED", "Vé không còn hiệu lực.");
             else Require(ticket.Status is "ISSUED" or "LOST" || (r.Action == "REPLACE" && ticket.Status == "REVOKED"), "Vé đã được thay hoặc thu hồi.");
             var before = ticket.Status;
+            var reason = r.Reason.Trim();
             ticket.Status = r.Action switch { "LOST" => "LOST", "REPLACE" => "REPLACED", _ => "REVOKED" };
-            ticket.ClosedBy = actor; ticket.ClosedAt = DateTime.UtcNow; ticket.Reason = r.Reason.Trim();
+            ticket.ClosedBy = actor; ticket.ClosedAt = DateTime.UtcNow; ticket.Reason = reason;
             await db.SaveChangesAsync(ct); // releases the partial unique session binding before issuing replacement
             string? replacement = null;
             if (r.Action == "REPLACE") {
                 replacement = TicketCode(r.ReplacementCode);
                 Require(!await db.ParkingTickets.AnyAsync(t => t.Code == replacement, ct), "Mã vé thay thế đã được sử dụng.");
                 db.ParkingTickets.Add(new ParkingTicket { LotId = lotId, Code = replacement,
-                    SessionId = ticket.SessionId, IssuedBy = actor, Reason = $"Thay vé {code}: {r.Reason.Trim()}" });
+                    SessionId = ticket.SessionId, IssuedBy = actor, Reason = reason });
             }
             Audit("CHANGE_TICKET", "parking_tickets", ticket.Id, actor, new { Status = before },
                 new { ticket.Status, ReplacementCode = replacement, ticket.Reason, ticket.SessionId });
@@ -323,11 +324,12 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
         var plate = PlateNumberHelper.NormalizeForComparison(r.PlateNumber);
         Require(plate.Length is >= 3 and <= 20 && plate.All(char.IsAsciiLetterOrDigit) && r.FuelType is "PETROL" or "ELECTRIC" or "HYBRID" && r.VehicleObserved,
             "Cần biển số, nhiên liệu và xác nhận đã đối chiếu xe thực tế tại ô.", status: 400);
+        Require(r.Reason is null || r.Reason.Length <= 500, "Lý do tối đa 500 ký tự.", status: 400);
         return await Write(lotId, async () => {
             var s = await LoadSession(lotId, id, r.ExpectedRevision, ct);
             Require(s.VerificationStatus == "WAITING_VERIFICATION" && s.Status == "ACTIVE", "Lượt không còn chờ xác minh.");
             if (!PlateNumberHelper.IsMatch(s.TemporaryPlateNumber, plate))
-                Require(!string.IsNullOrWhiteSpace(r.Reason) && r.Reason.Length <= 500, "Cần lý do nhập tay hoặc sửa biển số AI.", status: 400);
+                Require(!string.IsNullOrWhiteSpace(r.Reason), "Cần lý do nhập tay hoặc sửa biển số AI.", status: 400);
             // Canonical comparison also detects separators in legacy plates.
             var otherPlates = await db.ParkingSessions.Where(x => x.Id != id && x.VerificationStatus != "WAITING_VERIFICATION" &&
                 (x.Status == "ACTIVE" || x.Status == "PAID")).Select(x => x.PlateNumber).ToListAsync(ct);

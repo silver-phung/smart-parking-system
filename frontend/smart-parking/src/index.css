@@ -242,6 +242,14 @@ section[id] { scroll-margin-top: 16px; }
 .auth-switch { margin-top: 16px; color: var(--muted); text-align: center; font-size: 13px; }
 .auth-switch a { font-weight: 700; text-decoration: none; }
 .auth-switch a:hover { text-decoration: underline; }
+.auth-google { display: grid; justify-items: center; gap: 8px; margin-top: 16px; }
+.auth-google__divider { display: flex; align-items: center; gap: 12px; width: 100%; color: var(--muted); font-size: 13px; }
+.auth-google__divider::before, .auth-google__divider::after { content: ""; height: 1px; background: #dce4ee; flex: 1; }
+.auth-google__button { display: flex; justify-content: center; width: 100%; }
+.auth-google__button:empty { display: block; }
+.auth-google__placeholder { width: 100%; min-height: 40px; border: 1px solid #d3dbe6; border-radius: 6px; background: #fff; color: #344054; font: inherit; font-size: 14px; }
+.auth-google__placeholder:disabled { opacity: .65; }
+.auth-google small { color: var(--muted); }
 .auth-terms { margin-top: 28px; color: #8793a2; text-align: center; font-size: 11px; }
 
 /* ----- Customer pages ----- */

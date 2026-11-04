@@ -69,12 +69,12 @@ public class ParkingOperationsPostgresTests
             return await new ParkingOperationsService(db, new ParkingAuthorizationService(db), new RecognitionEvidenceReader(ai)).Enter(LotId,
                 new(eventId, ZoneId, ticket, null, null, "Manual entry in isolated test"), ActorId, "ADMIN", default);
         }
-        public async Task<OperationSessionDto?> TryVerify(OperationSessionDto s, string plate)
+        public async Task<OperationSessionDto?> TryVerify(OperationSessionDto s, string plate, string reason = "Observed at slot")
         {
             await using var db = Context();
             await using var ai = new AiRecognitionDbContext(new DbContextOptionsBuilder<AiRecognitionDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
             try { return await new ParkingOperationsService(db, new ParkingAuthorizationService(db), new RecognitionEvidenceReader(ai)).Verify(LotId,
-                s.Id, new(SlotId, plate, "PETROL", s.Revision, true, "Observed at slot"), ActorId, "ADMIN", default); }
+                s.Id, new(SlotId, plate, "PETROL", s.Revision, true, reason), ActorId, "ADMIN", default); }
             catch (ParkingOperationException e) when (e.Status == 409) { return null; }
         }
         public async ValueTask DisposeAsync()
@@ -115,10 +115,13 @@ public class ParkingOperationsPostgresTests
     {
         await using var f = await Database.Create();
         var a = await f.Enter("VE-PG001", Guid.NewGuid()); var b = await f.Enter("VE-PG002", Guid.NewGuid());
-        var results = await Task.WhenAll(f.TryVerify(a, "NEW111"), f.TryVerify(b, "NEW222"));
-        Assert.Single(results.Where(s => s != null));
+        var reason = new string('a', 500);
+        var results = await Task.WhenAll(f.TryVerify(a, "NEW111", reason), f.TryVerify(b, "NEW222", reason));
+        var winner = Assert.Single(results.OfType<OperationSessionDto>());
         await using var db = f.Context();
         Assert.Equal(1, await db.ParkingSessions.CountAsync(s => s.CurrentSlotId == f.SlotId));
         Assert.Equal("OCCUPIED", (await db.ParkingSlots.SingleAsync(s => s.Id == f.SlotId)).PhysicalStatus);
+        Assert.Equal($"Staff #{f.ActorId}: {reason}", await db.ParkingDispatches
+            .Where(d => d.SessionId == winner.Id).Select(d => d.Notes).SingleAsync());
     }
 }

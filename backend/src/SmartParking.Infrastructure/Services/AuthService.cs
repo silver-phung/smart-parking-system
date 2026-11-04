@@ -455,7 +455,26 @@ public class AuthService : IAuthService
             return AuthResult<AuthResponseDto>.Failure("Tên đăng nhập hoặc mật khẩu không chính xác.", 401);
         }
 
-        // 3. Password is valid: now check lockout and account states
+        return await StartSessionAsync(user, userAgent, clientIp, cancellationToken);
+    }
+
+    public async Task<AuthResult<AuthResponseDto>> LoginWithVerifiedGmailAsync(
+        string email, string? userAgent, string? clientIp, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var user = await _dbContext.Users.Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.Role.Code == Roles.User, cancellationToken);
+
+        if (user is null)
+            return AuthResult<AuthResponseDto>.Failure(
+                "Đăng nhập Google dành cho tài khoản khách đã đăng ký bằng Gmail này.", 403);
+
+        return await StartSessionAsync(user, userAgent, clientIp, cancellationToken);
+    }
+
+    private async Task<AuthResult<AuthResponseDto>> StartSessionAsync(
+        User user, string? userAgent, string? clientIp, CancellationToken cancellationToken)
+    {
         if (user.LockoutEndAt.HasValue && user.LockoutEndAt.Value > DateTime.UtcNow)
         {
             return AuthResult<AuthResponseDto>.Failure("Tài khoản tạm thời bị khóa do nhập sai mật khẩu nhiều lần. Vui lòng thử lại sau 15 phút.", 423);

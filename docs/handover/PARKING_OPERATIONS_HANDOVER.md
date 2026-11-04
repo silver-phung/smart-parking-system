@@ -1,4 +1,4 @@
-# Bàn giao phần Dương Sprint 4
+# Bàn giao vận hành bãi
 
 Ngày 02/11/2026. Bản triển khai bổ sung khu bãi, chính sách có phiên bản, vé và lượt chờ, xác minh xe/nhiên liệu và chuyển ô. Mã nguồn và kiểm thử tự động có trong nhánh hiện tại. Chưa áp migration lên DB dùng chung, chưa duyệt thay nhóm các tham số kinh doanh và chưa xác nhận nghiệm thu môi trường thật.
 
@@ -123,15 +123,7 @@ Check-out vẫn dùng `/api/v1/parking-sessions/{id}/check-out`; bổ sung `tick
 
 ## Migration và triển khai kiểm thử
 
-Core có hai migration mới `20261102083650_AddZonesPoliciesTicketsAndVerification` và `20261102084552_LinkEntryEvidence`. AI có `20261102084556_AddRecognitionContentHash`. Hai context có migration history riêng. Migration core backfill quan hệ khu mà không seed chính sách được duyệt hoặc dữ liệu trình diễn.
-
-Trước khi chạy ứng dụng mới, sao lưu và áp cả hai context trên database kiểm thử được cấu hình riêng. Không chạy lệnh dưới đây với connection mặc định của nhóm khi chưa đối chiếu đúng môi trường:
-
-```powershell
-dotnet ef database update --project backend/src/SmartParking.Infrastructure --startup-project backend/src/SmartParking.Api --context SmartParkingDbContext
-dotnet ef database update --project backend/src/SmartParking.Infrastructure --startup-project backend/src/SmartParking.Api --context AiRecognitionDbContext
-npm --prefix frontend/smart-parking run build
-```
+Core có migration khu/vé, liên kết ảnh đầu vào và lưu lý do xác minh/chuyển ô đầy đủ. Recognition có migration hash ảnh. Hai context có migration history riêng. Nâng cấp database `smartparking` hiện có bằng [hướng dẫn Neon](../operations/neon-microservices.md).
 
 Sau migration, Admin đối chiếu khu backfill với sơ đồ thực, thêm hai cấu trúc FIXED INSIDE/EXTERNAL **trên DB kiểm thử**, cấu hình và duyệt tham số có nguồn quyết định. Bản nháp không mở luồng nhận xe. Ảnh/recognition cũ chưa có hash phải được tải và nhận dạng lại khi dùng cho vé mới; dữ liệu lịch sử cũ được giữ nguyên.
 
