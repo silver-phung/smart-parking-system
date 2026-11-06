@@ -14,6 +14,7 @@ using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Options;
 using SmartParking.Domain.Constants;
 using SmartParking.Infrastructure;
+using SmartParking.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddMemoryCache();
@@ -275,6 +276,7 @@ builder.Services.AddHealthChecks();
 
 // Register Clean Architecture layers
 builder.Services.AddApplicationServices();
+builder.Services.AddParkingPersistence(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var app = builder.Build();

@@ -54,6 +54,7 @@ export default function PlateCapture({
   onChange,
   disabled,
   onWorking,
+  enableRecognition = true,
   title = "Ảnh xe tại cổng",
   plateLabel = "Biển số xe",
 }) {
@@ -128,13 +129,13 @@ export default function PlateCapture({
             <>
               <span className="staff-file-name">{value.file.name}</span>
               <div className="staff-inline-actions">
-                <button
+                {enableRecognition && <button
                   type="button"
                   className="staff-button staff-button--secondary"
                   onClick={detect}
                 >
                   {detecting ? "Đang nhận diện…" : "Nhận diện biển số"}
-                </button>
+                </button>}
                 <button
                   type="button"
                   className="staff-text-button"

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { operationsApi } from "../../services/operationsApi.js";
 import { apiRequest } from "../../services/api.js";
-import { staffApi, validatePhoto } from "../../services/staffApi.js";
+import { validatePhoto } from "../../services/staffApi.js";
 import { Notice, StaffError, useStaffAction, useStaffQuery, SafePhoto } from "./StaffUI.jsx";
 import StaffVerification from "./StaffVerification.jsx";
 
@@ -13,17 +13,11 @@ export function TicketEntry({ lot, onChanged, onBusyChange }) {
   const [zoneId, setZone] = useState("");
   const [ticket, setTicket] = useState("");
   const [file, setFile] = useState(null);
-  const [recognition, setRecognition] = useState(null);
   const [imageId, setImageId] = useState(null);
   const [reason, setReason] = useState("");
   const [created, setCreated] = useState(null);
   const request = useRef(null);
   const action = useStaffAction(onBusyChange);
-  const identify = () => action.run(async () => {
-    validatePhoto(file);
-    const result = await staffApi.detect(file);
-    setRecognition(result);
-  });
   const submit = e => {
     e.preventDefault();
     action.run(async () => {
@@ -36,22 +30,22 @@ export function TicketEntry({ lot, onChanged, onBusyChange }) {
           savedId = result.data.id; setImageId(savedId);
         }
         request.current = { eventId: crypto.randomUUID(), zoneId: Number(zoneId), ticketCode: ticket,
-          recognitionId: recognition?.id || null, imageId: savedId, manualReason: reason || null };
+          imageId: savedId, manualReason: reason || null };
       }
       const result = await operationsApi(lot.lotId, "entries", request.current);
       setCreated(result); onChanged();
     });
   };
-  const reset = () => { request.current = null; setCreated(null); setTicket(""); setFile(null); setRecognition(null); setImageId(null); setReason(""); action.setError(null); };
+  const reset = () => { request.current = null; setCreated(null); setTicket(""); setFile(null); setImageId(null); setReason(""); action.setError(null); };
   const locked = action.busy || Boolean(request.current);
   return <section className="staff-panel">
     <h2>Cấp vé và tiếp nhận xe</h2>
-    <p>Biển số AI là gợi ý. Nhân viên tại ô sẽ đối chiếu và xác minh xe thực tế.</p>
+    <p>Nhân viên tại ô sẽ đối chiếu xe thực tế và ghi nhận biển số chính thức.</p>
     <StaffError error={zones.error || action.error} />
     {zones.error && <button className="staff-button" onClick={zones.reload}>Tải lại khu</button>}
     {created ? <>
       <Notice kind="success">Đã cấp vé {created.ticketCode}. Lượt #{created.id} đang chờ xác minh.</Notice>
-      <p>Biển số tạm: {created.temporaryPlateNumber || "Chưa đọc được"}. Ô chưa chuyển sang Có xe.</p>
+      <p>Ô sẽ chuyển sang Có xe sau khi nhân viên xác minh.</p>
       <button className="staff-button staff-button--primary" onClick={reset}>Tiếp nhận xe tiếp theo</button>
     </> : <form onSubmit={submit}>
       <fieldset disabled={locked || !lot.isActive} className="operations-fields">
@@ -62,13 +56,11 @@ export function TicketEntry({ lot, onChanged, onBusyChange }) {
         <Field label="Ảnh xe"><input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={e => {
           const next = e.target.files?.[0]; e.target.value = "";
           if (!next) return;
-          try { validatePhoto(next); setFile(next); setRecognition(null); setImageId(null); action.setError(null); }
+          try { validatePhoto(next); setFile(next); setImageId(null); action.setError(null); }
           catch (error) { action.setError(error); }
         }} /></Field>
         {file && <p>{file.name}</p>}
-        <button type="button" className="staff-button" disabled={!file} onClick={identify}>Đọc biển số tạm</button>
-        {recognition && <Notice>AI: {recognition.plateNumber || "Không đọc được"}. Kết quả sẽ được xác minh tại ô.</Notice>}
-        <Field label="Lý do tiếp nhận thủ công khi chưa có AI"><textarea required={!recognition} maxLength={500} value={reason} onChange={e => setReason(e.target.value)} /></Field>
+        <Field label="Lý do tiếp nhận"><textarea required maxLength={500} value={reason} onChange={e => setReason(e.target.value)} /></Field>
       </fieldset>
       <button type="submit" className="staff-button staff-button--primary" disabled={action.busy || !lot.isActive || zones.loading || Boolean(zones.error)}>
         {action.busy ? "Đang tiếp nhận…" : request.current ? "Gửi lại cùng lượt xe" : "Cấp vé và đưa vào hàng chờ"}

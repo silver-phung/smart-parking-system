@@ -1,3 +1,4 @@
+using SmartParking.Application.Common.Helpers;
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -674,11 +675,11 @@ public class ParkingManagementTests
         Assert.Equal(1, deployedAvailableSlots);         // Available deployed spots = 1
 
         // Verify mathematical consistency with Booking/Check-in capacity engine
-        var calc1 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot1.Id, lot1);
+        var calc1 = await ParkingLotCapacityHelper.CalculateAsync(context, lot1.Id, lot1);
         Assert.Equal(lot1Dto.TotalCapacity, calc1.TotalCapacity);
         Assert.Equal(lot1Dto.AvailableSlotsCount, calc1.AvailableCapacity);
 
-        var calc2 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot2.Id, lot2);
+        var calc2 = await ParkingLotCapacityHelper.CalculateAsync(context, lot2.Id, lot2);
         Assert.Equal(lot2Dto.TotalCapacity, calc2.TotalCapacity);
         Assert.Equal(lot2Dto.AvailableSlotsCount, calc2.AvailableCapacity);
         Assert.Equal(100000, calc2.ConfiguredCapacity);

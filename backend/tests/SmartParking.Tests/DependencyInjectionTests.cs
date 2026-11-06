@@ -4,7 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartParking.Application;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Infrastructure;
-using SmartParking.Infrastructure.Data;
+using SmartParking.Persistence.Data;
+using SmartParking.Persistence;
 using SmartParking.Infrastructure.Services;
 using Xunit;
 
@@ -42,38 +43,43 @@ public class DependencyInjectionTests
     }
 
     [Fact]
-    public void Sprint4_UsesExistingCoreDatabaseAndRemoteRecognition()
+    public void Core_UsesExistingDatabaseAndRemoteRecognition()
     {
-        var configuration = Sprint4Configuration("smartparking");
-        using var provider = new ServiceCollection().AddInfrastructureServices(configuration).BuildServiceProvider();
+        var configuration = RecognitionConfiguration("recognition_test");
+        using var provider = new ServiceCollection().AddParkingPersistence(configuration)
+            .AddInfrastructureServices(configuration).BuildServiceProvider();
         using var scope = provider.CreateScope();
 
         var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
         Assert.Equal("smartparking", db.Database.GetDbConnection().Database);
         Assert.Null(scope.ServiceProvider.GetService<AiRecognitionDbContext>());
         Assert.IsType<RecognitionServiceClient>(scope.ServiceProvider.GetRequiredService<IStaffDetectionService>());
-        Assert.IsType<RecognitionServiceClient>(scope.ServiceProvider.GetRequiredService<IRecognitionEvidenceReader>());
     }
 
-    [Theory]
-    [InlineData("smartparking_parking_operations")]
-    [InlineData("smartparking_core_sprint4")]
-    [InlineData("smartparking_identity")]
-    [InlineData("smartparking_recognition")]
-    public void Sprint4_RejectsOtherDatabasesForCore(string database)
+    [Fact]
+    public void Recognition_RequiresItsOwnConfiguredConnection()
     {
         Assert.Throws<InvalidOperationException>(() =>
-            new ServiceCollection().AddInfrastructureServices(Sprint4Configuration(database)));
+            new ServiceCollection().AddRecognitionPersistence(new ConfigurationBuilder().Build()));
     }
 
-    private static IConfiguration Sprint4Configuration(string database) =>
+    [Fact]
+    public void Recognition_UsesOnlyAiPersistence()
+    {
+        using var provider = new ServiceCollection()
+            .AddRecognitionPersistence(RecognitionConfiguration("recognition_test")).BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AiRecognitionDbContext>();
+        Assert.Equal("recognition_test", db.Database.GetDbConnection().Database);
+        Assert.Null(scope.ServiceProvider.GetService<SmartParkingDbContext>());
+    }
+
+    private static IConfiguration RecognitionConfiguration(string database) =>
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Sprint4:Enabled"] = "true",
-            ["Sprint4:RecognitionUrl"] = "http://127.0.0.1:5296/",
-            ["Sprint4:RecognitionKey"] = new string('x', 32),
-            ["ConnectionStrings:Sprint4Core"] = "Host=localhost;Database=smartparking_parking_operations;Username=test",
-            ["ConnectionStrings:DefaultConnection"] = $"Host=localhost;Database={database};Username=test",
-            ["ConnectionStrings:AiRecognitionConnection"] = "Host=localhost;Database=smartparking_recognition;Username=test"
+            ["Recognition:BaseUrl"] = "http://127.0.0.1:5296/",
+            ["Recognition:InternalKey"] = new string('x', 32),
+            ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=smartparking;Username=test",
+            ["ConnectionStrings:AiRecognitionConnection"] = $"Host=localhost;Database={database};Username=test"
         }).Build();
 }

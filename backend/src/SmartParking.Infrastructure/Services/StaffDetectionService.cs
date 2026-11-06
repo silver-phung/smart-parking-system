@@ -6,8 +6,8 @@ using Microsoft.Extensions.Configuration;
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.DTOs.StaffAssignments;
-using SmartParking.Infrastructure.Data;
-using SmartParking.Infrastructure.Entities;
+using SmartParking.Persistence.Data;
+using SmartParking.Persistence.Entities;
 
 namespace SmartParking.Infrastructure.Services;
 
@@ -155,9 +155,4 @@ public sealed class StaffDetectionService : IStaffDetectionService
         string PlateNumber, string RawPlateNumber, double Confidence, bool IsLegit,
         double? VehicleConfidence, IReadOnlyList<int>? VehicleBbox,
         IReadOnlyList<int>? PlateBbox, double InferenceTimeMs);
-}
-
-public sealed class AiServiceException(HttpStatusCode statusCode, string message) : Exception(message)
-{
-    public HttpStatusCode StatusCode { get; } = statusCode;
 }

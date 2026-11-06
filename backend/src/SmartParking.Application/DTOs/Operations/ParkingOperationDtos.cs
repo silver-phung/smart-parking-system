@@ -3,8 +3,7 @@ namespace SmartParking.Application.DTOs.Operations;
 public record ZoneRequest(string Code, string Name, string Type, string Layout, bool IsActive);
 public record FloorZoneRequest(int ZoneId);
 public record SlotFuelRequest(string AllowedFuelType);
-public record EntryRequest(Guid EventId, int ZoneId, string TicketCode, long? RecognitionId,
-    long? ImageId, string? ManualReason);
+public record EntryRequest(Guid EventId, int ZoneId, string TicketCode, long? ImageId, string? ManualReason);
 public record VerifyVehicleRequest(long ActualSlotId, string PlateNumber, string FuelType,
     long ExpectedRevision, bool VehicleObserved, string? Reason);
 public record MoveVehicleRequest(long ActualSlotId, long ExpectedRevision, bool OldSlotObservedEmpty,
@@ -16,7 +15,7 @@ public record PolicyRequest(int? ZoneId, DateTime EffectiveFrom, bool Approve, s
     int? FeeUnitMinutes, string? FeeRounding, string? NoShowAction,
     string? CancellationAction, string? RateSelection);
 public record OperationSessionDto(long Id, int LotId, int? ZoneId, long? PolicyId, Guid? EventId,
-    string PlateNumber, string? TemporaryPlateNumber, long? RecognitionId, long? ImageId,
+    string PlateNumber, string? TemporaryPlateNumber, long? ImageId,
     string VerificationStatus, string Status, string? FuelType, long? CurrentSlotId,
     string? SlotCode, long Revision, DateTime CheckInTime, DateTime? VerifiedAt,
     string? TicketCode, string? TicketStatus);

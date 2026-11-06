@@ -1,3 +1,4 @@
+using SmartParking.Persistence.Data;
 using System.Collections.Concurrent;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -10,7 +11,6 @@ using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Bookings;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Common;
 
 namespace SmartParking.Infrastructure.Services;
 

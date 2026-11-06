@@ -1,11 +1,12 @@
+using SmartParking.Persistence.Repositories;
+using SmartParking.Application.Common.Helpers;
+using SmartParking.Application.UseCases.ParkingOperations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.Application.DTOs.Operations;
 using SmartParking.Application.DTOs.Sessions;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Common;
-using SmartParking.Infrastructure.Data;
-using SmartParking.Infrastructure.Entities;
+using SmartParking.Persistence.Data;
 using SmartParking.Infrastructure.Services;
 
 namespace SmartParking.Tests;
@@ -15,17 +16,15 @@ public class ParkingOperationsTests
     private sealed class Fixture : IAsyncDisposable
     {
         public TestSmartParkingDbContext Db { get; }
-        public AiRecognitionDbContext Ai { get; }
         public ParkingOperationsService Service { get; }
         public Fixture(TestSmartParkingDbContext db)
         {
             Db = db;
-            Ai = new AiRecognitionDbContext(new DbContextOptionsBuilder<AiRecognitionDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-            Service = new ParkingOperationsService(db, new ParkingAuthorizationService(db), new RecognitionEvidenceReader(Ai));
+            Service = new ParkingOperationsService(db, new ParkingAuthorizationService(db), new ParkingOperationsWriter(db));
         }
-        public async ValueTask DisposeAsync() { await Db.DisposeAsync(); await Ai.DisposeAsync(); }
-        public Task<OperationSessionDto> Enter(string code = "VE-001", Guid? eventId = null, long? recognition = null, long? image = null) =>
-            Service.Enter(1, new(eventId ?? Guid.NewGuid(), 1, code, recognition, image, "Kiểm tra trực tiếp khi AI chưa sẵn sàng"), 1, "ADMIN", default);
+        public ValueTask DisposeAsync() => Db.DisposeAsync();
+        public Task<OperationSessionDto> Enter(string code = "VE-001", Guid? eventId = null, long? image = null) =>
+            Service.Enter(1, new(eventId ?? Guid.NewGuid(), 1, code, image, "Tiếp nhận theo vé tại cổng"), 1, "ADMIN", default);
         public Task<OperationSessionDto> Verify(OperationSessionDto s, long slot = 1, string plate = "51F-123.45", string fuel = "PETROL") =>
             Service.Verify(1, s.Id, new(slot, plate, fuel, s.Revision, true, "Đối chiếu xe thực tế"), 1, "ADMIN", default);
     }
@@ -62,14 +61,10 @@ public class ParkingOperationsTests
         Assert.Equal("EVENT_MISMATCH", ex.Code);
     }
     [Fact]
-    public async Task Temporary_ocr_duplicates_are_separate_waiting_sessions_and_count_capacity()
+    public async Task Separate_manual_entries_count_capacity_without_occupying_slots()
     {
         await using var f = await Create();
-        f.Ai.RecognitionRecords.AddRange(new AiRecognitionRecord { Id = 1, StaffUserId = 1, PlateNumber = "51F12345", ContentSha256 = "same" },
-            new AiRecognitionRecord { Id = 2, StaffUserId = 1, PlateNumber = "51F12345", ContentSha256 = "same" });
-        f.Db.StoredImages.Add(new StoredImage { Id = 1, UserId = 1, PublicId = "img1", Url = "https://example.test/1", ContentSha256 = "same" });
-        await f.Ai.SaveChangesAsync(); await f.Db.SaveChangesAsync();
-        var a = await f.Enter(recognition: 1, image: 1); var b = await f.Enter("VE-002", recognition: 2, image: 1);
+        var a = await f.Enter(); var b = await f.Enter("VE-002");
         Assert.NotEqual(a.Id, b.Id); Assert.Equal("", a.PlateNumber); Assert.Equal("WAITING_VERIFICATION", a.VerificationStatus);
         Assert.All(await f.Db.ParkingSlots.ToListAsync(), s => Assert.Equal("EMPTY", s.PhysicalStatus));
         var capacity = await ParkingLotCapacityHelper.CalculateAsync(f.Db, 1);
@@ -168,13 +163,12 @@ public class ParkingOperationsTests
         Assert.Equal(404, (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.Lookup(2, "VE-NEW", 1, "ADMIN", default))).Status);
     }
     [Fact]
-    public async Task Recognition_must_belong_to_actor_and_match_saved_image_bytes()
+    public async Task Entry_image_must_belong_to_actor()
     {
         await using var f = await Create();
-        f.Ai.RecognitionRecords.Add(new AiRecognitionRecord { Id = 1, StaffUserId = 1, PlateNumber = "51F12345", ContentSha256 = "correct" });
-        f.Db.StoredImages.Add(new StoredImage { Id = 1, UserId = 1, ContentSha256 = "wrong", PublicId = "img", Url = "https://example.test/1" });
-        await f.Ai.SaveChangesAsync(); await f.Db.SaveChangesAsync();
-        Assert.Equal("EVIDENCE_MISMATCH", (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Enter(recognition: 1, image: 1))).Code);
+        f.Db.StoredImages.Add(new StoredImage { Id = 1, UserId = 2, PublicId = "img", Url = "https://example.test/1" });
+        await f.Db.SaveChangesAsync();
+        Assert.Equal("INVALID_IMAGE", (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Enter(image: 1))).Code);
         Assert.Empty(await f.Db.ParkingSessions.ToListAsync());
     }
     [Fact]

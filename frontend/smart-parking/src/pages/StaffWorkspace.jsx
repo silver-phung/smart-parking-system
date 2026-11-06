@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
-import { StaffExit } from "../components/staff/StaffGate.jsx";
+import { StaffExit } from "../components/staff/StaffExit.jsx";
 import {
   StaffDispatches,
   StaffSessions,

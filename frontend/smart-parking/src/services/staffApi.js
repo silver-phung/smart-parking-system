@@ -233,12 +233,6 @@ export const staffApi = {
       plateNumber: validatePlate(plateNumber),
       note,
     }),
-  checkIn: (lotId, plateNumber, imageUrl) =>
-    post("/v1/parking-sessions/check-in", {
-      lotId: Number(lotId),
-      plateNumber: validatePlate(plateNumber),
-      ...(imageUrl ? { checkInImageUrl: imageUrl } : {}),
-    }),
   async checkOut(sessionId, lotId, plateNumber, imageUrl, ticketCode) {
     const fresh = await staffApi.session(sessionId);
     if (!fresh || fresh.lotId !== Number(lotId))

@@ -2,8 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.Application.DTOs.Operations;
+using SmartParking.Application.UseCases.ParkingOperations;
 using SmartParking.Domain.Constants;
-using SmartParking.Infrastructure.Services;
 
 namespace SmartParking.Api.Controllers;
 

@@ -5,18 +5,13 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Interfaces;
-using SmartParking.Infrastructure.Data;
+using SmartParking.Persistence;
 using SmartParking.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-var connection = builder.Configuration.GetConnectionString("Sprint4Recognition");
-if (string.IsNullOrWhiteSpace(connection) ||
-    new NpgsqlConnectionStringBuilder(connection).Database != "smartparking_recognition")
-    throw new InvalidOperationException("ConnectionStrings:Sprint4Recognition must select smartparking_recognition.");
-
-var key = builder.Configuration["Sprint4:RecognitionKey"];
+var key = builder.Configuration["Recognition:InternalKey"];
 if (string.IsNullOrWhiteSpace(key) || Encoding.UTF8.GetByteCount(key) < 32)
-    throw new InvalidOperationException("Sprint4:RecognitionKey requires at least 32 bytes.");
+    throw new InvalidOperationException("Recognition:InternalKey requires at least 32 bytes.");
 
 var keyHash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
 var aiUrl = builder.Configuration["AiService:BaseUrl"] ?? "http://localhost:8000/";
@@ -26,9 +21,7 @@ if (!Uri.TryCreate(aiUrl.TrimEnd('/') + "/", UriKind.Absolute, out var aiUri) ||
 var maxBytes = builder.Configuration.GetValue<long?>("AiService:MaxUploadSizeBytes") ?? 10 * 1024 * 1024;
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = maxBytes);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = maxBytes + 64 * 1024);
-builder.Services.AddDbContext<AiRecognitionDbContext>(options =>
-    options.UseNpgsql(connection, npgsql => npgsql.MigrationsHistoryTable("__AiRecognitionMigrationsHistory")));
-builder.Services.AddScoped<IRecognitionEvidenceReader, RecognitionEvidenceReader>();
+builder.Services.AddRecognitionPersistence(builder.Configuration);
 builder.Services.AddHttpClient<IStaffDetectionService, StaffDetectionService>(client =>
 {
     client.BaseAddress = aiUri;
@@ -77,12 +70,6 @@ recognition.MapPost("/{id:long}/confirm", async (
         return Results.BadRequest(new { message = "Invalid recognition confirmation." });
 
     var result = await service.ConfirmAsync(id, request.PlateNumber, request.Note, request.StaffUserId, ct);
-    return result is null ? Results.NotFound() : Results.Ok(result);
-});
-
-recognition.MapGet("/{id:long}/evidence", async (long id, IRecognitionEvidenceReader reader, CancellationToken ct) =>
-{
-    var result = await reader.FindAsync(id, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 

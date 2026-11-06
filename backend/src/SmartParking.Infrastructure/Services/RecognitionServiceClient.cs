@@ -8,7 +8,7 @@ using SmartParking.Application.DTOs.StaffAssignments;
 
 namespace SmartParking.Infrastructure.Services;
 
-public sealed class RecognitionServiceClient(HttpClient client) : IStaffDetectionService, IRecognitionEvidenceReader
+public sealed class RecognitionServiceClient(HttpClient client) : IStaffDetectionService
 {
     public const string KeyHeader = "X-Recognition-Service-Key";
 
@@ -36,26 +36,13 @@ public sealed class RecognitionServiceClient(HttpClient client) : IStaffDetectio
             Content = JsonContent.Create(new ConfirmRecognition(plateNumber, note, staffUserId))
         }, allowNotFound: true, cancellationToken);
 
-    public async Task<RecognitionEvidence?> FindAsync(long id, CancellationToken cancellationToken)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
-        try
-        {
-            return await SendAsync<RecognitionEvidence>(
-                new HttpRequestMessage(HttpMethod.Get, $"internal/recognition/{id}/evidence"),
-                allowNotFound: true, requestCancellation.Token);
-        }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            throw Unavailable();
-        }
-    }
-
     private async Task<T?> SendAsync<T>(HttpRequestMessage request, bool allowNotFound, CancellationToken ct) where T : class
     {
         using (request)
         {
+            if (client.BaseAddress is null)
+                throw Unavailable();
+
             try
             {
                 using var response = await client.SendAsync(request, ct);

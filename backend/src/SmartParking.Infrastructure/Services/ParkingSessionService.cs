@@ -1,3 +1,4 @@
+using SmartParking.Persistence.Data;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,6 @@ using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Sessions;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Common;
 
 namespace SmartParking.Infrastructure.Services;
 

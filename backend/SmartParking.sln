@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartParking.YarpApiGateway
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartParking.Recognition.Api", "src\SmartParking.Recognition.Api\SmartParking.Recognition.Api.csproj", "{E7CFF7F5-D8BA-475F-A925-0E473B758A31}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartParking.Persistence", "src\SmartParking.Persistence\SmartParking.Persistence.csproj", "{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -117,6 +119,18 @@ Global
 		{E7CFF7F5-D8BA-475F-A925-0E473B758A31}.Release|x64.Build.0 = Release|Any CPU
 		{E7CFF7F5-D8BA-475F-A925-0E473B758A31}.Release|x86.ActiveCfg = Release|Any CPU
 		{E7CFF7F5-D8BA-475F-A925-0E473B758A31}.Release|x86.Build.0 = Release|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Debug|x64.Build.0 = Debug|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Debug|x86.Build.0 = Debug|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Release|Any CPU.Build.0 = Release|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Release|x64.ActiveCfg = Release|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Release|x64.Build.0 = Release|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Release|x86.ActiveCfg = Release|Any CPU
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -130,5 +144,6 @@ Global
 		{FCA01246-F2C6-0AA7-D43F-FD13BE0B9D88} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{E5BA4FFC-46F2-492E-AB4D-83CD0FFC7D53} = {FCA01246-F2C6-0AA7-D43F-FD13BE0B9D88}
 		{E7CFF7F5-D8BA-475F-A925-0E473B758A31} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{32397F41-7B48-4D45-A44B-FC7CC2C2BE62} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

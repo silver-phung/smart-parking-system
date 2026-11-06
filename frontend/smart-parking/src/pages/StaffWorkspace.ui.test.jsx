@@ -105,7 +105,7 @@ beforeEach(() => {
     if (path.endsWith("/operations/entries")) {
       if (model.denyCheckIn) return Response.json({ message: "Bạn không có quyền nghiệp vụ cổng tại bãi này." }, { status: 403 });
       const session = { ...primary, id: 20, eventId: body.eventId, plateNumber: "", zoneId: body.zoneId, revision: 1,
-        temporaryPlateNumber: body.recognitionId ? "51F12345" : null, verificationStatus: "WAITING_VERIFICATION", ticketCode: body.ticketCode, ticketStatus: "ISSUED" };
+        temporaryPlateNumber: null, verificationStatus: "WAITING_VERIFICATION", ticketCode: body.ticketCode, ticketStatus: "ISSUED" };
       model.sessions.push(session); return result(session);
     }
     if (/\/operations\/sessions\/\d+\/verify$/.test(path)) {
@@ -236,15 +236,16 @@ describe("Staff workspace", () => {
     await screen.findByRole("option", { name: "VL · Vãng lai" });
     await user.selectOptions(screen.getByLabelText("Khu vãng lai"), "1");
     await user.type(screen.getByLabelText("Mã vé"), ticket);
-    await user.type(screen.getByLabelText("Lý do tiếp nhận thủ công khi chưa có AI"), "AI chưa sẵn sàng, nhận xe theo vé.");
+    await user.type(screen.getByLabelText("Lý do tiếp nhận"), "Nhận xe theo vé tại cổng.");
   }
 
-  it("issues a ticket without making the OCR plate official or requiring gate approval", async () => {
+  it("issues a ticket and leaves the plate for verification at the slot", async () => {
     const user = userEvent.setup(); mount(); await entryDraft(user);
     await user.click(screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" }));
     await screen.findByText(/Đã cấp vé VE-001/);
     const body = JSON.parse(requests("/entries")[0][1].body);
-    expect(body).toMatchObject({ ticketCode: "VE-001", zoneId: 1, recognitionId: null });
+    expect(body).toMatchObject({ ticketCode: "VE-001", zoneId: 1 });
+    expect(body.recognitionId).toBeUndefined();
     expect(body.eventId).toBeTruthy(); expect(body.plateNumber).toBeUndefined();
     expect(requests("/check-in")).toHaveLength(0);
   });
@@ -273,15 +274,13 @@ describe("Staff workspace", () => {
     expect(screen.queryByText(/Đã cấp vé/)).toBeNull();
   });
 
-  it("attaches OCR and the uploaded photo without confirming OCR at the gate", async () => {
+  it("attaches the uploaded photo without invoking recognition at the gate", async () => {
     const user = userEvent.setup(); mount(); await entryDraft(user);
     await user.upload(screen.getByLabelText("Ảnh xe"), new File(["photo"], "entry.jpg", { type: "image/jpeg" }));
-    await user.click(screen.getByRole("button", { name: "Đọc biển số tạm" }));
-    await screen.findByText(/AI: 51F12345/);
     await user.click(screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" }));
     await screen.findByText(/Đã cấp vé/);
-    expect(JSON.parse(requests("/entries")[0][1].body)).toMatchObject({ recognitionId: 501, imageId: 88 });
-    expect(requests("/confirm")).toHaveLength(0);
+    expect(JSON.parse(requests("/entries")[0][1].body)).toMatchObject({ imageId: 88 });
+    expect(requests("/detect")).toHaveLength(0);
   });
 
   it("does not issue an entry when image persistence fails", async () => {
@@ -311,7 +310,7 @@ describe("Staff workspace", () => {
     const user = userEvent.setup(); mount(); await entryDraft(user);
     await user.selectOptions(screen.getByRole("combobox", { name: "Bãi đang làm việc" }), "2");
     expect(screen.getByLabelText("Mã vé").value).toBe("");
-    expect(screen.getByLabelText("Lý do tiếp nhận thủ công khi chưa có AI").value).toBe("");
+    expect(screen.getByLabelText("Lý do tiếp nhận").value).toBe("");
     expect(requests("/entries")).toHaveLength(0);
   });
 

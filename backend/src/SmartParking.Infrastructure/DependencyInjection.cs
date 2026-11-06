@@ -1,11 +1,8 @@
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Options;
-using SmartParking.Infrastructure.Data;
 using SmartParking.Infrastructure.Repositories;
 using SmartParking.Infrastructure.Services;
 
@@ -15,25 +12,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // 1. Database Context
-        var useSprint4 = configuration.GetValue<bool>("Sprint4:Enabled");
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
-        if (useSprint4 && (string.IsNullOrWhiteSpace(connectionString) ||
-            new NpgsqlConnectionStringBuilder(connectionString).Database != "smartparking"))
-            throw new InvalidOperationException("ConnectionStrings:DefaultConnection must select the existing smartparking database.");
-        if (!string.IsNullOrEmpty(connectionString))
-        {
-            services.AddDbContext<SmartParkingDbContext>(options =>
-                options.UseNpgsql(connectionString, b => b.MigrationsAssembly(typeof(SmartParkingDbContext).Assembly.FullName)));
-        }
-        else
-        {
-            services.AddDbContext<SmartParkingDbContext>(options =>
-                options.UseNpgsql(b => b.MigrationsAssembly(typeof(SmartParkingDbContext).Assembly.FullName)));
-        }
-
-        services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<SmartParkingDbContext>());
-
         // 2. Strongly Typed Options
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.SectionName));
@@ -61,51 +39,35 @@ public static class DependencyInjection
         services.AddScoped<IParkingManagementService, ParkingManagementService>();
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IParkingSessionService, ParkingSessionService>();
-        services.AddScoped<ParkingOperationsService>();
         services.AddScoped<IParkingDispatchService, ParkingDispatchService>();
         services.AddScoped<IParkingAuthorizationService, ParkingAuthorizationService>();
         services.AddScoped<IStaffLotAssignmentService, StaffLotAssignmentService>();
         services.AddScoped<IAdminUserService, AdminUserService>();
         services.AddScoped<IBookingService, BookingService>();
         services.AddScoped<IImageService, ImageService>();
-        if (useSprint4)
+        var url = configuration["Recognition:BaseUrl"];
+        var key = configuration["Recognition:InternalKey"];
+        Uri? recognitionUri = null;
+        if (!string.IsNullOrWhiteSpace(url) || !string.IsNullOrWhiteSpace(key))
         {
-            var url = configuration["Sprint4:RecognitionUrl"];
-            var key = configuration["Sprint4:RecognitionKey"];
             if (string.IsNullOrWhiteSpace(url) ||
-                !Uri.TryCreate(url.TrimEnd('/') + "/", UriKind.Absolute, out var uri) ||
-                (uri.Scheme != Uri.UriSchemeHttps && !(uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback)) ||
-                !string.IsNullOrEmpty(uri.UserInfo) || uri.AbsolutePath != "/" || uri.Query != "" || uri.Fragment != "")
-                throw new InvalidOperationException("Sprint4:RecognitionUrl must be a service origin using HTTPS or loopback HTTP.");
+                !Uri.TryCreate(url.TrimEnd('/') + "/", UriKind.Absolute, out recognitionUri) ||
+                (recognitionUri.Scheme != Uri.UriSchemeHttps && !(recognitionUri.Scheme == Uri.UriSchemeHttp && recognitionUri.IsLoopback)) ||
+                !string.IsNullOrEmpty(recognitionUri.UserInfo) || recognitionUri.AbsolutePath != "/" ||
+                recognitionUri.Query != "" || recognitionUri.Fragment != "")
+                throw new InvalidOperationException("Recognition:BaseUrl must be a service origin using HTTPS or loopback HTTP.");
             if (string.IsNullOrWhiteSpace(key) || Encoding.UTF8.GetByteCount(key) < 32)
-                throw new InvalidOperationException("Sprint4:RecognitionKey requires at least 32 bytes.");
+                throw new InvalidOperationException("Recognition:InternalKey requires at least 32 bytes.");
+        }
 
-            services.AddHttpClient<RecognitionServiceClient>(client =>
-            {
-                client.BaseAddress = uri;
-                client.Timeout = TimeSpan.FromSeconds(65);
-                client.DefaultRequestHeaders.Add(RecognitionServiceClient.KeyHeader, key);
-            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-            services.AddTransient<IRecognitionEvidenceReader>(provider => provider.GetRequiredService<RecognitionServiceClient>());
-            services.AddTransient<IStaffDetectionService>(provider => provider.GetRequiredService<RecognitionServiceClient>());
-        }
-        else
+        services.AddHttpClient<RecognitionServiceClient>(client =>
         {
-            var aiConnectionString = configuration.GetConnectionString("AiRecognitionConnection");
-            services.AddDbContext<AiRecognitionDbContext>(options =>
-                options.UseNpgsql(aiConnectionString, b => b
-                    .MigrationsAssembly(typeof(AiRecognitionDbContext).Assembly)
-                    .MigrationsHistoryTable("__AiRecognitionMigrationsHistory")));
-            services.AddScoped<IRecognitionEvidenceReader, RecognitionEvidenceReader>();
-            services.AddHttpClient<IStaffDetectionService, StaffDetectionService>((provider, client) =>
-            {
-                var baseUrl = provider.GetRequiredService<IConfiguration>()["AiService:BaseUrl"];
-                if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
-                    throw new InvalidOperationException("AiService:BaseUrl must be a valid absolute URL.");
-                client.BaseAddress = uri.AbsoluteUri.EndsWith('/') ? uri : new Uri(uri, "/");
-                client.Timeout = TimeSpan.FromSeconds(60);
-            });
-        }
+            client.BaseAddress = recognitionUri;
+            client.Timeout = TimeSpan.FromSeconds(65);
+            if (recognitionUri is not null)
+                client.DefaultRequestHeaders.Add(RecognitionServiceClient.KeyHeader, key!);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddTransient<IStaffDetectionService>(provider => provider.GetRequiredService<RecognitionServiceClient>());
         var relativePath = configuration["ParkingLots:DataFile"] ?? "Data/parking-lots.json";
         var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
         if (!File.Exists(fullPath))

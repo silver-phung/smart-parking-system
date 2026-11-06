@@ -2,7 +2,7 @@
 
 **Status:** Implemented design pending team acceptance and PostgreSQL acceptance tests
 **Date:** 02/11/2026
-**Scope:** Phần Dương trong Sprint 4
+**Phạm vi** Vận hành bãi, chính sách, vé và xác minh xe
 
 ## Nguồn quyết định
 
@@ -35,11 +35,11 @@ Sức chứa vãng lai loại khu FIXED, khu đóng, tầng/ô ngừng dùng và
 
 ## Vé và trạng thái xác minh
 
-Không thêm chuỗi `WAITING_VERIFICATION` vào `parking_sessions.status`. Phiên vẫn `ACTIVE`; trường riêng `VerificationStatus` nhận `LEGACY`, `WAITING_VERIFICATION` hoặc `VERIFIED`. OCR tạm nằm ở `TemporaryPlateNumber`; biển số chính thức rỗng trong hàng chờ. Unique biển số mở chỉ áp dụng khi đã qua hàng chờ. Vé, sự kiện và nhận dạng đều có unique index trong database.
+Phiên chờ xác minh có `parking_sessions.status = ACTIVE` và `VerificationStatus = WAITING_VERIFICATION`. Biển số chính thức được ghi khi nhân viên đối chiếu xe. Unique biển số mở áp dụng sau khi lượt xe qua hàng chờ.
 
 Mỗi mã vé là mã in dùng cho một lịch sử phát hành; mã đã dùng không được tái sử dụng. Báo mất giữ nguyên SessionId. Thay vé yêu cầu Admin/Manager và lý do, kết thúc vé cũ trước khi cấp vé mới trong một giao dịch. Chỉ một vé `ISSUED` được gắn với một phiên. Đây là vé có mã riêng; việc tái sử dụng thẻ vật lý và quyền gói thuộc Sprint 5.
 
-`EntryEventId` cùng hash nội dung bảo đảm gửi lại cùng yêu cầu trả cùng phiên, kể cả sau khi tạo DbContext/tiến trình mới. Dùng lại EventId với nội dung khác bị từ chối. Hai kết quả OCR giống nhau không gộp xe.
+`EntryEventId` cùng hash nội dung bảo đảm gửi lại cùng yêu cầu trả cùng phiên, kể cả sau khi tạo DbContext/tiến trình mới. Dùng lại EventId với nội dung khác bị từ chối.
 
 ## Xác minh và chuyển xe
 
@@ -47,10 +47,10 @@ Nhân viên đúng bãi và duty `SLOT_VERIFIER` xác nhận biển số, nhiên
 
 Chuyển xe đã `VERIFIED` dùng endpoint riêng, yêu cầu lý do và xác nhận đã thấy ô cũ trống/xe tại ô mới. Không mở lỏng guard `Reassign` cho dispatch OCCUPIED. Giữ lịch sử điều phối và audit vị trí trước/sau.
 
-Ghi theo bãi dùng semaphore trong tiến trình và PostgreSQL advisory transaction lock. `Revision` cùng concurrency token của ô chặn dữ liệu cũ; unique index chặn trùng vé, sự kiện, nhận dạng, biển số và ô đã xác minh. Những cơ chế này cần được kiểm thử trên PostgreSQL thật; InMemory không chứng minh các ràng buộc database.
+Ghi theo bãi dùng semaphore trong tiến trình và PostgreSQL advisory transaction lock. `Revision` cùng concurrency token của ô chặn dữ liệu cũ. Unique index chặn trùng vé, sự kiện, biển số và ô đã xác minh. Kiểm thử PostgreSQL thật xác nhận các ràng buộc này.
 
-## Ảnh và AI
+## Ảnh tại cổng
 
-Nhận dạng và ảnh lưu có SHA-256 do máy chủ tính từ nội dung file. Khi cấp vé với RecognitionId, server yêu cầu ảnh cùng hash và cùng người tiếp nhận; client không được khai biển số OCR làm nguồn tin cậy. Core giữ liên kết `RecognitionId/EntryImageId/SessionId`, không ép AI phải biết SessionId trước khi nhận xe.
+Ảnh tại cổng là tùy chọn. Khi cấp vé kèm ảnh, Core kiểm tra ảnh đã được lưu và thuộc người tiếp nhận, rồi gắn `EntryImageId` vào lượt gửi.
 
 Ảnh gắn với phiên không được xóa bằng ImageService. Endpoint evidence kiểm tra quyền bãi trước khi trả metadata ảnh. Việc chuyển Cloudinary sang ảnh có đường dẫn riêng tư và phân quyền toàn hệ thống vẫn thuộc phần tích hợp của Trí; việc này không được xem là đã hoàn tất chỉ vì endpoint core có quyền.

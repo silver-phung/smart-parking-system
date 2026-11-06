@@ -1,9 +1,11 @@
+using SmartParking.Persistence.Repositories;
+using SmartParking.Application.UseCases.ParkingOperations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using SmartParking.Application.DTOs.Operations;
-using SmartParking.Infrastructure.Data;
+using SmartParking.Persistence.Data;
 using SmartParking.Infrastructure.Services;
 
 namespace SmartParking.Tests;
@@ -65,15 +67,13 @@ public class ParkingOperationsPostgresTests
         public async Task<OperationSessionDto> Enter(string ticket, Guid eventId)
         {
             await using var db = Context();
-            await using var ai = new AiRecognitionDbContext(new DbContextOptionsBuilder<AiRecognitionDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-            return await new ParkingOperationsService(db, new ParkingAuthorizationService(db), new RecognitionEvidenceReader(ai)).Enter(LotId,
-                new(eventId, ZoneId, ticket, null, null, "Manual entry in isolated test"), ActorId, "ADMIN", default);
+            return await new ParkingOperationsService(db, new ParkingAuthorizationService(db), new ParkingOperationsWriter(db)).Enter(LotId,
+                new(eventId, ZoneId, ticket, null, "Manual entry in isolated test"), ActorId, "ADMIN", default);
         }
         public async Task<OperationSessionDto?> TryVerify(OperationSessionDto s, string plate, string reason = "Observed at slot")
         {
             await using var db = Context();
-            await using var ai = new AiRecognitionDbContext(new DbContextOptionsBuilder<AiRecognitionDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-            try { return await new ParkingOperationsService(db, new ParkingAuthorizationService(db), new RecognitionEvidenceReader(ai)).Verify(LotId,
+            try { return await new ParkingOperationsService(db, new ParkingAuthorizationService(db), new ParkingOperationsWriter(db)).Verify(LotId,
                 s.Id, new(SlotId, plate, "PETROL", s.Revision, true, reason), ActorId, "ADMIN", default); }
             catch (ParkingOperationException e) when (e.Status == 409) { return null; }
         }

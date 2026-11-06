@@ -7,6 +7,8 @@
 
 **Mốc đối chiếu:** `Sprint3/demo` tại `4bed0c8a929fe050d644aa4e07c0a1caa77d8d0e`, ngày 28/10/2026. Xem [README](../README.md) để biết nguồn, quy ước và trạng thái.
 
+Xem [phạm vi dữ liệu và API hiện tại](README.md#vận-hành-bãi) cho các bảng vận hành bãi bổ sung vào `smartparking` sau mốc này.
+
 ## 1 Phạm vi xác minh
 
 Danh mục dưới đây được lấy từ design-time model EF Core của mã nguồn; không mở kết nối DB. Có **14 bảng được ánh xạ**, không phải kết quả khẳng định 14 bảng đã được migration thành công trên một Neon cụ thể. Bảng migration nội bộ của EF không tính là bảng nghiệp vụ.
@@ -572,7 +574,7 @@ Biển số unique và chủ tài khoản có thể null cho vãng lai; hãng/mo
 
 ## 6 Entity không thuộc 14 bảng đang ánh xạ
 
-`EventParkingSession`, `ParkingEventLog` có class nhưng chưa được đưa vào DbContext đang dùng; repository thực tế là InMemory. Các file EF adapter còn dưới `#if EF_REPOSITORIES`; bridge còn dưới `#if LIVE_BRIDGE`. `SimulatorParkingLot` dùng nguồn JSON. Dictionary của viewer và localStorage của HTML cũ cũng không phải bảng PostgreSQL.
+`EventParkingSession`, `ParkingEventLog` có class nhưng chưa được đưa vào DbContext đang dùng; repository thực tế là InMemory. Bridge còn dưới `#if LIVE_BRIDGE`. `SimulatorParkingLot` dùng nguồn JSON. Dictionary của viewer và localStorage của HTML cũ cũng không phải bảng PostgreSQL.
 
 ## 7 Thiết kế dữ liệu bổ sung
 

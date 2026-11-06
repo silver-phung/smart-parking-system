@@ -1,8 +1,8 @@
+using SmartParking.Application.Common.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.Application.DTOs.Sessions;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Common;
 using SmartParking.Infrastructure.Services;
 using Xunit;
 

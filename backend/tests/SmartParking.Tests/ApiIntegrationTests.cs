@@ -11,7 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Options;
 using SmartParking.Domain.Constants;
-using SmartParking.Infrastructure.Data;
+using SmartParking.Persistence.Data;
 using System.Net.Http.Json;
 using SmartParking.Application.Events.Dtos;
 using Xunit;

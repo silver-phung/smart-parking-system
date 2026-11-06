@@ -75,7 +75,7 @@ Một thay đổi liên quan trạng thái, quyền, tiền, dữ liệu xe ho�
 
 Các PDF/DOCX trong thư mục `/Users/tim/FPTU/C#/SmartParkingSystem_OJT/Docs` được giữ làm nguồn yêu cầu và lịch sử Sprint. Chúng không tự ghi đè bộ tài liệu hiện hành trong repository. `docs/archive/` chỉ chứa chỉ mục hoặc tài liệu lịch sử cần đi cùng source; không nhân bản binary lớn nếu không cần.
 
-## Bàn giao Sprint 4 của Dương
+## Bàn giao vận hành bãi
 
 Xem [hợp đồng API, migration và kiểm thử](handover/PARKING_OPERATIONS_HANDOVER.md) cùng [ADR 006](decisions/ADR-006-versioned-parking-operations.md) cho khu bãi, chính sách có phiên bản, vé và xác minh xe tại ô.
 
