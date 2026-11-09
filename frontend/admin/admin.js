@@ -273,7 +273,7 @@
   function pView3D() {
     var l = S.lot(ui.liveLot) || S.LOTS[0];
     var h = '<div class="fbar"><div class="chips">' + S.LOTS.map(function (x) { return '<button type="button" class="chip" data-act="liveLot" data-id="' + x.id + '" aria-pressed="' + (x.id === l.id) + '">' + esc(x.name) + '</button>'; }).join('') + '</div></div>';
-    h += '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2>Sơ đồ không gian 3D - ' + esc(l.name) + '</h2><a href="../3d-viewer.html" target="_blank" class="btn sm primary">Mở toàn màn hình ↗</a></div><div id="admin3DContainer" style="height:580px;position:relative;border-radius:12px;overflow:hidden"></div></div>';
+    h += '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap"><h2>Sơ đồ không gian 3D - ' + esc(l.name) + '</h2><div style="display:flex;gap:8px"><a href="../3d-parking-render.html?role=admin" target="_blank" class="btn sm primary">Render 3D đầy đủ (Hầm &amp; Cao tầng) ↗</a><a href="../3d-viewer.html" target="_blank" class="btn sm">Viewer nối API ↗</a></div></div><div id="admin3DContainer" style="height:580px;position:relative;border-radius:12px;overflow:hidden"></div></div>';
     setTimeout(function () {
       if (admin3DInstance) {
         admin3DInstance.destroy();

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SmartPark 3D Render - Hầm &amp; Bãi đỗ xe cao tầng (Three.js)</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="assets/css/parking-3d-render.css">
+</head>
+<body class="p3r-page">
+  <header class="p3r-header">
+    <div class="p3r-brand"><span class="p3r-logo">P</span><div><h1>SmartPark 3D · Render bãi đỗ xe</h1><small>Hầm ngầm 2-3 tầng · Bãi cao tầng 2-3 tầng (dữ liệu demo)</small></div></div>
+    <nav>
+      <a href="client/index.html">Web Client</a>
+      <a href="admin/index.html">Web Admin</a>
+      <a href="3d-viewer.html">Viewer nối API</a>
+    </nav>
+  </header>
+
+  <main class="p3r-main">
+    <section id="render3d"></section>
+
+    <aside class="p3r-side">
+      <div class="p3r-card">
+        <h3>Vai trò đang xem</h3>
+        <select id="roleSel">
+          <option value="guest">Khách vãng lai (chưa đăng nhập)</option>
+          <option value="user">Khách hàng (đã đăng nhập)</option>
+          <option value="admin">Quản trị viên (Admin)</option>
+        </select>
+        <p class="p3r-note" id="roleNote"></p>
+      </div>
+      <div class="p3r-card">
+        <h3>Cách điều hướng</h3>
+        <ul>
+          <li><b>Street View:</b> bấm vòng tròn trên sàn để đi tới điểm đó, kéo chuột để nhìn.</li>
+          <li><b>Thang máy:</b> đi vào tiền sảnh kính, nút ▲ Lên / ▼ Xuống mới hiện ra.</li>
+          <li><b>Barrier:</b> tự mở khi bạn tới gần, hoặc bấm vào thanh chắn.</li>
+          <li><b>Thông tin xe:</b> chỉ hiện khi bạn đi tới gần slot (&lt; 11 m, rõ chi tiết &lt; 7 m).</li>
+          <li><b>Toàn cảnh:</b> xoay/zoom, cắt bỏ trần và các tầng phía trên để quan sát.</li>
+        </ul>
+      </div>
+      <div class="p3r-card">
+        <h3>Quy ước mã slot</h3>
+        <p><code>[Tầng]-[Dãy][Số]</code> → <code>B1-A01</code>, <code>B2-C20</code>, <code>L3-D25</code></p>
+        <p>100 slot/tầng = 4 dãy (A-D) × 25. <span class="tag blue">Xe tháng 01-12 (48)</span> <span class="tag green">Vãng lai 13-25 (52)</span></p>
+        <div class="p3r-legend">
+          <span><i style="background:#10b981"></i>Trống</span><span><i style="background:#ef4444"></i>Có xe</span><span><i style="background:#f59e0b"></i>Bảo trì (cọc tiêu)</span>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/parking-3d-render-kit.js"></script>
+  <script src="assets/js/parking-3d-render-floor.js"></script>
+  <script src="assets/js/parking-3d-render.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var NOTES = {
+        guest: 'Không thấy biển số xe trong nhãn slot (chỉ thấy trạng thái).',
+        user: 'Thấy biển số đã che một phần (51A-***.45).',
+        admin: 'Thấy đầy đủ biển số và trạng thái từng slot.'
+      };
+      var params = new URLSearchParams(location.search);
+      var role = 'guest';
+      try { var s = window.SP && SP.auth && SP.auth.session(); if (s) role = s.role === 'admin' ? 'admin' : 'user'; } catch (e) { }
+      if (['guest', 'user', 'admin'].indexOf(params.get('role')) >= 0) role = params.get('role');
+      var sel = document.getElementById('roleSel'), note = document.getElementById('roleNote');
+      sel.value = role; note.textContent = NOTES[role];
+      var viewer = new ParkingRender({ container: '#render3d', role: role, lotId: params.get('lot') || undefined });
+      window.parkingRender = viewer;
+      // Tham số tiện kiểm thử: ?lot=vincom&floor=1&mode=orbit&go=core|entry|exit&step=3
+      if (params.get('floor')) { viewer.lifting = false; viewer.setFloor(+params.get('floor')); }
+      if (params.get('mode') === 'orbit') { viewer.setMode('orbit'); viewer.tr = null; }
+      if (params.get('go')) setTimeout(function () { viewer.lifting = false; viewer._goTo(params.get('go')); }, 1200);
+      if (params.get('step')) {
+        var steps = +params.get('step');
+        setTimeout(function () {
+          for (var i = 0; i < steps; i++) {
+            viewer.tween = null;
+            viewer._step(1);
+            if (viewer.tween) { viewer._place(viewer.tween.node, null, null); }
+          }
+        }, 1200);
+      }
+      sel.addEventListener('change', function () { viewer.setRole(sel.value); note.textContent = NOTES[sel.value]; });
+    });
+  </script>
+</body>
+</html>

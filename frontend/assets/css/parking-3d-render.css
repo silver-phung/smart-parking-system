@@ -1,0 +1,72 @@
+/* SmartPark 3D Render - giao diện trang + HUD */
+.p3r-page { margin: 0; background: #090d16; color: #e8eef7; font-family: 'Be Vietnam Pro', system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.p3r-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0f172a; border-bottom: 1px solid rgba(255,255,255,.1); }
+.p3r-brand { display: flex; gap: 12px; align-items: center; }
+.p3r-brand h1 { margin: 0; font-size: 16px; }
+.p3r-brand small { color: #94a3b8; font-size: 11px; }
+.p3r-logo { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #0284c7, #38bdf8); display: grid; place-items: center; font-weight: 800; color: #fff; }
+.p3r-header nav { display: flex; gap: 8px; }
+.p3r-header nav a { color: #e2e8f0; text-decoration: none; font-size: 13px; font-weight: 600; padding: 7px 12px; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; }
+.p3r-header nav a:hover { color: #38bdf8; border-color: #38bdf8; }
+.p3r-main { flex: 1; display: flex; min-height: 0; }
+#render3d { flex: 1; position: relative; min-width: 0; }
+.p3r-side { width: 300px; padding: 14px; overflow-y: auto; background: #0f172a; border-left: 1px solid rgba(255,255,255,.1); display: flex; flex-direction: column; gap: 12px; }
+.p3r-card { background: rgba(30,41,59,.7); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 12px; font-size: 12.5px; line-height: 1.55; color: #cbd5e1; }
+.p3r-card h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; color: #38bdf8; }
+.p3r-card ul { margin: 0; padding-left: 16px; }
+.p3r-card select { width: 100%; padding: 8px; border-radius: 8px; background: #0b1220; color: #fff; border: 1px solid rgba(255,255,255,.2); }
+.p3r-card code { background: #0b1220; padding: 1px 6px; border-radius: 5px; color: #fde68a; }
+.p3r-note { margin: 8px 0 0; color: #94a3b8; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+.tag.blue { background: #1f5fae; color: #fff; } .tag.green { background: #1e8f4e; color: #fff; }
+.p3r-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.p3r-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+/* HUD */
+.p3r-root { overflow: hidden; background: #0a0f17; user-select: none; }
+.p3r-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.p3r-top { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; pointer-events: none; }
+.p3r-group { pointer-events: auto; display: flex; align-items: center; gap: 8px; background: rgba(10,16,28,.82); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(8px); border-radius: 12px; padding: 6px 10px; }
+.p3r-cap { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: #7dd3fc; font-weight: 700; }
+.p3r-floors { display: flex; gap: 5px; }
+.p3r-pill { background: rgba(255,255,255,.07); color: #cbd5e1; border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 5px 12px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.p3r-pill:hover { border-color: #38bdf8; color: #fff; }
+.p3r-pill.on { background: #0284c7; color: #fff; border-color: #38bdf8; }
+.p3r-lot { background: #0b1220; color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 6px 8px; font-size: 13px; font-weight: 600; max-width: 330px; }
+.p3r-stats { margin-left: auto; gap: 6px; flex-wrap: wrap; }
+.p3r-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 99px; background: rgba(255,255,255,.08); color: #e2e8f0; white-space: nowrap; }
+.p3r-chip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+.p3r-chip.blue { background: #1f5fae; } .p3r-chip.green { background: #1e8f4e; }
+.p3r-where { position: absolute; left: 12px; top: 64px; background: rgba(10,16,28,.82); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; pointer-events: none; }
+.p3r-hint { position: absolute; top: 112px; left: 50%; transform: translateX(-50%); background: rgba(2,132,199,.9); padding: 7px 14px; border-radius: 10px; font-size: 12px; pointer-events: none; transition: opacity 1s; max-width: 70%; text-align: center; }
+.p3r-hint.fade { opacity: 0; }
+.p3r-bottom { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; background: rgba(10,16,28,.82); border: 1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 7px 10px; backdrop-filter: blur(8px); flex-wrap: wrap; justify-content: center; }
+.p3r-btn { background: rgba(255,255,255,.07); color: #e2e8f0; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.p3r-btn:hover { border-color: #38bdf8; color: #fff; }
+.p3r-btn.on { background: #0284c7; border-color: #38bdf8; color: #fff; }
+.p3r-sep { width: 1px; height: 22px; background: rgba(255,255,255,.18); }
+
+/* nút thang máy - chỉ hiện khi vào phòng thang */
+.p3r-lift { position: absolute; bottom: 88px; left: 50%; transform: translateX(-50%); background: rgba(8,20,40,.94); border: 1px solid #38bdf8; box-shadow: 0 0 24px rgba(56,189,248,.35); border-radius: 14px; padding: 10px 16px; text-align: center; z-index: 10; }
+.p3r-lift[hidden] { display: none; }
+.p3r-lift-t { font-size: 13px; margin-bottom: 8px; }
+.p3r-lift-b { display: flex; gap: 8px; justify-content: center; }
+.p3r-lift-b button { border: 0; border-radius: 10px; padding: 9px 16px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; }
+.p3r-lift-b .up { background: #16a34a; } .p3r-lift-b .down { background: #d97706; }
+.p3r-lift-b button:hover { filter: brightness(1.15); }
+
+/* nhãn slot / xe (chỉ hiện khi tới gần) */
+.p3r-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.p3r-label { position: absolute; left: 0; top: 0; display: none; background: rgba(9,14,24,.88); border: 1px solid rgba(255,255,255,.18); border-radius: 9px; padding: 4px 8px; font-size: 11.5px; line-height: 1.35; text-align: center; white-space: nowrap; will-change: transform; }
+.p3r-label b { font-size: 12.5px; color: #fff; margin-right: 6px; }
+.p3r-label .z { font-style: normal; font-size: 10px; padding: 1px 6px; border-radius: 99px; color: #fff; }
+.p3r-label .z.m { background: #1f5fae; } .p3r-label .z.v { background: #1e8f4e; }
+.p3r-label .st { display: block; font-weight: 700; margin-top: 2px; }
+.p3r-label .st.empty { color: #34d399; } .p3r-label .st.occupied { color: #f87171; } .p3r-label .st.maintenance { color: #fbbf24; }
+.p3r-label .pl { display: block; font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: #fde68a; font-size: 13px; }
+.p3r-label small { color: #94a3b8; }
+
+.p3r-fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s; display: grid; place-items: center; font-size: 18px; font-weight: 700; color: #e0f2fe; }
+.p3r-fade.on { opacity: .94; pointer-events: auto; }
+
+@media (max-width: 900px) { .p3r-side { display: none; } .p3r-stats { display: none; } }
