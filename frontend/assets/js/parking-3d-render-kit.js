@@ -24,69 +24,33 @@
   'use strict';
 
   /* ------------------------------------------------------------------ */
-  /* HẰNG SỐ KÍCH THƯỚC (mét)                                            */
+  /* HẰNG SỐ CHUNG (mét) - kích thước bố cục chi tiết nằm trong floor.js */
   /* ------------------------------------------------------------------ */
   var FH = 4.8;          // cao độ giữa 2 tầng
   var CLEAR = 4.2;       // chiều cao thông thủy (đã nâng trần)
   var SLAB = 0.6;        // dày sàn
-  var SW = 2.5, SL = 5.0;                 // rộng / dài 1 slot
-  var GAPW = 5.6;                         // bề rộng hành lang đi bộ (có thang máy)
-  var AISLE = 6.5;                        // bề rộng lối đi xe
-  var GROUPS = [6, 6, 6, 7];              // 25 slot / hàng, 3 hành lang đi bộ
-  var ROW_LEN = 25 * SW + 3 * GAPW;       // 79.3
-  var END = 5;                            // lối ngang 2 đầu
-  var XM = ROW_LEN / 2 + END;             // nửa chiều dài sàn chính
-  var RAMP_L = 20, LAND = 6;              // dốc + đoạn bằng chân dốc
-  var XT = XM + RAMP_L + LAND;            // nửa chiều dài tổng (gồm 2 khu dốc)
-  var D = 4 * SL + 3 * AISLE;             // 39.5
-  var HD = D / 2;
-  var RB0 = -17.5, RB1 = -9.5;            // dải dốc (2 làn x 4m)
-  var RBC = (RB0 + RB1) / 2;              // -13.5
   var EYE = 1.65;
-  var MONTHLY_MAX = 12;
-
-  var ROWS = [
-    { id: 'A', zc: -HD + 2.5, face: 1 },
-    { id: 'B', zc: -HD + 14, face: 1 },
-    { id: 'C', zc: HD - 14, face: -1 },
-    { id: 'D', zc: HD - 2.5, face: -1 }
-  ];
-  var AISLE_Z = [-HD + 5 + AISLE / 2, 0, HD - 5 - AISLE / 2]; // -11.5, 0, 11.5
-  var ENTRY_Z = AISLE_Z[2], EXIT_Z = AISLE_Z[0];
-
-  /* x của từng slot và của 3 hành lang đi bộ */
-  var SLOT_X = [], GAP_X = [];
-  (function () {
-    var x = -ROW_LEN / 2;
-    GROUPS.forEach(function (n, gi) {
-      for (var i = 0; i < n; i++) SLOT_X.push(x + (i + 0.5) * SW);
-      x += n * SW;
-      if (gi < GROUPS.length - 1) { GAP_X.push(x + GAPW / 2); x += GAPW; }
-    });
-  })();
-  var ZONE_X = GAP_X[1];  // ranh giới tháng | vãng lai
-
-  /* vị trí cột (theo dãy chia ô) */
-  var COL_X = (function () {
-    var out = [], x = -ROW_LEN / 2;
-    GROUPS.forEach(function (n, gi) {
-      out.push(x); out.push(x + Math.round(n / 2) * SW); out.push(x + n * SW);
-      x += n * SW + GAPW;
-    });
-    return out;
-  })();
 
   /* ------------------------------------------------------------------ */
-  /* DANH SÁCH BÃI (tên toà nhà lớn ở TP.HCM)                            */
+  /* DANH SÁCH BÃI MẪU                                                   */
+  /*  - ids[0] luôn là TẦNG ĐẦU TIÊN (B1 hoặc T1): có lối vào, check-in   */
+  /*    xe tháng, check-out xe tháng và lối ra. Hầm: B1 là tầng cao nhất; */
+  /*    cao tầng: T1 là tầng trệt, các tầng sau nằm phía trên.            */
+  /*  - counts: số slot của 4 dãy A-D ở từng tầng.                         */
+  /*  - Tầng đầu = chỉ xe THÁNG, các tầng sau = xe VÃNG LAI.               */
   /* ------------------------------------------------------------------ */
   var LOTS = [
-    { id: 'landmark81', name: 'Landmark 81 · 3 tầng hầm', type: 'underground', ids: ['B1', 'B2', 'B3'], seed: 81 },
-    { id: 'bitexco', name: 'Bitexco Financial Tower · 2 tầng hầm', type: 'underground', ids: ['B1', 'B2'], seed: 68 },
-    { id: 'vincom', name: 'Vincom Center Landmark · bãi 3 tầng', type: 'multistorey', ids: ['L3', 'L2', 'L1'], seed: 45 },
-    { id: 'saigoncentre', name: 'Saigon Centre · bãi 2 tầng', type: 'multistorey', ids: ['L2', 'L1'], seed: 27 }
+    { id: 'fptq9', name: 'Hầm ngầm FPT Q9 · 2 tầng (64 slot)', type: 'underground', ids: ['B1', 'B2'], seed: 9,
+      counts: [[8, 8, 8, 8], [8, 8, 8, 8]] },
+    { id: 'landmark81', name: 'Vincom Landmark 81 · 3 tầng hầm (82 slot)', type: 'underground', ids: ['B1', 'B2', 'B3'], seed: 81,
+      counts: [[6, 6, 6, 6], [7, 7, 7, 7], [7, 7, 8, 8]] },
+    { id: 'aeon', name: 'Aeon Mall Mega Hub · 4 tầng hầm (112 slot)', type: 'underground', ids: ['B1', 'B2', 'B3', 'B4'], seed: 112,
+      counts: [[6, 6, 6, 6], [7, 7, 7, 8], [7, 7, 7, 8], [8, 8, 7, 7]] },
+    { id: 'saigoncentre', name: 'Saigon Centre · bãi cao tầng 3 tầng (88 slot)', type: 'multistorey', ids: ['T1', 'T2', 'T3'], seed: 27,
+      counts: [[7, 7, 7, 7], [7, 7, 7, 7], [8, 8, 8, 8]] },
+    { id: 'crescent', name: 'Crescent Mall · bãi cao tầng 2 tầng (64 slot)', type: 'multistorey', ids: ['T1', 'T2'], seed: 45,
+      counts: [[8, 8, 8, 8], [8, 8, 8, 8]] }
   ];
-  // Với multistorey, ids[0] là tầng CAO NHẤT (k = 0 luôn là tầng trên cùng, nơi có lối vào/ra).
-  // Hiển thị cho người dùng: L1, L2, L3 (từ thấp lên cao).
 
   var T; // alias THREE
   var M = {};          // materials
@@ -374,8 +338,8 @@
 
   root.__P3R_INTERNAL__ = {
     setThree: function (three) { T = three; },
-    C: { FH: FH, CLEAR: CLEAR, SLAB: SLAB, SW: SW, SL: SL, GAPW: GAPW, AISLE: AISLE, ROW_LEN: ROW_LEN, END: END, XM: XM, RAMP_L: RAMP_L, LAND: LAND, XT: XT, D: D, HD: HD, RB0: RB0, RB1: RB1, RBC: RBC, EYE: EYE, MONTHLY_MAX: MONTHLY_MAX },
-    ROWS: ROWS, AISLE_Z: AISLE_Z, ENTRY_Z: ENTRY_Z, EXIT_Z: EXIT_Z, SLOT_X: SLOT_X, GAP_X: GAP_X, ZONE_X: ZONE_X, COL_X: COL_X, LOTS: LOTS,
+    C: { FH: FH, CLEAR: CLEAR, SLAB: SLAB, EYE: EYE },
+    LOTS: LOTS,
     M: M, initMaterials: initMaterials,
     util: { rng: rng, pad2: pad2, clamp: clamp, canvasTex: canvasTex, box: box, cyl: cyl, texPlane: texPlane, floorRect: floorRect, wallSeg: wallSeg, wallWithGap: wallWithGap, inst: inst, getGeo: getGeo, unitBox: unitBox, flatQuad: flatQuad, signTex: signTex, signMat: signMat, hangSign: hangSign, floorArrow: floorArrow, buildCars: buildCars, CAR_COLORS: CAR_COLORS, arrowTex: arrowTex }
   };

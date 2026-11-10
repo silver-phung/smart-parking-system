@@ -58,9 +58,11 @@
       '  <button class="p3r-btn on" data-mode="walk">🚶 Đi bộ (Street View)</button>',
       '  <button class="p3r-btn" data-mode="orbit">🗺 Toàn cảnh</button>',
       '  <span class="p3r-sep"></span>',
-      '  <button class="p3r-btn" data-go="entry">⬇ Lối vào</button>',
-      '  <button class="p3r-btn" data-go="exit">⬆ Lối ra</button>',
-      '  <button class="p3r-btn" data-go="core">🛗 Thang máy gần nhất</button>',
+      '  <button class="p3r-btn" data-go="entry">⬇ Dốc vào</button>',
+      '  <button class="p3r-btn" data-go="checkin">🛂 Booth Check-in</button>',
+      '  <button class="p3r-btn" data-go="checkout">🏁 Booth Check-out &amp; Lối ra</button>',
+      '  <button class="p3r-btn" data-go="ramp">↘ Dốc B2 &amp; Checkout vãng lai</button>',
+      '  <button class="p3r-btn" data-go="core">🛗 Phòng thang máy</button>',
       '</div>',
       '<div class="p3r-labels"></div>',
       '<div class="p3r-fade"><span></span></div>'
@@ -84,7 +86,7 @@
     def.ids.forEach(function (id, k) {
       var b = document.createElement('button');
       b.className = 'p3r-pill'; b.textContent = id; b.setAttribute('data-k', k);
-      b.title = k === 0 ? 'Tầng trên cùng (có lối vào / lối ra)' : 'Tầng ' + id;
+      b.title = k === 0 ? 'Tầng ' + id + ' · Khu gửi xe THÁNG + Lane bypass vãng lai' : 'Tầng ' + id + ' · Khu gửi xe VÃNG LAI';
       b.addEventListener('click', function () { self.setFloor(k); });
       self.elFloors.appendChild(b);
     });
@@ -94,14 +96,19 @@
     var cur = this.mode === 'walk' ? this.floorIdx : this.selFloor;
     this.elFloors.querySelectorAll('.p3r-pill').forEach(function (b) { b.classList.toggle('on', +b.getAttribute('data-k') === cur); });
     this.el.querySelectorAll('[data-mode]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-mode') === this.mode); }, this);
-    var fl = this.lot.floors[cur], mo = [0, 0, 0], vi = [0, 0, 0];
+    var fl = this.lot.floors[cur], st = [0, 0, 0], totalLot = 0;
+    this.lot.floors.forEach(function (f) { totalLot += f.slots.length; });
     fl.slots.forEach(function (s) {
-      var arr = s.zone === 'MONTHLY' ? mo : vi, i = s.status === 'OCCUPIED' ? 1 : (s.status === 'EMPTY' ? 0 : 2); arr[i]++;
+      var i = s.status === 'OCCUPIED' ? 1 : (s.status === 'EMPTY' ? 0 : 2); st[i]++;
     });
-    this.elStats.innerHTML = '<span class="p3r-chip"><i style="background:#10b981"></i>Trống ' + (mo[0] + vi[0]) + '</span>' +
-      '<span class="p3r-chip"><i style="background:#ef4444"></i>Có xe ' + (mo[1] + vi[1]) + '</span>' +
-      '<span class="p3r-chip"><i style="background:#f59e0b"></i>Bảo trì ' + (mo[2] + vi[2]) + '</span>' +
-      '<span class="p3r-chip blue">Tháng 48 · ' + mo[1] + ' xe</span><span class="p3r-chip green">Vãng lai 52 · ' + vi[1] + ' xe</span>';
+    var kindChip = fl.kind === 'MONTHLY'
+      ? '<span class="p3r-chip blue">Tầng ' + fl.id + ' · XE THÁNG (' + fl.slots.length + ' ô)</span>'
+      : '<span class="p3r-chip green">Tầng ' + fl.id + ' · VÃNG LAI (' + fl.slots.length + ' ô)</span>';
+    this.elStats.innerHTML = kindChip +
+      '<span class="p3r-chip"><i style="background:#10b981"></i>Trống ' + st[0] + '</span>' +
+      '<span class="p3r-chip"><i style="background:#ef4444"></i>Có xe ' + st[1] + '</span>' +
+      '<span class="p3r-chip"><i style="background:#f59e0b"></i>Bảo trì ' + st[2] + '</span>' +
+      '<span class="p3r-chip">Tổng bãi: ' + totalLot + ' slots</span>';
     if (this.onChange) this.onChange(this.getState());
   };
 
@@ -252,10 +259,9 @@
     this.selFloor = 0;
     this._renderFloorPills();
     var n = this.lot.entryNode;
-    this._place(n, Math.PI / 2, -0.04);
-    var mid = this.lot.ys[0] + 0;
-    this.orbit.target.set(0, this.lot.ys[0] - (def.ids.length - 1) * C.FH * 0.4, 0);
-    this.orbit.r = def.type === 'underground' ? 120 : 135;
+    this._place(n, this.lot.pois && this.lot.pois.entry ? this.lot.pois.entry.yaw : Math.PI / 2, -0.04);
+    this.orbit.target.set(0, this.lot.ys[0], 0);
+    this.orbit.r = def.type === 'underground' ? 128 : 138;
     this._applyVisibility();
     this._syncFloorPills();
     if (this.mode === 'orbit') this._beginTransition();
@@ -272,11 +278,14 @@
     var self = this;
     this.lot.floors.forEach(function (fl) {
       if (self.mode === 'walk') { fl.group.visible = true; fl.ceil.visible = true; }
-      else { fl.group.visible = fl.k >= self.selFloor; fl.ceil.visible = false; }
+      else {
+        fl.group.visible = self.lot.under ? (fl.k >= self.selFloor) : (fl.k <= self.selFloor);
+        fl.ceil.visible = false;
+      }
     });
-    this.sun.intensity = this.mode === 'orbit' ? 0.7 : 0;
+    this.sun.intensity = this.mode === 'orbit' ? 0.75 : 0;
     this.torch.intensity = this.mode === 'walk' ? 0.55 : 0;
-    this.scene.fog = this.mode === 'walk' ? new T.Fog(0x0a0f17, 55, 190) : null;
+    this.scene.fog = this.mode === 'walk' ? new T.Fog(0x0a0f17, 58, 195) : null;
     this.scene.background.set(this.mode === 'walk' ? 0x0a0f17 : 0x1a2433);
   };
   P.setMode = function (m) {
@@ -313,22 +322,24 @@
   P._goTo = function (what) {
     if (this.lifting) return;
     if (this.mode !== 'walk') this.setMode('walk');
-    var self = this, node, yaw = null;
-    if (what === 'entry') { node = this.lot.entryNode; yaw = Math.PI / 2; }
-    else if (what === 'exit') { node = this.lot.exitNode; yaw = Math.PI / 2; }
-    else {
+    var self = this, node = null, yaw = null;
+    if (what === 'exit') what = 'checkout';
+    if (what === 'core') {
       var best = null, bd = 1e12;
       this.lot.cores.forEach(function (c) {
         if (c.floorIdx !== self.floorIdx) return;
         var d = Math.pow(c.pos.x - self.walk.pos.x, 2) + Math.pow(c.pos.z - self.walk.pos.z, 2);
         if (d < bd) { bd = d; best = c; }
       });
+      if (!best) best = this.lot.cores[0];
       if (!best) return;
-      node = this.lot.nodes[best.nodeId]; yaw = best.side > 0 ? 0 : Math.PI;
+      node = this.lot.nodes[best.nodeId]; yaw = best.yaw;
+    } else if (this.lot.pois && this.lot.pois[what] && this.lot.pois[what].node) {
+      node = this.lot.pois[what].node; yaw = this.lot.pois[what].yaw;
+    } else {
+      node = this.lot.entryNode; yaw = Math.PI / 2;
     }
-    var flip = node.floorIdx !== this.floorIdx;
-    var go = function () { self._place(node, yaw, -0.05); };
-    if (flip || what !== 'core') this._fadeTo('Đang di chuyển…', go); else this._fadeTo('Đang di chuyển…', go);
+    this._fadeTo('Đang di chuyển…', function () { self._place(node, yaw, -0.05); });
   };
 
   P._moveTo = function (id) {
@@ -395,17 +406,19 @@
   P._animateProps = function (now) {
     var cp = this.camera.position, walk = this.mode === 'walk';
     this.lot.gates.forEach(function (g) {
-      var d = Math.hypot(cp.x - g.pos.x, cp.z - g.pos.z) < 7 && Math.abs(cp.y - g.pos.y) < 4 && walk;
+      var d = Math.hypot(cp.x - g.pos.x, cp.z - g.pos.z) < 7.5 && Math.abs(cp.y - g.pos.y) < 4 && walk;
       g.open = !!g.forced || d;
-      var target = g.open ? Math.PI / 2 : 0;
-      g.lift.rotation.x += (target - g.lift.rotation.x) * 0.1;
+      var target = g.open ? (g.openAngle || Math.PI / 2) : 0;
+      g.lift.rotation.x += (target - g.lift.rotation.x) * 0.12;
       g.grM.color.setHex(g.open ? 0x22e06a : 0x0b3d1d);
       g.redM.color.setHex(g.open ? 0x4a1010 : 0xff2a2a);
     });
     this.lot.cores.forEach(function (c) {
-      var d = Math.hypot(cp.x - c.pos.x, cp.z - c.pos.z) < 5.5 && Math.abs(cp.y - c.pos.y) < 4 && walk;
-      c.open += ((d ? 1 : 0) - c.open) * 0.08;
-      c.doors[0].position.x = -0.5 - c.open * 0.95; c.doors[1].position.x = 0.5 + c.open * 0.95;
+      var d = Math.hypot(cp.x - c.pos.x, cp.z - c.pos.z) < 6.0 && Math.abs(cp.y - c.pos.y) < 4 && walk;
+      c.open += ((d ? 1 : 0) - c.open) * 0.09;
+      if (c.slide) {
+        c.slide.forEach(function (s) { s.mesh.position.x = s.base + s.dir * s.dist * c.open; });
+      }
     });
   };
   P._updateHotspotLook = function (now) {
@@ -461,7 +474,7 @@
   /* Nút Lên / Xuống chỉ hiện khi đứng trong khu vực phòng thang máy */
   P._nearCore = function () {
     if (this.mode !== 'walk' || this.lifting || this.tween) return null;
-    var cp = this.walk.pos, best = null, bd = 5.0, self = this;
+    var cp = this.walk.pos, best = null, bd = 5.4, self = this;
     this.lot.cores.forEach(function (c) {
       if (c.floorIdx !== self.floorIdx) return;
       var d = Math.hypot(cp.x - c.pos.x, cp.z - c.pos.z);
@@ -472,9 +485,9 @@
   P._updateLift = function () {
     var c = this._nearCore(), el = this.elLift;
     if (!c) { if (!el.hidden) { el.hidden = true; el._k = ''; } return; }
-    var def = this.lot.def, cur = this.floorIdx, key = c.x + '|' + c.side + '|' + cur;
+    var def = this.lot.def, cur = this.floorIdx, key = c.id + '|' + cur;
     if (el._k !== key) {
-      el._k = key; var self = this, h = '<div class="p3r-lift-t">🛗 Thang máy · Đang ở <b>' + def.ids[cur] + '</b></div><div class="p3r-lift-b">';
+      el._k = key; var self = this, h = '<div class="p3r-lift-t">🛗 ' + esc(c.name) + ' · Đang ở <b>' + def.ids[cur] + '</b></div><div class="p3r-lift-b">';
       var ks = def.ids.map(function (_, k) { return k; }).filter(function (k) { return k !== cur; });
       ks.forEach(function (k) {
         var up = this.lot.ys[k] > this.lot.ys[cur];
@@ -487,25 +500,25 @@
   };
   P._lift = function (k, core) {
     var self = this, lot = this.lot, dest = null;
-    lot.cores.forEach(function (c) { if (c.floorIdx === k && Math.abs(c.x - core.x) < 0.1 && c.side === core.side) dest = c; });
+    lot.cores.forEach(function (c) { if (c.floorIdx === k && c.id === core.id) dest = c; });
     if (!dest) return;
     var up = lot.ys[k] > lot.ys[this.floorIdx];
     this.elLift.hidden = true; this.elLift._k = '';
     this._fadeTo((up ? '▲ Đang lên tầng ' : '▼ Đang xuống tầng ') + lot.def.ids[k] + '…', function () {
-      self._place(lot.nodes[dest.nodeId], dest.side > 0 ? 0 : Math.PI, -0.05);
+      self._place(lot.nodes[dest.nodeId], dest.yaw, -0.05);
     });
   };
 
   P._updateWhere = function () {
     var el = this.elWhere;
-    if (this.mode !== 'walk') { var t0 = 'Toàn cảnh · cắt tầng ' + this.lot.def.ids[this.selFloor] + ' (kéo để xoay, cuộn để zoom)'; if (el._k !== t0) { el.textContent = t0; el._k = t0; } return; }
-    var p = this.walk.pos, x = p.x, z = p.z, a = Math.abs(x), area;
-    if (this.node && this.node.type === 'core') area = 'Tiền sảnh thang máy';
-    else if (a > C.XM) area = 'Khu dốc xe lên/xuống';
-    else if (a > C.ROW_LEN / 2) area = 'Lối ngang đầu bãi';
-    else area = z < -14.75 ? 'Dãy A' : z < -8.25 ? 'Lối đi 1' : z < -3.25 ? 'Dãy B' : z < 3.25 ? 'Lối đi 2' : z < 8.25 ? 'Dãy C' : z < 14.75 ? 'Lối đi 3' : 'Dãy D';
-    var zone = a > C.ROW_LEN / 2 ? '' : (x < I.ZONE_X ? ' · Khu XE THÁNG' : ' · Khu VÃNG LAI');
-    var txt = '📍 ' + this.lot.def.ids[this.floorIdx] + ' · ' + area + zone;
+    if (this.mode !== 'walk') {
+      var fl = this.lot.floors[this.selFloor];
+      var t0 = 'Toàn cảnh · cắt tầng ' + fl.id + ' (' + (fl.kind === 'MONTHLY' ? 'Khu xe tháng + Lane bypass vãng lai' : 'Khu xe vãng lai') + ' · ' + fl.slots.length + ' slots)';
+      if (el._k !== t0) { el.textContent = t0; el._k = t0; }
+      return;
+    }
+    var p = this.walk.pos;
+    var txt = '📍 ' + this.lot.describe(p.x, p.z, this.floorIdx);
     if (el._k !== txt) { el.textContent = txt; el._k = txt; }
   };
 

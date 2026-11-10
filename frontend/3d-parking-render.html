@@ -12,7 +12,7 @@
 </head>
 <body class="p3r-page">
   <header class="p3r-header">
-    <div class="p3r-brand"><span class="p3r-logo">P</span><div><h1>SmartPark 3D · Render bãi đỗ xe</h1><small>Hầm ngầm 2-3 tầng · Bãi cao tầng 2-3 tầng (dữ liệu demo)</small></div></div>
+    <div class="p3r-brand"><span class="p3r-logo">P</span><div><h1>SmartPark 3D · Render bãi đỗ xe</h1><small>FPT Q9 (2 tầng · 64 slots) · Landmark 81 (3 tầng · 82 slots) · Aeon Mall (4 tầng · 112 slots)</small></div></div>
     <nav>
       <a href="client/index.html">Web Client</a>
       <a href="admin/index.html">Web Admin</a>
@@ -34,19 +34,20 @@
         <p class="p3r-note" id="roleNote"></p>
       </div>
       <div class="p3r-card">
-        <h3>Cách điều hướng</h3>
+        <h3>Luồng di chuyển &amp; Phân khu</h3>
         <ul>
-          <li><b>Street View:</b> bấm vòng tròn trên sàn để đi tới điểm đó, kéo chuột để nhìn.</li>
-          <li><b>Thang máy:</b> đi vào tiền sảnh kính, nút ▲ Lên / ▼ Xuống mới hiện ra.</li>
-          <li><b>Barrier:</b> tự mở khi bạn tới gần, hoặc bấm vào thanh chắn.</li>
-          <li><b>Thông tin xe:</b> chỉ hiện khi bạn đi tới gần slot (&lt; 11 m, rõ chi tiết &lt; 7 m).</li>
-          <li><b>Toàn cảnh:</b> xoay/zoom, cắt bỏ trần và các tầng phía trên để quan sát.</li>
+          <li><b>Tầng đầu (B1 / T1):</b> dành riêng cho <span class="tag blue">Xe tháng</span> (quẹt thẻ ở <b>Booth Check-in</b> phía trong sau khi xuống dốc).</li>
+          <li><b>Lane xe vãng lai (mũi tên xanh dương):</b> đi thẳng dọc hành lang phía Nam (ngăn cách gờ đỏ với khu xe tháng) xuống dốc <b>B2, B3, B4</b> kèm bảng LED báo số slot trống từng tầng.</li>
+          <li><b>Lối ra 2 lane (cọc tiêu phân làn):</b> xe tháng quẹt thẻ ở <b>Booth Check-out B1</b> đi <b>lane trái (mũi tên vàng)</b>; xe vãng lai quẹt thẻ <b>Checkout ở B2</b> rồi lên dốc đi <b>lane phải (mũi tên xanh lá)</b> cùng lên mặt đất.</li>
+          <li><b>Phòng thang máy:</b> phòng kín vách kính tách biệt với hầm (3 vị trí/tầng), vào trong phòng mới hiện nút ▲ Lên / ▼ Xuống.</li>
         </ul>
       </div>
       <div class="p3r-card">
-        <h3>Quy ước mã slot</h3>
-        <p><code>[Tầng]-[Dãy][Số]</code> → <code>B1-A01</code>, <code>B2-C20</code>, <code>L3-D25</code></p>
-        <p>100 slot/tầng = 4 dãy (A-D) × 25. <span class="tag blue">Xe tháng 01-12 (48)</span> <span class="tag green">Vãng lai 13-25 (52)</span></p>
+        <h3>Các bãi mẫu &amp; Mã slot</h3>
+        <p><code>[Tầng]-[Dãy A..D][Số]</code> → <code>B1-A01</code>, <code>B2-C05</code>, <code>B4-D07</code></p>
+        <p>• <b>Hầm ngầm FPT Q9 (2 tầng B1–B2):</b> 64 slots (32 ô/tầng chuẩn DB)<br>
+           • <b>Vincom Landmark 81 (3 tầng B1–B3):</b> 82 slots<br>
+           • <b>Aeon Mall Mega Hub (4 tầng B1–B4):</b> 112 slots</p>
         <div class="p3r-legend">
           <span><i style="background:#10b981"></i>Trống</span><span><i style="background:#ef4444"></i>Có xe</span><span><i style="background:#f59e0b"></i>Bảo trì (cọc tiêu)</span>
         </div>
@@ -74,9 +75,9 @@
       sel.value = role; note.textContent = NOTES[role];
       var viewer = new ParkingRender({ container: '#render3d', role: role, lotId: params.get('lot') || undefined });
       window.parkingRender = viewer;
-      // Tham số tiện kiểm thử: ?lot=vincom&floor=1&mode=orbit&go=core|entry|exit&step=3
-      if (params.get('floor')) { viewer.lifting = false; viewer.setFloor(+params.get('floor')); }
+      // Tham số tiện kiểm thử: ?lot=fptq9&floor=1&mode=orbit&go=core|entry|checkin|checkout|ramp&step=3
       if (params.get('mode') === 'orbit') { viewer.setMode('orbit'); viewer.tr = null; }
+      if (params.get('floor')) { viewer.lifting = false; viewer.setFloor(+params.get('floor')); viewer.tr = null; }
       if (params.get('go')) setTimeout(function () { viewer.lifting = false; viewer._goTo(params.get('go')); }, 1200);
       if (params.get('step')) {
         var steps = +params.get('step');
