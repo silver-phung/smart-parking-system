@@ -33,12 +33,7 @@ public class ParkingManagementService : IParkingManagementService
 
     public async Task<PagedResult<ParkingLotDto>> GetLotsAsync(ParkingLotFilterDto filter, bool isAdminOrStaff, CancellationToken ct = default)
     {
-        var query = _context.ParkingLots
-            .Include(l => l.Floors)
-                .ThenInclude(f => f.Slots)
-                    .ThenInclude(s => s.AssignedDispatches)
-            .AsNoTracking()
-            .AsQueryable();
+        var query = _context.ParkingLots.AsNoTracking();
 
         // Guest / Public users can only view active lots
         if (!isAdminOrStaff)
@@ -57,98 +52,71 @@ public class ParkingManagementService : IParkingManagementService
         }
 
         var totalCount = await query.CountAsync(ct);
-
-        var lots = await query
+        var dtos = await query
             .OrderBy(l => l.Name)
             .Skip((filter.PageNumber - 1) * filter.PageSize)
             .Take(filter.PageSize)
-            .ToListAsync(ct);
-
-        var dtos = lots.Select(l =>
-        {
-            var allSlots = l.Floors.SelectMany(f => f.Slots).ToList();
-            var hasConfiguredSlots = allSlots.Any();
-            var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
-                                                  s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
-                                                  s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
-
-            var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
-            var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
-            var totalCapacity = usableSlots.Count;
-            var availableSlotsCount = (l.IsActive && hasConfiguredSlots) ? availableCount : 0;
-
-            return new ParkingLotDto
+            .Select(l => new ParkingLotDto
             {
                 Id = l.Id,
                 Name = l.Name,
                 Address = l.Address,
-                TotalCapacity = totalCapacity,
+                TotalCapacity = l.Floors.Where(f => f.IsActive).SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                        s.PhysicalStatus != SlotPhysicalStatuses.Unavailable),
                 TotalFloors = l.Floors.Count,
-                AvailableSlotsCount = availableSlotsCount,
-                OccupiedSlotsCount = occupiedCount,
+                AvailableSlotsCount = l.IsActive ? l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty &&
+                        !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)) : 0,
+                OccupiedSlotsCount = l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
                 IsActive = l.IsActive,
                 CreatedAt = l.CreatedAt,
                 UpdatedAt = l.UpdatedAt,
-                PhysicalSlotsCount = allSlots.Count,
+                PhysicalSlotsCount = l.Floors.SelectMany(f => f.Slots).Count(),
                 ConfiguredCapacity = l.TotalCapacity
-            };
-        }).ToList();
+            })
+            .ToListAsync(ct);
 
         return PagedResult<ParkingLotDto>.Create(dtos, totalCount, filter.PageNumber, filter.PageSize);
     }
 
     public async Task<ParkingLotDetailDto?> GetLotByIdAsync(int id, bool isAdminOrStaff, CancellationToken ct = default)
     {
-        var lot = await _context.ParkingLots
-            .Include(l => l.Floors)
-                .ThenInclude(f => f.Slots)
-                    .ThenInclude(s => s.AssignedDispatches)
+        return await _context.ParkingLots
             .AsNoTracking()
-            .FirstOrDefaultAsync(l => l.Id == id, ct);
-
-        if (lot == null) return null;
-        if (!isAdminOrStaff && !lot.IsActive) return null;
-
-        var allSlots = lot.Floors.SelectMany(f => f.Slots).ToList();
-        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
-        var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
-
-        var floorSummaries = lot.Floors
-            .OrderBy(f => f.FloorNumber)
-            .Select(f => new ParkingFloorSummaryDto
+            .Where(l => l.Id == id && (isAdminOrStaff || l.IsActive))
+            .Select(l => new ParkingLotDetailDto
             {
-                Id = f.Id,
-                FloorNumber = f.FloorNumber,
-                Name = f.Name,
-                TotalSlots = f.TotalSlots,
-                AvailableSlotsCount = f.Slots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)),
-                OccupiedSlotsCount = f.Slots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
-                IsActive = f.IsActive
-            }).ToList();
-
-        var hasConfiguredSlots = allSlots.Any();
-        var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
-                                              s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
-                                              s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
-        var totalCapacity = usableSlots.Count;
-        var availableSlotsCount = (lot.IsActive && hasConfiguredSlots) ? availableCount : 0;
-
-        return new ParkingLotDetailDto
-        {
-            Id = lot.Id,
-            Name = lot.Name,
-            Address = lot.Address,
-            TotalCapacity = totalCapacity,
-            TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = availableSlotsCount,
-            OccupiedSlotsCount = occupiedCount,
-            IsActive = lot.IsActive,
-            CreatedAt = lot.CreatedAt,
-            UpdatedAt = lot.UpdatedAt,
-            PhysicalSlotsCount = allSlots.Count,
-            ConfiguredCapacity = lot.TotalCapacity,
-            Floors = floorSummaries
-        };
+                Id = l.Id,
+                Name = l.Name,
+                Address = l.Address,
+                TotalCapacity = l.Floors.Where(f => f.IsActive).SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                        s.PhysicalStatus != SlotPhysicalStatuses.Unavailable),
+                TotalFloors = l.Floors.Count,
+                AvailableSlotsCount = l.IsActive ? l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty &&
+                        !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)) : 0,
+                OccupiedSlotsCount = l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
+                IsActive = l.IsActive,
+                CreatedAt = l.CreatedAt,
+                UpdatedAt = l.UpdatedAt,
+                PhysicalSlotsCount = l.Floors.SelectMany(f => f.Slots).Count(),
+                ConfiguredCapacity = l.TotalCapacity,
+                Floors = l.Floors.OrderBy(f => f.FloorNumber).Select(f => new ParkingFloorSummaryDto
+                {
+                    Id = f.Id,
+                    FloorNumber = f.FloorNumber,
+                    Name = f.Name,
+                    TotalSlots = f.TotalSlots,
+                    AvailableSlotsCount = f.Slots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty &&
+                        !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)),
+                    OccupiedSlotsCount = f.Slots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied)
+                }).ToList()
+            })
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task<(bool Success, string Message, ParkingLotDto? Lot)> CreateLotAsync(CreateParkingLotRequestDto request, long? actorId, CancellationToken ct = default)

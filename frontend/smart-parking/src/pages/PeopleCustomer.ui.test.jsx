@@ -300,3 +300,29 @@ it("keeps email registration and OTP requests public", async () => {
   await waitFor(() => expect(writes()).toHaveLength(2));
   expect(writes()[1][0]).toBe("/api/v1/auth/verify-email");
 });
+
+it("resends OTP after a reopened registration form receives a conflict", async () => {
+  const email = "customer@example.com";
+  fetcher
+    .mockResolvedValueOnce(Response.json({ message: "Email đã tồn tại" }, { status: 409 }))
+    .mockResolvedValueOnce(Response.json({ message: "Nếu email chưa xác minh, mã mới sẽ được gửi." }));
+
+  mount(<Register />);
+  fireEvent.change(screen.getByLabelText("Email"), { target: { value: email } });
+  fireEvent.change(screen.getByLabelText("Mật khẩu", { exact: true }), {
+    target: { value: "Password123!" },
+  });
+  fireEvent.change(screen.getByLabelText("Nhập lại mật khẩu"), {
+    target: { value: "Password123!" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Gửi mã", exact: true }));
+
+  expect((await screen.findByRole("status")).textContent).toContain("Nếu email chưa xác minh");
+  expect(screen.getByLabelText("Mã OTP").disabled).toBe(false);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(writes().map(([url]) => url)).toEqual([
+    "/api/v1/auth/register",
+    "/api/v1/auth/resend-verification",
+  ]);
+  expect(JSON.parse(writes()[1][1].body)).toEqual({ email });
+});

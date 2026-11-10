@@ -45,17 +45,21 @@ export default function Register() {
     setError("");
     setInfo("");
     const email = form.email.trim();
+    const resendOtp = () => apiRequest("/v1/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+      skipAuth: true,
+    });
     try {
       const response = otpSent
-        ? await apiRequest("/v1/auth/resend-verification", {
-            method: "POST",
-            body: JSON.stringify({ email }),
-            skipAuth: true,
-          })
+        ? await resendOtp()
         : await apiRequest("/v1/auth/register", {
             method: "POST",
             body: JSON.stringify({ email, password: form.password }),
             skipAuth: true,
+          }).catch((registrationError) => {
+            if (registrationError.status !== 409) throw registrationError;
+            return resendOtp();
           });
       setOtpSent(true);
       setCooldown(RESEND_COOLDOWN_SECONDS);
