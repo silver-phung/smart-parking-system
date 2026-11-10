@@ -46,17 +46,19 @@ public class StoredImageConfiguration : IEntityTypeConfiguration<StoredImage>
             .HasMaxLength(10)
             .IsRequired();
 
+        builder.Property(image => image.Content)
+            .HasColumnName("content")
+            .HasColumnType("bytea");
+
         builder.Property(image => image.Bytes)
             .HasColumnName("bytes")
             .IsRequired();
 
         builder.Property(image => image.Width)
-            .HasColumnName("width")
-            .IsRequired();
+            .HasColumnName("width");
 
         builder.Property(image => image.Height)
-            .HasColumnName("height")
-            .IsRequired();
+            .HasColumnName("height");
 
         builder.Property(image => image.CreatedAt)
             .HasColumnName("created_at")

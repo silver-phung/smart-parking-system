@@ -92,6 +92,7 @@
     $('#pageTitle').textContent = PAGES[p][0];
     Array.prototype.forEach.call(document.querySelectorAll('#nav button'), function (b) { if (b.getAttribute('data-p') === p) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
     if (location.hash !== '#' + p) history.replaceState(null, '', '#' + p);
+    if (p === 'rev') loadTraffic();
     render(); window.scrollTo(0, 0);
     /* [ANIM] hiệu ứng vào trang: chỉ chạy khi bấm đổi trang. Không đặt hiệu ứng "xuất hiện" trong render() vì trang tự vẽ lại mỗi 3 giây. */
     var pg = $('#page'); pg.classList.remove('enter'); void pg.offsetWidth; pg.classList.add('enter');
@@ -186,6 +187,52 @@
   /* ---------- Trang: Doanh thu ----------
      Xem báo cáo 7/14/30 ngày; cơ cấu thanh toán là số liệu mẫu; hỗ trợ xuất CSV.
   */
+  /* Lưu lượng theo tháng: lấy từ DB qua GET /api/v1/parking-sessions/monthly-stats (cần token ADMIN thật). */
+  function curMonth() { var d = new Date(); return d.getFullYear() + '-' + S.pad(d.getMonth() + 1); }
+  var traffic = { month: curMonth(), data: null, state: 'idle' };
+  function apiToken() {
+    try { var s = JSON.parse(sessionStorage.getItem('smart-parking.auth.v1') || 'null'); return s && s.accessToken || null; } catch (e) { return null; }
+  }
+  function loadTraffic() {
+    var key = traffic.month, tk = apiToken();
+    if (!tk) { traffic.state = 'noauth'; traffic.data = null; if (ui.page === 'rev') render(); return; }
+    traffic.state = 'loading'; traffic.data = null;
+    fetch((window.SP_API_BASE || '') + '/api/v1/parking-sessions/monthly-stats?year=' + key.slice(0, 4) + '&month=' + +key.slice(5, 7), { headers: { Authorization: 'Bearer ' + tk } })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) { if (key === traffic.month) { traffic.data = d; traffic.state = 'ok'; } })
+      .catch(function () { if (key === traffic.month) traffic.state = 'error'; })
+      .then(function () { if (key === traffic.month && ui.page === 'rev') render(); });
+  }
+  function trafficChart(days) {
+    var W = 640, H = 250, l = 46, r = 8, t = 10, b = 28, n = days.length, iw = W - l - r, ih = H - t - b, g = '', bars = '', i;
+    var mx = niceMax(Math.max.apply(null, days.map(function (d) { return Math.max(d.checkIns, d.checkOuts); })) * 1.05), slot = iw / n, bw = slot * 0.36;
+    var Y = function (v) { return t + ih * (1 - v / mx); };
+    for (i = 0; i <= 4; i++) { var v = mx * i / 4; g += '<line class="ch-grid" x1="' + l + '" x2="' + (W - r) + '" y1="' + Y(v) + '" y2="' + Y(v) + '"/><text class="ch-t" x="' + (l - 6) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + Math.round(v) + '</text>'; }
+    days.forEach(function (d, k) {
+      var x = l + slot * k + slot * 0.12, tt = d.date.slice(8) + '/' + d.date.slice(5, 7);
+      [['checkIns', 'b-car', 'Vào'], ['checkOuts', 'b-ev', 'Ra']].forEach(function (s, j) {
+        var h = ih * d[s[0]] / mx; bars += '<rect class="' + s[1] + '" x="' + (x + j * bw).toFixed(1) + '" y="' + (Y(0) - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(0, h).toFixed(1) + '"><title>' + tt + ' · ' + s[2] + ': ' + d[s[0]] + ' lượt</title></rect>';
+      });
+      if (k % 3 === 0) bars += '<text class="ch-t" x="' + (x + bw).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + tt + '</text>';
+    });
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Biểu đồ lưu lượng xe vào/ra theo ngày trong tháng">' + g + bars + '</svg>';
+  }
+  function trafficCard() {
+    var d = traffic.data, body;
+    var head = '<div class="card-h"><h2>Lưu lượng xe trong tháng</h2><div class="chart-legend"><span><i class="lg-car"></i>Xe vào</span><span><i class="lg-ev"></i>Xe ra</span>' +
+      '<input type="month" id="trMonth" value="' + traffic.month + '" max="' + curMonth() + '" data-chg="trMonth" aria-label="Chọn tháng"></div></div>';
+    if (traffic.state === 'noauth') body = '<p class="empty">Cần đăng nhập bằng tài khoản ADMIN của hệ thống (backend) để xem dữ liệu thật từ cơ sở dữ liệu.</p>';
+    else if (traffic.state === 'loading' || traffic.state === 'idle') body = '<p class="empty">Đang tải dữ liệu...</p>';
+    else if (traffic.state === 'error' || !d) body = '<p class="empty">Không tải được dữ liệu. Kiểm tra backend đang chạy và quyền ADMIN.</p>';
+    else {
+      var days = d.days, act = days.filter(function (x) { return x.checkIns + x.checkOuts > 0; }), fd = function (x) { return x.date.slice(8) + '/' + x.date.slice(5, 7); };
+      var pk = days.reduce(function (a, x) { return x.checkIns > a.checkIns ? x : a; }, days[0]), hr = d.checkInsByHour.indexOf(Math.max.apply(null, d.checkInsByHour));
+      body = trafficChart(days) + '<div class="insights"><div class="insight"><small>Tổng lượt vào / ra</small><b>' + d.totalCheckIns.toLocaleString('vi-VN') + ' / ' + d.totalCheckOuts.toLocaleString('vi-VN') + '</b><small>Trung bình ' + Math.round(d.totalCheckIns / (act.length || 1)) + ' lượt vào/ngày hoạt động</small></div>' +
+        '<div class="insight"><small>Ngày đông nhất</small><b>' + (d.totalCheckIns ? fd(pk) : '--') + '</b><small>' + pk.checkIns + ' lượt vào</small></div>' +
+        '<div class="insight"><small>Giờ cao điểm</small><b>' + (d.totalCheckIns ? S.pad(hr) + ':00 - ' + S.pad(hr + 1) + ':00' : '--') + '</b><small>Doanh thu tháng ' + S.money(d.totalRevenue) + '</small></div></div>';
+    }
+    return '<section class="card">' + head + body + '<p class="hint" style="margin-top:10px">Số liệu thật từ cơ sở dữ liệu, toàn bộ các bãi xe.</p></section>';
+  }
   function pRev() {
     var lots = lotsSel(), n = ui.revDays, all = dailyAgg(lots), cur = all.slice(30 - n), prev = 30 - 2 * n >= 0 ? all.slice(30 - 2 * n, 30 - n) : null;
     var tot = function (a) { return sum(a, function (d) { return d.car + d.moto + d.ev; }); }, tr = sum(cur, function (d) { return d.trips; }), rev = tot(cur);
@@ -194,6 +241,7 @@
     h += '<div class="kpis">' + kpi('Tổng doanh thu', S.moneyShort(rev) + '<small>₫</small>', delta == null ? 'Chưa đủ dữ liệu kỳ trước' : (delta >= 0 ? '+' : '') + delta + '% so với ' + n + ' ngày trước', delta == null ? '' : delta >= 0 ? 'up' : 'down') +
       kpi('Lượt xe', tr.toLocaleString('vi-VN'), 'Trung bình ' + Math.round(tr / n) + ' lượt/ngày') + kpi('Giá trị mỗi lượt', S.money(rev / (tr || 1)), 'Đã gồm phụ thu cao điểm') + kpi('Doanh thu mỗi ngày', S.moneyShort(rev / n) + '<small>₫</small>', 'Trung bình trong kỳ') + '</div>';
     h += '<section class="card"><div class="card-h"><h2>Doanh thu theo ngày</h2><div class="chart-legend">' + ['car', 'moto', 'ev'].map(function (t) { return '<span><i class="lg-' + t + '"></i>' + S.VEH[t].label + '</span>'; }).join('') + '</div></div>' + stackChart(cur) + '</section>';
+    h += trafficCard();
     var rows = lots.map(function (l) {
       var r = 0, t = 0, i; for (i = 30 - n; i < 30; i++) { var e = S.hist.daily[l.id][i]; r += e.rev.car + e.rev.moto + e.rev.ev; t += e.trips.car + e.trips.moto + e.trips.ev; }
       var lr = liveRev([l]); r += lr.car + lr.moto + lr.ev;
@@ -351,6 +399,7 @@
   document.addEventListener('change', function (e) {
     var k = e.target.getAttribute && e.target.getAttribute('data-chg');
     if (e.target.id === 'lotSel') { ui.lot = e.target.value; render(); return; }
+    if (k === 'trMonth') { if (e.target.value) { traffic.month = e.target.value; loadTraffic(); render(); } return; }
     if (k === 'priceScope') { ui.priceScope = e.target.value; render(); }
     else if (k === 'priceOwn') { var P = S.state.pricing; if (e.target.checked) P.lots[ui.priceScope] = JSON.parse(JSON.stringify(P.def)); else delete P.lots[ui.priceScope]; S.save(); render(); }
     else if (k === 'calc') calcPrice();

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { staffError } from "../../services/staffApi.js";
+import { useImageUrl } from "../../services/useImageUrl.js";
 
 export function StaffIcon({ name, size = 20 }) {
   const paths = {
@@ -8,6 +9,12 @@ export function StaffIcon({ name, size = 20 }) {
       <>
         <path d="M3 12h13m-5-5 5 5-5 5" />
         <path d="M16 3h5v18h-5" />
+      </>
+    ),
+    bookings: (
+      <>
+        <rect x="4" y="5" width="16" height="16" rx="2" />
+        <path d="M8 3v4m8-4v4M4 10h16m-11 5 2 2 4-4" />
       </>
     ),
     exit: (
@@ -138,19 +145,20 @@ export const formatMoney = (value) =>
 
 export function SafePhoto({ url, alt, className = "" }) {
   const [failed, setFailed] = useState(false);
+  const image = useImageUrl(url);
   useEffect(() => setFailed(false), [url]);
-  if (!url || !/^(https?:\/\/|blob:)/i.test(url) || failed) {
+  if (!image.source || image.error || failed) {
     return (
       <div className={`staff-photo-empty ${className}`}>
         <StaffIcon name="camera" size={28} />
-        <span>{url ? "Không tải được ảnh" : "Chưa có ảnh xe"}</span>
+        <span>{url ? (image.error || failed ? "Không tải được ảnh" : "Đang tải ảnh…") : "Chưa có ảnh xe"}</span>
       </div>
     );
   }
   return (
     <img
       className={`staff-photo ${className}`}
-      src={url}
+      src={image.source}
       alt={alt}
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}

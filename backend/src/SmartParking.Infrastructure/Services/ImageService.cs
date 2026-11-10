@@ -25,15 +25,18 @@ public sealed class ImageService : IImageService
     private readonly IApplicationDbContext _dbContext;
     private readonly CloudinaryOptions _options;
     private readonly ILogger<ImageService> _logger;
+    private readonly IParkingAuthorizationService _authorization;
 
     public ImageService(
         IApplicationDbContext dbContext,
         IOptions<CloudinaryOptions> options,
-        ILogger<ImageService> logger)
+        ILogger<ImageService> logger,
+        IParkingAuthorizationService authorization)
     {
         _dbContext = dbContext;
         _options = options.Value;
         _logger = logger;
+        _authorization = authorization;
     }
 
     public async Task<StoredImageDto> UploadAsync(
@@ -44,7 +47,7 @@ public sealed class ImageService : IImageService
         CancellationToken cancellationToken)
     {
         if (_options.MaxUploadSizeBytes <= 0)
-            throw new ImageConfigurationException();
+            throw new ImageConfigurationException("The image upload size limit must be greater than zero.");
 
         if (contentLength <= 0 || contentLength > _options.MaxUploadSizeBytes)
             throw new ImageValidationException("Image file is empty or exceeds the configured size limit.");
@@ -63,39 +66,19 @@ public sealed class ImageService : IImageService
             await imageStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
         }
 
-        if (imageStream.Length == 0 || !HasExpectedSignature(imageStream.GetBuffer(), contentType))
+        var imageContent = imageStream.ToArray();
+        if (imageContent.Length == 0 || !HasExpectedSignature(imageContent, contentType))
             throw new ImageValidationException("The file content does not match a supported image format.");
 
-        imageStream.Position = 0;
-        var cloudinary = CreateCloudinaryClient();
-        ImageUploadResult upload;
-        try
-        {
-            upload = await cloudinary.UploadAsync(new ImageUploadParams
-            {
-                File = new FileDescription($"upload.{expectedFormat}", imageStream),
-                Folder = _options.Folder,
-                UseFilename = false,
-                UniqueFilename = true
-            }, cancellationToken);
-        }
-        catch (HttpRequestException)
-        {
-            throw new ImageProviderException();
-        }
-
-        if (upload.Error is not null || string.IsNullOrWhiteSpace(upload.PublicId) || upload.SecureUrl is null)
-            throw new ImageProviderException();
-
+        var imageKey = Guid.NewGuid().ToString("N");
         var storedImage = new StoredImage
         {
             UserId = userId,
-            PublicId = upload.PublicId,
-            Url = upload.SecureUrl.ToString(),
-            Format = upload.Format ?? expectedFormat,
-            Bytes = upload.Bytes,
-            Width = upload.Width,
-            Height = upload.Height,
+            PublicId = imageKey,
+            Url = $"/api/v1/images/content/{imageKey}",
+            Format = expectedFormat,
+            Content = imageContent,
+            Bytes = imageStream.Length,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -106,13 +89,8 @@ public sealed class ImageService : IImageService
         }
         catch (Exception exception) when (exception is DbUpdateException or NpgsqlException)
         {
-            await RemoveOrphanedUploadAsync(cloudinary, storedImage.PublicId);
+            _logger.LogError(exception, "Unable to save image metadata and content.");
             throw new ImagePersistenceException();
-        }
-        catch (OperationCanceledException)
-        {
-            await RemoveOrphanedUploadAsync(cloudinary, storedImage.PublicId);
-            throw;
         }
 
         return ToDto(storedImage);
@@ -131,6 +109,41 @@ public sealed class ImageService : IImageService
         return image is null ? null : ToDto(image);
     }
 
+    public async Task<StoredImageContentDto?> GetContentAsync(
+        string publicId, long userId, string role, CancellationToken cancellationToken)
+    {
+        var image = await _dbContext.StoredImages.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.PublicId == publicId && i.Content != null, cancellationToken);
+        if (image is null) return null;
+
+        var allowed = image.UserId == userId || role == SmartParking.Domain.Constants.Roles.Admin;
+        if (!allowed)
+        {
+            var sessions = await _dbContext.ParkingSessions.AsNoTracking()
+                .Where(s => s.CheckInImageUrl == image.Url || s.CheckOutImageUrl == image.Url)
+                .Select(s => new { s.LotId, VehicleUserId = s.Vehicle == null ? null : s.Vehicle.UserId })
+                .ToListAsync(cancellationToken);
+            foreach (var session in sessions)
+            {
+                if (session.VehicleUserId == userId ||
+                    await _authorization.HasLotAccessAsync(userId, role, session.LotId, cancellationToken))
+                {
+                    allowed = true;
+                    break;
+                }
+            }
+        }
+        if (!allowed) return null;
+        var contentType = image.Format switch
+        {
+            "jpg" => "image/jpeg",
+            "png" => "image/png",
+            "webp" => "image/webp",
+            _ => throw new ImagePersistenceException()
+        };
+        return new StoredImageContentDto(image.Content!, contentType);
+    }
+
     public async Task<ImageDeleteResult> DeleteAsync(
         long id,
         long userId,
@@ -145,6 +158,13 @@ public sealed class ImageService : IImageService
 
         if (!isAdmin && image.UserId != userId)
             return ImageDeleteResult.Forbidden;
+
+        if (image.Content is not null)
+        {
+            _dbContext.StoredImages.Remove(image);
+            await SaveDeletedMetadataAsync(image.Id, cancellationToken);
+            return ImageDeleteResult.Deleted;
+        }
 
         var cloudinary = CreateCloudinaryClient();
         DeletionResult deletion;
@@ -204,24 +224,6 @@ public sealed class ImageService : IImageService
         return new Cloudinary(new Account(_options.CloudName, _options.ApiKey, _options.ApiSecret));
     }
 
-    private async Task RemoveOrphanedUploadAsync(Cloudinary cloudinary, string publicId)
-    {
-        try
-        {
-            var deletion = await cloudinary.DestroyAsync(new DeletionParams(publicId)
-            {
-                ResourceType = ResourceType.Image
-            });
-
-            if (deletion.Error is not null || !string.Equals(deletion.Result, "ok", StringComparison.OrdinalIgnoreCase))
-                _logger.LogWarning("Cloudinary cleanup failed for uploaded asset {PublicId}.", publicId);
-        }
-        catch (HttpRequestException)
-        {
-            _logger.LogWarning("Cloudinary cleanup failed for uploaded asset {PublicId}.", publicId);
-        }
-    }
-
     private async Task SaveDeletedMetadataAsync(long imageId, CancellationToken cancellationToken)
     {
         try
@@ -230,7 +232,7 @@ public sealed class ImageService : IImageService
         }
         catch (Exception exception) when (exception is DbUpdateException or NpgsqlException)
         {
-            _logger.LogError("Cloudinary asset for image {ImageId} was deleted, but its metadata could not be removed.", imageId);
+            _logger.LogError(exception, "Could not remove metadata for image {ImageId}.", imageId);
             throw new ImagePersistenceException();
         }
     }

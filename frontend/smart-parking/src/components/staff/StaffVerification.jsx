@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   plateKey,
+  platesMatch,
   slotIsSelectable,
   staffApi,
+  validatePlate,
 } from "../../services/staffApi.js";
 import {
   formatTime,
@@ -49,6 +51,7 @@ export default function StaffVerification({
   const [slotId, setSlotId] = useState("");
   const [floorId, setFloorId] = useState("");
   const [notes, setNotes] = useState("");
+  const [observedPlate, setObservedPlate] = useState("");
   const [checked, setChecked] = useState(false);
   const [message, setMessage] = useState("");
   const panelRef = useRef(null);
@@ -62,14 +65,14 @@ export default function StaffVerification({
 
   const data = resource.data;
   const session = data?.sessions.find(
-    (item) => String(item.id) === String(selectedId),
+    (item) => !item.bookingId && String(item.id) === String(selectedId),
   );
   const dispatch = data?.dispatches.find(
     (item) => item.sessionId === session?.id,
   );
   const slot = data?.slots.find((item) => String(item.id) === String(slotId));
   const queue = (data?.sessions || []).filter((item) => {
-    if (item.status !== "ACTIVE") return false;
+    if (item.status !== "ACTIVE" || item.bookingId) return false;
     const open = data.dispatches.find((row) => row.sessionId === item.id);
     const pending = !item.currentSlotId || Boolean(open);
     if (queueFilter === "waiting" && (!pending || open?.status === "ASSIGNED"))
@@ -86,6 +89,7 @@ export default function StaffVerification({
     setSlotId(item.currentSlotId ? String(item.currentSlotId) : "");
     setFloorId("");
     setNotes("");
+    setObservedPlate("");
     setChecked(false);
     setMode("verify");
     setMessage("");
@@ -100,12 +104,16 @@ export default function StaffVerification({
         throw new Error("Chọn ô hợp lệ, chưa được xe khác sử dụng.");
       if (!checked)
         throw new Error("Vui lòng xác nhận đã kiểm tra xe và vị trí thực tế.");
+      const plate = mode === "assign" ? "" : validatePlate(observedPlate);
+      if (mode !== "assign" && !platesMatch(plate, session.plateNumber))
+        throw new Error("Biển số thực tế không khớp với phiên xe vào cổng.");
       const result = await staffApi.slotAction({
         mode,
         session,
         slotId: Number(slotId),
         notes: notes.trim(),
         dispatch,
+        observedPlate: plate,
       });
       setMessage(
         result.message || `Đã cập nhật vị trí xe ${session.plateNumber}.`,
@@ -113,6 +121,7 @@ export default function StaffVerification({
       setSelectedId("");
       setSlotId("");
       setNotes("");
+      setObservedPlate("");
       setChecked(false);
       onChanged();
     });
@@ -140,7 +149,8 @@ export default function StaffVerification({
               <div className="staff-panel-heading">
                 <div>
                   <span className="staff-eyebrow">TẠI BÃI</span>
-                  <h2>Hàng xe cần xử lý</h2>
+                  <h2>Xe vãng lai chờ xử lý</h2>
+                  <p>Đối chiếu ảnh tại cổng, biển số và ô xe đã đỗ.</p>
                 </div>
                 <span className="staff-count">{queue.length}</span>
               </div>
@@ -250,6 +260,12 @@ export default function StaffVerification({
                     </div>
                   </div>
                   <StaffError error={action.error} />
+                  {!session.checkInImageUrl && (
+                    <Notice kind="warning">
+                      Phiên này chưa có ảnh tại cổng. Hãy kiểm tra trực tiếp xe
+                      và liên hệ nhân viên cổng để đối chiếu.
+                    </Notice>
+                  )}
                   <form onSubmit={submit} aria-label="Xác minh vị trí xe">
                     <fieldset
                       className="staff-action-picker"
@@ -281,6 +297,22 @@ export default function StaffVerification({
                         </label>
                       ))}
                     </fieldset>
+                    {mode !== "assign" && (
+                      <label className="staff-field">
+                        Biển số thực tế tại ô
+                        <input
+                          value={observedPlate}
+                          onChange={(event) => {
+                            setObservedPlate(event.target.value.toUpperCase());
+                            setChecked(false);
+                          }}
+                          maxLength={20}
+                          required
+                          disabled={action.busy}
+                          placeholder="Nhập biển số sau khi đối chiếu"
+                        />
+                      </label>
+                    )}
                     <label className="staff-field">
                       Tầng
                       <select

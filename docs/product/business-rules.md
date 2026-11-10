@@ -292,7 +292,7 @@ Nhận đúng bãi/xe/khung giờ và điều kiện; liên kết một phiên d
 
 - **Nguồn:** BR-07 SRS; FR-BOOK-07.
 - **Điểm thực thi:** [APP] [DB].
-- **Hiện trạng:** MỘT PHẦN; check-in chuyển PENDING theo bãi/biển số thành CHECKED_IN; điều kiện giờ/tiền chưa đủ.
+- **Hiện trạng:** Staff xác minh booking PENDING, biển số, ảnh và ô thực tế trực tiếp tại bãi; cùng giao dịch tạo phiên ACTIVE, chuyển booking sang CHECKED_IN và ô sang OCCUPIED. Xe có booking không check-in tại cổng; điều kiện tiền chưa đủ.
 - **Đối chiếu:** Dùng lại mã/biển số đã nhận không sinh phiên thứ hai; giờ đến không hợp lệ phải xử lý rõ.
 
 ## BR-BOOK-04 Hủy giữ không xóa xe

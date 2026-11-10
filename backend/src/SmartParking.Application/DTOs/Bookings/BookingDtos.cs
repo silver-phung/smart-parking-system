@@ -11,6 +11,9 @@ public class BookingDto
     public string? LotAddress { get; set; }
     public long UserId { get; set; }
     public string Username { get; set; } = null!;
+    public string? FullName { get; set; }
+    public string? Email { get; set; }
+    public string? PhoneNumber { get; set; }
     public long VehicleId { get; set; }
     public string PlateNumber { get; set; } = null!;
     public DateTime StartTime { get; set; }
@@ -76,6 +79,7 @@ public class LotCapacityDto
     public int TotalCapacity { get; set; }
     public int AvailableForWalkIn { get; set; }
     public int AvailableForBooking { get; set; }
+    public int PendingBookingsCount { get; set; }
     public bool IsFull { get; set; }
     public int PhysicalSlotsCount { get; set; }
     public int ConfiguredCapacity { get; set; }
@@ -108,4 +112,3 @@ public class LotCapacityDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DiscrepancyNotes { get; set; }
 }
-

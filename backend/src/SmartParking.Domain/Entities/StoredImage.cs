@@ -8,8 +8,9 @@ public class StoredImage
     public string PublicId { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
     public string Format { get; set; } = string.Empty;
+    public byte[]? Content { get; set; }
     public long Bytes { get; set; }
-    public int Width { get; set; }
-    public int Height { get; set; }
+    public int? Width { get; set; }
+    public int? Height { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

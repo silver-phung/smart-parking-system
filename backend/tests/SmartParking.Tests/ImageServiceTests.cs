@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Options;
+using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
 using SmartParking.Infrastructure.Services;
 
@@ -40,14 +41,49 @@ public class ImageServiceTests
     }
 
     [Fact]
-    public async Task UploadAsync_ReportsMissingCloudinaryConfiguration()
+    public async Task UploadAsync_StoresImageBytesWithoutCloudinary()
     {
         await using var db = await TestDbHelper.CreateInMemoryDbContextAsync();
         var service = CreateService(db, maxUploadSizeBytes: 16);
         var pngHeader = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
 
-        await Assert.ThrowsAsync<ImageConfigurationException>(() =>
-            service.UploadAsync(new MemoryStream(pngHeader), "image/png", pngHeader.Length, 7, CancellationToken.None));
+        var uploaded = await service.UploadAsync(new MemoryStream(pngHeader), "image/png", pngHeader.Length, 7, CancellationToken.None);
+        var key = uploaded.Url.Split('/').Last();
+        var content = await service.GetContentAsync(key, 7, Roles.Staff, CancellationToken.None);
+        Assert.NotNull(content);
+        Assert.Equal(pngHeader, content.Content);
+        Assert.Equal("image/png", content.ContentType);
+        Assert.Null(uploaded.Width);
+        Assert.Null(uploaded.Height);
+        Assert.Null(await service.GetContentAsync(key, 8, Roles.User, CancellationToken.None));
+        Assert.NotNull(await service.GetContentAsync(key, 8, Roles.Admin, CancellationToken.None));
+        Assert.Equal(SmartParking.Application.Common.Interfaces.ImageDeleteResult.Forbidden,
+            await service.DeleteAsync(uploaded.Id, 8, false, CancellationToken.None));
+        Assert.Equal(SmartParking.Application.Common.Interfaces.ImageDeleteResult.Deleted,
+            await service.DeleteAsync(uploaded.Id, 7, false, CancellationToken.None));
+        Assert.Null(await service.GetContentAsync(key, 7, Roles.Staff, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetContentAsync_AllowsAssignedLotStaffAndVehicleOwnerOnly()
+    {
+        await using var db = await TestDbHelper.CreateInMemoryDbContextAsync();
+        db.Users.AddRange(
+            new User { Id = 8, RoleId = 3, IsActive = true, Username = "staff", Email = "staff@test", FullName = "Staff", PasswordHash = "x" },
+            new User { Id = 9, RoleId = 3, IsActive = true, Username = "other", Email = "other@test", FullName = "Other", PasswordHash = "x" });
+        db.StaffLotAssignments.Add(new StaffLotAssignment { UserId = 8, LotId = 1, IsActive = true });
+        db.Vehicles.Add(new Vehicle { Id = 12, UserId = 10, PlateNumber = "51A12345" });
+        var service = CreateService(db, 16);
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        var uploaded = await service.UploadAsync(new MemoryStream(png), "image/png", png.Length, 7, CancellationToken.None);
+        db.ParkingSessions.Add(new ParkingSession { LotId = 1, VehicleId = 12, CheckInImageUrl = uploaded.Url });
+        await db.SaveChangesAsync();
+        var key = uploaded.Url.Split('/').Last();
+
+        Assert.NotNull(await service.GetContentAsync(key, 8, Roles.Staff, CancellationToken.None));
+        Assert.NotNull(await service.GetContentAsync(key, 10, Roles.User, CancellationToken.None));
+        Assert.Null(await service.GetContentAsync(key, 9, Roles.Staff, CancellationToken.None));
+        Assert.Null(await service.GetContentAsync(key, 11, Roles.User, CancellationToken.None));
     }
 
     [Fact]
@@ -78,5 +114,6 @@ public class ImageServiceTests
         new(
             db,
             Options.Create(new CloudinaryOptions { MaxUploadSizeBytes = maxUploadSizeBytes }),
-            NullLogger<ImageService>.Instance);
+            NullLogger<ImageService>.Instance,
+            new ParkingAuthorizationService(db));
 }

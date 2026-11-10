@@ -84,14 +84,15 @@ Route hiện public; kết quả AI không tự xác nhận nghiệp vụ.
 
 ### A05 ImagesController
 
-**Dữ liệu liên quan:** stored_images và Cloudinary. Phạm vi đọc/ghi cụ thể theo action và service; nguồn bộ nhớ được ghi rõ.
+**Dữ liệu liên quan:** stored_images trên PostgreSQL. Ảnh Cloudinary cũ vẫn được giữ nguyên.
 
-Hiện quyền người tải/Admin; chưa có liên kết phiên/bãi hoàn chỉnh.
+Quyền xem nội dung theo người tải, Admin, chủ xe hoặc staff/manager được phân công bãi của phiên.
 
 | Mã | Method và path | Quyền route hiện tại | Đầu vào | HTTP khai báo | Hành vi và giới hạn |
 |---|---|---|---|---|---|
-| SP-API-015 | `POST /api/v1/images` | AUTHENTICATED | route/inferred: file (IFormFile) | 201, 400, 401, 502, 503 | Upload file lên Cloudinary và lưu metadata |
+| SP-API-015 | `POST /api/v1/images` | AUTHENTICATED | route/inferred: file (IFormFile) | 201, 400, 401, 500, 503 | Lưu ảnh và metadata vào PostgreSQL |
 | SP-API-016 | `GET /api/v1/images/{id:long}` | AUTHENTICATED | route/inferred: id (Int64) | 200, 401, 404 | Metadata ảnh của người tải/Admin |
+| — | `GET /api/v1/images/content/{key}` | AUTHENTICATED | key: GUID 32 ký tự | 200, 401, 404 | Nội dung ảnh database, phân quyền theo phiên/bãi |
 | SP-API-017 | `DELETE /api/v1/images/{id:long}` | AUTHENTICATED | route/inferred: id (Int64) | 204, 401, 403, 404, 500, 502, 503 | Xóa ảnh theo quyền người tải/Admin |
 
 [Nguồn controller](https://github.com/silver-phung/smart-parking-system/blob/4bed0c8a929fe050d644aa4e07c0a1caa77d8d0e/backend/src/SmartParking.Api/Controllers/ImagesController.cs).
@@ -194,6 +195,7 @@ Check-out chưa kiểm tra đủ phí/vé; không dùng API rời để chứng 
 | SP-API-050 | `GET /api/v1/parking-sessions/my-sessions` | ADMIN,USER | query: filter (ParkingSessionFilterDto) | 200, 401 | Phiên gắn xe của người gọi |
 | SP-API-051 | `GET /api/v1/parking-sessions/{id:long}` | ADMIN,MANAGER,STAFF,USER | route/inferred: id (Int64) | 200, 401, 403, 404 | Chi tiết phiên theo quyền |
 | SP-API-052 | `GET /api/v1/parking-sessions/by-plate/{plateNumber}/active` | ADMIN,MANAGER,STAFF,USER | route/inferred: plateNumber (String) | 200, 401, 403, 404 | Tra phiên mở theo biển số |
+| SP-API-070 | `POST /api/v1/parking-sessions/bookings/{bookingId:long}/confirm-parked` | ADMIN,MANAGER,STAFF có SLOT_VERIFIER tại bãi | route: bookingId; body: ConfirmBookingParkedRequestDto | 201, 400, 401, 403, 404, 409 | Đối chiếu booking/biển số, tạo phiên ACTIVE, lưu ảnh và cập nhật ô OCCUPIED nguyên tử |
 
 [Nguồn controller](https://github.com/silver-phung/smart-parking-system/blob/4bed0c8a929fe050d644aa4e07c0a1caa77d8d0e/backend/src/SmartParking.Api/Controllers/ParkingSessionsController.cs).
 
@@ -324,7 +326,7 @@ FastAPI có các route tài liệu mặc định tùy cấu hình framework; kh�
 
 Giá trị ID/biển số/địa chỉ dưới đây minh họa hợp đồng, không cấp dữ liệu vận hành hoặc credential.
 
-### 5.1 Nhận vãng lai
+### 5.1 Nhận vãng lai tại cổng
 
 `POST /api/v1/parking-sessions/check-in` với Bearer của người có quyền bãi:
 
@@ -332,11 +334,25 @@ Giá trị ID/biển số/địa chỉ dưới đây minh họa hợp đồng, k
 {"lotId": 12, "plateNumber": "51F-123.45", "checkInImageUrl": "https://example.com/entry.jpg"}
 ```
 
-`slotId` tùy chọn nhưng chưa chứng minh đã đỗ. Không có `customerId`, `ticketId` hoặc `fuelType` trong CheckInRequestDto hiện tại. Thành công tạo phiên ACTIVE; không dùng response này để hiện xe tại ô chưa xác nhận.
+Chỉ dùng cho xe vãng lai. Nếu biển số có booking `PENDING`, API từ chối để Staff xác minh xe trực tiếp tại ô. `slotId` tùy chọn nhưng không tự chuyển trạng thái ô sang `OCCUPIED`. Không có `customerId`, `ticketId` hoặc `fuelType` trong CheckInRequestDto hiện tại.
 
 Hợp đồng hiện có coi `plateNumber` là đầu vào chính thức và chưa đáp ứng quyết định mới. Hướng đích cho luồng chuẩn là camera/AI tạo recognition result và session ACTIVE ở trạng thái vận hành `WAITING_VERIFICATION`, liên kết vé/thẻ vào và ảnh; Staff không phải xác nhận ở cổng. Biển số chính thức chỉ được chốt/sửa khi Staff điều phối xác minh xe tại actual slot. Cần idempotency theo event/vé để OCR sai hoặc retry không tạo hai phiên.
 
-### 5.2 Phân ô và xác nhận
+### 5.2 Xác minh booking đã đỗ tại bãi
+
+`POST /api/v1/parking-sessions/bookings/{bookingId}/confirm-parked` yêu cầu quyền `SLOT_VERIFIER` tại bãi:
+
+```json
+{
+  "plateNumber": "51F-123.45",
+  "slotId": 91,
+  "checkInImageUrl": "https://example.com/verified-plate.jpg"
+}
+```
+
+Staff chọn xe từ booking PENDING, đối chiếu biển số/ảnh tại vị trí thực tế và chọn ô. Backend xác thực booking, ô cùng bãi và không có phiên xe khác; sau đó tạo phiên ACTIVE gắn booking/ô, chuyển booking sang CHECKED_IN, lưu URL ảnh, cập nhật ô OCCUPIED và audit trong cùng giao dịch. Booking giữ sức chứa, không giữ trước một ô cụ thể. Không dùng bước check-in cổng cho xe booking.
+
+### 5.3 Phân ô và xác nhận
 
 ```text
 POST /api/v1/parking-dispatches
@@ -351,7 +367,7 @@ POST /api/v1/parking-dispatches/789/report-wrong-slot
 
 Confirm và report-wrong chỉ áp dụng khi lệnh còn ASSIGNED; không gọi nối cả hai trên cùng lệnh đã kết thúc. `assign` nhận `{ slotId, notes }`, chỉ đổi được PENDING/ASSIGNED.
 
-### 5.3 Check-out hiện tại
+### 5.4 Check-out hiện tại
 
 ```text
 POST /api/v1/parking-sessions/456/check-out
@@ -362,7 +378,7 @@ DTO chưa có vé, mã khoản thu hoặc xác nhận đối chiếu. Không th�
 
 Hướng đích tại cổng ra: xe tự tới làn checkout và quẹt vé/thẻ; hệ thống tra đúng phiên mở, trả ảnh/thông tin lúc vào và tính phí máy chủ. Không cần sự kiện “khách yêu cầu lấy xe” riêng. Sau khi thu đủ hoặc duyệt ngoại lệ và có xác nhận xe qua cổng, lệnh check-out mới đóng phiên.
 
-### 5.4 Sự kiện riêng
+### 5.5 Sự kiện riêng
 
 ```json
 {"eventId":"f5061ecf-16b8-4ea2-b785-dc92ba05a803","parkingLotId":12,"carPlate":"51F-123.45","eventType":"VehicleEntered","source":"GateStaff","triggeredBy":"staff-reference","eventTimestampUtc":"2026-10-28T07:00:00Z"}
@@ -370,9 +386,9 @@ Hướng đích tại cổng ra: xe tự tới làn checkout và quẹt vé/th�
 
 Gửi tới `POST /api/events`. Khi retry cùng thao tác dùng lại EventId. SessionId là chuỗi của pipeline riêng, không phải số `parking_sessions.id`. Source/TriggeredBy hiện là dữ liệu client; chưa phải danh tính được xác thực. Xem [06 Enum domains](data-contracts.md) cho regex slot và sai khác mã.
 
-### 5.5 Upload và OCR
+### 5.6 Upload và OCR
 
-`POST /api/v1/images` nhận multipart `file`, Bearer bắt buộc. Backend mặc định giới hạn ảnh 10 MiB và JPEG/PNG/WebP theo cấu hình Cloudinary. Quyền metadata hiện theo người tải/Admin. FastAPI `/api/v1/detect` cũng nhận `file` nhưng không tự dùng chung giới hạn/guard của upload .NET.
+`POST /api/v1/images` nhận multipart `file`, Bearer bắt buộc. Backend mặc định giới hạn ảnh 10 MiB và JPEG/PNG/WebP lưu trực tiếp trong PostgreSQL; tên cấu hình giới hạn vẫn là Cloudinary:MaxUploadSizeBytes. Metadata chỉ dành cho người tải/Admin; nội dung ảnh có phân quyền theo phiên/bãi. FastAPI `/api/v1/detect` cũng nhận `file` nhưng không tự dùng chung giới hạn/guard của upload .NET.
 
 FastAPI trả `{ success, message, data }`, data có `plate_number`, `raw_plate_number`, `confidence`, `is_legit`, bbox và `inference_time_ms`. Không đọc được biển số không được lấy kết quả lần trước điền thành công. Gemini nhận `imageUrl` qua query và trả `isSuccess`; NoOp không có nghĩa đã phân tích thật.
 

@@ -18,11 +18,9 @@ export const roleNavigation = {
     ["/manager?view=sessions", "Xe đang gửi"],
   ],
   STAFF: [
-    ["/staff?view=entry", "Xe vào"],
+    ["/staff?view=entry", "Xe vào vãng lai"],
+    ["/staff?view=bookings", "Xe đặt qua web"],
     ["/staff?view=exit", "Xe ra"],
-    ["/staff?view=verify", "Xác minh ô"],
-    ["/staff?view=sessions", "Xe đang gửi"],
-    ["/staff?view=dispatches", "Điều phối"],
   ],
   USER: [
     ["/customer", "Bãi đỗ"],
@@ -30,12 +28,28 @@ export const roleNavigation = {
     ["/customer/profile", "Hồ sơ & xe"],
   ],
 };
+export function staffLocation(view, step) {
+  const legacy = {
+    verify: { view: "entry", step: "verify" },
+    dispatches: { view: "entry", step: "dispatches" },
+    sessions: { view: "exit", step: "sessions" },
+  };
+  if (legacy[view]) return legacy[view];
+  if (view === "bookings") return { view, step: "" };
+  if (view === "exit")
+    return { view, step: step === "sessions" ? "sessions" : "gate" };
+  return {
+    view: "entry",
+    step: ["verify", "dispatches"].includes(step) ? step : "gate",
+  };
+}
+
 export function navIsActive(target, pathname, search) {
   const [path, query = ""] = target.split("?");
   if (path !== pathname) return false;
   const current = new URLSearchParams(search).get("view");
   const expected = new URLSearchParams(query).get("view");
-  if (path === "/staff") return (current || "entry") === expected;
+  if (path === "/staff") return staffLocation(current).view === expected;
   if (path === "/manager")
     return (current || "overview") === (expected || "overview");
   if (path === "/admin/people")
