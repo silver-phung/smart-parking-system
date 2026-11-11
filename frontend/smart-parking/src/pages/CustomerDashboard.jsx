@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import RequireCustomer from "../components/RequireCustomer.jsx";
+import ParkingSlotManagement from "./ParkingSlotManagement.jsx";
+import { getAuthSession, subscribeAuthSession } from "../services/authSession.js";
 import { apiRequest } from "../services/api.js";
 import { collectPages } from "../services/staffApi.js";
 import "../workspace.css";
@@ -19,6 +21,7 @@ const slotLabels = {
   OCCUPIED: "Đang sử dụng",
   MAINTENANCE: "Đang bảo trì",
   UNAVAILABLE: "Không khả dụng",
+  RESERVED: "Đang giữ chỗ",
 };
 
 function DashboardContent({ publicView = false }) {
@@ -356,6 +359,8 @@ function DashboardContent({ publicView = false }) {
 }
 
 export default function CustomerDashboard({ publicView = false }) {
+  const auth = useSyncExternalStore(subscribeAuthSession, getAuthSession, getAuthSession);
+  if (auth?.userProfile.role === "ADMIN" || auth?.userProfile.role === "MANAGER") return <ParkingSlotManagement role={auth.userProfile.role} />;
   if (publicView) return <DashboardContent publicView />;
   return (
     <RequireCustomer>

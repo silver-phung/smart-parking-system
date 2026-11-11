@@ -10,4 +10,6 @@ public static class StaffDuties
 
     public static bool IsValid(string? duty) =>
         !string.IsNullOrWhiteSpace(duty) && All.Contains(duty.Trim().ToUpperInvariant());
+
+    public static bool IsAssignable(string? duty) => duty is Gate or SlotVerifier;
 }

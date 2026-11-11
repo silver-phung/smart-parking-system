@@ -284,6 +284,9 @@ public class ParkingSessionService : IParkingSessionService
         {
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng ra (GATE) tại bãi đỗ xe này.", null);
         }
+        if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, session.LotId, StaffDuties.Gate,
+            session.CurrentSlot?.FloorId, session.ZoneId ?? session.CurrentSlot?.Floor.ZoneId, ct))
+            return (false, "Phiên xe nằm ngoài tầng hoặc khu vực được phân công.", null);
 
         // Kiểm tra nhận diện biển số tại cổng ra nếu có cung cấp (chuẩn hóa đối chiếu theo PlateNumberHelper.IsMatch)
         if (!string.IsNullOrWhiteSpace(request.ConfirmedPlateNumber))

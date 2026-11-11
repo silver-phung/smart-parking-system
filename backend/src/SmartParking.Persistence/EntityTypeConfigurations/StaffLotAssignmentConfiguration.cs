@@ -38,6 +38,11 @@ public class StaffLotAssignmentConfiguration : IEntityTypeConfiguration<StaffLot
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_staff_lot_assignments_lot");
 
+        builder.Property(a => a.FloorId).HasColumnName("floor_id");
+        builder.Property(a => a.ZoneId).HasColumnName("zone_id");
+        builder.HasOne(a => a.Floor).WithMany().HasForeignKey(a => a.FloorId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(a => a.Zone).WithMany().HasForeignKey(a => a.ZoneId).OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(a => a.AssignedBy)
             .HasColumnName("assigned_by")
             .IsRequired();

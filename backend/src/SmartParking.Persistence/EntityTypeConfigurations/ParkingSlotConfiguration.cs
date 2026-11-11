@@ -10,7 +10,7 @@ public class ParkingSlotConfiguration : IEntityTypeConfiguration<ParkingSlot>
     {
         builder.ToTable("parking_slots", t =>
         {
-            t.HasCheckConstraint("chk_parking_slots_physical_status", "physical_status IN ('EMPTY', 'OCCUPIED', 'MAINTENANCE', 'UNAVAILABLE')");
+            t.HasCheckConstraint("chk_parking_slots_physical_status", "physical_status IN ('EMPTY', 'OCCUPIED', 'MAINTENANCE', 'UNAVAILABLE', 'RESERVED')");
         });
 
         builder.HasKey(s => s.Id)

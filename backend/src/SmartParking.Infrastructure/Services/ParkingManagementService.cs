@@ -703,6 +703,11 @@ public class ParkingManagementService : IParkingManagementService
             .Take(filter.PageSize)
             .ToListAsync(ct);
 
+        var pageSlotIds = slots.Select(s => s.Id).ToArray();
+        var protectedSlotIds = (await _context.ParkingSlots.Where(s => pageSlotIds.Contains(s.Id) &&
+            (_context.ParkingSessions.Any(p => p.CurrentSlotId == s.Id && (p.Status == SessionStatuses.Active || p.Status == SessionStatuses.Paid)) ||
+             _context.ParkingDispatches.Any(d => d.AssignedSlotId == s.Id && d.Status == DispatchStatuses.Assigned)))
+            .Select(s => s.Id).ToListAsync(ct)).ToHashSet();
         var dtos = slots.Select(s => new ParkingSlotDto
         {
             Id = s.Id,
@@ -712,7 +717,8 @@ public class ParkingManagementService : IParkingManagementService
             LotName = s.Floor.Lot.Name,
             SlotCode = s.SlotCode,
             PhysicalStatus = s.PhysicalStatus,
-            IsAvailable = s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned),
+            IsAvailable = s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !protectedSlotIds.Contains(s.Id),
+            IsProtected = protectedSlotIds.Contains(s.Id),
             PositionX = s.PositionX,
             PositionY = s.PositionY,
             PositionZ = s.PositionZ,

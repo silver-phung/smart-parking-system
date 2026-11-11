@@ -188,6 +188,16 @@ public class StaffAssignmentsController : ControllerBase
         return Ok(new { data = await _assignmentService.GetCandidatesAsync(filter, actorId.Value, ct) });
     }
 
+    [HttpGet("locations/{lotId:int}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<IActionResult> GetLocations(int lotId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue) return Unauthorized();
+        var locations = await _assignmentService.GetLocationsAsync(lotId, actorId.Value, ct);
+        return locations == null ? NotFound(new { message = "Bãi không hoạt động hoặc bạn không có quyền quản lý bãi này." }) : Ok(new { data = locations });
+    }
+
     /// <summary>
     /// Lấy danh sách các bãi đỗ xe mà tài khoản đang đăng nhập (MANAGER hoặc STAFF) được phân công làm việc.
     /// </summary>

@@ -60,6 +60,7 @@ public static class ParkingLotCapacityHelper
                 .CountAsync(s => s.Floor.LotId == lotId && s.IsActive && s.Floor.IsActive &&
                                  (s.Floor.Zone == null || s.Floor.Zone.IsActive) &&
                                  s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                                 s.PhysicalStatus != SlotPhysicalStatuses.Reserved &&
                                  s.PhysicalStatus != SlotPhysicalStatuses.Unavailable, ct);
 
             physicalOccupiedSlots = await slots

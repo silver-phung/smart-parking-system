@@ -235,6 +235,7 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
             }
             Require(await db.ParkingLots.AnyAsync(l => l.Id == lotId && l.IsActive, ct), "Bãi đang đóng nhận xe.");
             var zone = await db.ParkingZones.FirstOrDefaultAsync(z => z.Id == r.ZoneId && z.LotId == lotId, ct);
+            Require(await auth.CanOperateAreaAsync(actor, role, lotId, "GATE", null, r.ZoneId, ct), "Bạn không có nhiệm vụ tại khu vực này.", "FORBIDDEN", 403);
             Require(zone is { IsActive: true, Type: "TRANSIENT" }, "Chỉ nhận vãng lai vào khu TRANSIENT đang hoạt động.");
             Require(!await db.ParkingTickets.AnyAsync(t => t.Code == code && t.Status == "ISSUED", ct), "Vé đang dùng cho lượt khác.", "TICKET_IN_USE");
             // Historical ticket codes are immutable; a replacement/new printed code is required.
@@ -341,6 +342,7 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
                 (x.Status == "ACTIVE" || x.Status == "PAID")).Select(x => x.PlateNumber).ToListAsync(ct);
             Require(!otherPlates.Any(p => PlateNumberHelper.IsMatch(p, plate)), "Biển số chính thức đang có lượt gửi mở.", "PLATE_CONFLICT");
             var slot = await EligibleSlot(lotId, s, r.ActualSlotId, r.FuelType, ct);
+            Require(await auth.CanOperateAreaAsync(actor, role, lotId, "SLOT_VERIFIER", slot.FloorId, s.ZoneId, ct), "Ô nằm ngoài tầng hoặc khu vực được phân công.", "FORBIDDEN", 403);
             s.PlateNumber = plate; s.FuelType = r.FuelType; s.VerifiedAt = DateTime.UtcNow;
             s.VerifiedBy = actor; s.VerificationStatus = "VERIFIED"; s.CurrentSlotId = slot.Id;
             s.Revision++; s.UpdatedAt = DateTime.UtcNow;
@@ -364,6 +366,9 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
             var old = await db.ParkingSlots.FirstAsync(x => x.Id == s.CurrentSlotId, ct);
             Require(old.PhysicalStatus == "OCCUPIED", "Trạng thái ô cũ không khớp. Cần đối soát trước.");
             var next = await EligibleSlot(lotId, s, r.ActualSlotId, s.FuelType!, ct);
+            Require(await auth.CanOperateAreaAsync(actor, role, lotId, "SLOT_VERIFIER", old.FloorId, s.ZoneId, ct) &&
+                await auth.CanOperateAreaAsync(actor, role, lotId, "SLOT_VERIFIER", next.FloorId, s.ZoneId, ct),
+                "Chỉ chuyển ô trong tầng và khu vực được phân công.", "FORBIDDEN", 403);
             old.PhysicalStatus = "EMPTY"; old.UpdatedAt = DateTime.UtcNow;
             next.PhysicalStatus = "OCCUPIED"; next.UpdatedAt = DateTime.UtcNow;
             s.CurrentSlotId = next.Id; s.Revision++; s.UpdatedAt = DateTime.UtcNow;

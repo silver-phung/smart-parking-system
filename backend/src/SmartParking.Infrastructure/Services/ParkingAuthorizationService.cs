@@ -13,6 +13,18 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         _context = context;
     }
 
+    public async Task<bool> CanOperateAreaAsync(long userId, string userRole, int lotId, string duty, int? floorId, int? zoneId, CancellationToken ct = default)
+    {
+        var role = await ResolveEffectiveRoleAsync(userId, ct);
+        if (role == Roles.Admin) return true;
+        if (role == Roles.Manager) return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
+        if (role != Roles.Staff) return false;
+        return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
+            (a.Duty == duty || a.Duty == StaffDuties.Both) &&
+            (a.FloorId == null || floorId == null || a.FloorId == floorId) &&
+            (a.ZoneId == null || (zoneId != null && a.ZoneId == zoneId)), ct);
+    }
+
     private async Task<string?> ResolveEffectiveRoleAsync(long userId, CancellationToken ct)
     {
         var user = await _context.Users

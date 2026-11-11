@@ -533,12 +533,16 @@ public class WalkInSessionAndStaffDutyTests
         context.Users.AddRange(staff1, staff2);
         await context.SaveChangesAsync();
 
+        context.ParkingZones.Add(new ParkingZone { Id = 211, LotId = 211, Code = "Z211", Name = "Khu 211" });
+        (await context.ParkingFloors.FindAsync(2111))!.ZoneId = 211;
+        await context.SaveChangesAsync();
+
         // 1. Unspecified duty -> defaults to GATE (least privilege, NOT BOTH)
         var defaultDutyRes = await assignmentService.CreateAssignmentAsync(
             new SmartParking.Application.DTOs.StaffAssignments.CreateStaffAssignmentRequestDto
             {
                 UserId = 2111,
-                LotId = 211,
+                LotId = 211, FloorId = 2111, ZoneId = 211,
                 Duty = ""
             },
             actorId: 1,
@@ -552,7 +556,7 @@ public class WalkInSessionAndStaffDutyTests
             new SmartParking.Application.DTOs.StaffAssignments.CreateStaffAssignmentRequestDto
             {
                 UserId = 2112,
-                LotId = 211,
+                LotId = 211, FloorId = 2111, ZoneId = 211,
                 Duty = "SUPER_STAFF"
             },
             actorId: 1,

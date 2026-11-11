@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IAdminBootstrapService, AdminBootstrapService>();
         services.AddScoped<IParkingManagementService, ParkingManagementService>();
+        services.AddScoped<ParkingSlotAdministrationService>();
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IParkingSessionService, ParkingSessionService>();
         services.AddScoped<IParkingDispatchService, ParkingDispatchService>();

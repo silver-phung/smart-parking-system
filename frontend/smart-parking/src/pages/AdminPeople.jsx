@@ -16,7 +16,6 @@ const roles = ["USER", "STAFF", "MANAGER", "ADMIN"];
 const duties = {
   GATE: "Trực cổng",
   SLOT_VERIFIER: "Xác minh ô",
-  BOTH: "Cổng và xác minh ô",
 };
 const emptyUser = {
   username: "",
@@ -43,10 +42,13 @@ export function People({ assignmentsOnly = false }) {
   const [assignment, setAssignment] = useState({
     userId: "",
     lotId: "",
+    floorId: "",
+    zoneId: "",
     duty: "",
     notes: "",
   });
   const [staffSearch, setStaffSearch] = useState("");
+  const [chosenStaff, setChosenStaff] = useState(null);
   const users = useResource(
     view === "users"
       ? `/v1/admin/users?${query({ page, pageSize: 20, search, role, isActive: active })}`
@@ -60,7 +62,7 @@ export function People({ assignmentsOnly = false }) {
     revision,
   );
   const candidates = useResource(
-    view === "assignments"
+    view === "assignments" && !chosenStaff && staffSearch.trim()
       ? `/v1/staff-assignments/candidates?${query({ search: staffSearch, page: 1, pageSize: 100 })}`
       : null,
     revision,
@@ -77,11 +79,18 @@ export function People({ assignmentsOnly = false }) {
     selected ? `/v1/admin/users/${selected}` : null,
     revision,
   );
+  const locations = useResource(
+    view === "assignments" && assignment.lotId ? `/v1/staff-assignments/locations/${assignment.lotId}` : null,
+    revision,
+  );
+  const floors = locations.data?.floors || [];
+  const selectedFloor = floors.find(f => String(f.id) === assignment.floorId);
+  const zones = selectedFloor?.zones || [];
   const eligible = itemsOf(candidates.data).filter((u) => u.role === "STAFF");
   const availableLots = assignmentsOnly
     ? itemsOf(lots.data).filter(l => l.isActive).map(l => ({ id: l.lotId, name: l.lotName }))
     : itemsOf(lots.data);
-  const chosen = eligible.find((u) => String(u.id) === assignment.userId);
+  const chosen = chosenStaff;
   const updated = () => refresh((n) => n + 1);
   const list = view === "users" ? users : assignments;
   function switchView(next) {
@@ -256,20 +265,32 @@ export function People({ assignmentsOnly = false }) {
           </p>
           <div className="workspace-filters">
             <label>
-              Tìm nhân sự theo tên/email
+              Tìm Staff theo tên/email
               <input
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="staff-search-results"
+                aria-expanded={Boolean(!chosenStaff && staffSearch.trim() && eligible.length)}
                 value={staffSearch}
                 onChange={(e) => {
                   setStaffSearch(e.target.value);
+                  setChosenStaff(null);
                   setAssignment((a) => ({ ...a, userId: "" }));
                 }}
                 disabled={action.busy}
               />
             </label>
           </div>
+          {!chosenStaff && staffSearch.trim() && <ul className="assignment-search-results" id="staff-search-results" role="listbox" aria-label="Kết quả tìm Staff">
+            {eligible.map(staff => <li key={staff.id} role="option" aria-selected="false"><button type="button" className="assignment-search-result" disabled={action.busy} onClick={() => {
+              setChosenStaff(staff); setStaffSearch(staff.fullName); setAssignment(a => ({ ...a, userId: String(staff.id) }));
+            }}><strong>{staff.fullName}</strong><span>{staff.username} · {staff.email}</span></button></li>)}
+            {!candidates.loading && !candidates.error && !eligible.length && <li>Không tìm thấy Staff phù hợp.</li>}
+          </ul>}
+          {chosenStaff && <div className="assignment-selected-staff"><div><strong>{chosenStaff.fullName}</strong><small>{chosenStaff.username} · {chosenStaff.email}</small></div><button type="button" className="btn btn--outline" disabled={action.busy} onClick={() => { setChosenStaff(null); setStaffSearch(""); setAssignment(a => ({ ...a, userId: "" })); }}>Chọn lại nhân viên</button></div>}
           <Feedback
-            loading={candidates.loading || lots.loading}
-            error={candidates.error || lots.error}
+            loading={candidates.loading || lots.loading || locations.loading}
+            error={candidates.error || lots.error || locations.error}
           />
           <form
             className="workspace-form"
@@ -280,6 +301,8 @@ export function People({ assignmentsOnly = false }) {
                   write("/v1/staff-assignments", {
                     userId: Number(assignment.userId),
                     lotId: Number(assignment.lotId),
+                    floorId: Number(assignment.floorId),
+                    zoneId: Number(assignment.zoneId),
                     duty: assignment.duty,
                     notes: assignment.notes || null,
                   }),
@@ -292,33 +315,12 @@ export function People({ assignmentsOnly = false }) {
           >
             <fieldset disabled={action.busy}>
               <label>
-                Nhân sự
-                <select
-                  required
-                  value={assignment.userId}
-                  onChange={(e) =>
-                    setAssignment({
-                      ...assignment,
-                      userId: e.target.value,
-                      duty: "",
-                    })
-                  }
-                >
-                  <option value="">Chọn Staff</option>
-                  {eligible.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.fullName} · {u.username} · {u.role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
                 Bãi đỗ
                 <select
                   required
                   value={assignment.lotId}
                   onChange={(e) => {
-                    setAssignment({ ...assignment, lotId: e.target.value });
+                    setAssignment({ ...assignment, lotId: e.target.value, floorId: "", zoneId: "" });
                     setPage(1);
                   }}
                 >
@@ -330,6 +332,12 @@ export function People({ assignmentsOnly = false }) {
                   ))}
                 </select>
               </label>
+              <label>Tầng<select required value={assignment.floorId} disabled={!assignment.lotId || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, floorId: e.target.value, zoneId: "" })}>
+                <option value="">Chọn tầng</option>{floors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select></label>
+              <label>Khu vực<select required value={assignment.zoneId} disabled={!selectedFloor || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, zoneId: e.target.value })}>
+                <option value="">Chọn khu vực</option>{zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select></label>
               <label>
                 Nhiệm vụ
                 <select
@@ -363,8 +371,9 @@ export function People({ assignmentsOnly = false }) {
                   action.busy ||
                   !chosen ||
                   !assignment.lotId ||
+                  !selectedFloor || !zones.some(z => String(z.id) === assignment.zoneId) ||
                   !assignment.duty ||
-                  Boolean(candidates.error || lots.error) ||
+                  Boolean(candidates.error || lots.error || locations.error) || locations.loading ||
                   !availableLots.some(l => String(l.id) === assignment.lotId) ||
                   candidates.loading ||
                   lots.loading
@@ -581,7 +590,8 @@ export function People({ assignmentsOnly = false }) {
                       </td>
                       <td>
                         {row.lotName}
-                        <small>{duties[row.duty] || row.duty}</small>
+                        <small>{row.floorName || "Chưa chọn tầng"} · {row.zoneName || "Chưa chọn khu vực"}</small>
+                        <small>{duties[row.duty] || "Cần chọn lại nhiệm vụ"}</small>
                       </td>
                       <td>
                         {dateLabel(row.assignedAt)}

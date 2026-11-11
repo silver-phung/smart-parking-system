@@ -55,6 +55,17 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
         return PagedResult<StaffCandidateDto>.Create(items, count, filter.Page, filter.PageSize);
     }
 
+    public async Task<AssignmentLocationsDto?> GetLocationsAsync(int lotId, long actorId, CancellationToken ct = default)
+    {
+        var actor = await GetAssignmentActorAsync(actorId, ct);
+        if (actor == null || (actor.Role.Code == Roles.Manager && !await ManagesLotAsync(actorId, lotId, ct))) return null;
+        if (!await _context.ParkingLots.AnyAsync(l => l.Id == lotId && l.IsActive, ct)) return null;
+        var floors = await _context.ParkingFloors.AsNoTracking().Include(f => f.Zone)
+            .Where(f => f.LotId == lotId && f.IsActive).OrderBy(f => f.FloorNumber).ThenBy(f => f.Id).ToListAsync(ct);
+        return new AssignmentLocationsDto(floors.Select(f => new AssignmentFloorDto(f.Id, f.Name,
+            f.Zone is { IsActive: true } z && z.LotId == lotId ? [new(z.Id, z.Name, z.Code)] : [])).ToList());
+    }
+
     public async Task<(bool Success, string Message, StaffLotAssignmentDto? Data)> CreateAssignmentAsync(
         CreateStaffAssignmentRequestDto request,
         long actorId,
@@ -93,9 +104,9 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             ? StaffDuties.Gate
             : request.Duty.Trim().ToUpperInvariant();
 
-        if (!StaffDuties.IsValid(duty))
+        if (!StaffDuties.IsAssignable(duty))
         {
-            return (false, $"Nhiệm vụ trực ca '{request.Duty}' không hợp lệ. Chỉ chấp nhận các giá trị: GATE, SLOT_VERIFIER, hoặc BOTH.", null);
+            return (false, "Nhiệm vụ không hợp lệ. Mỗi Staff chỉ nhận GATE hoặc SLOT_VERIFIER.", null);
         }
 
         var targetLot = await _context.ParkingLots
@@ -110,6 +121,12 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
         {
             return (false, $"Bãi đỗ xe '{targetLot.Name}' hiện đang tạm đóng hoặc ngừng hoạt động.", null);
         }
+
+        if (request.FloorId is not > 0 || request.ZoneId is not > 0)
+            return (false, "Chọn tầng và khu vực được phân công.", null);
+        var floor = await _context.ParkingFloors.Include(f => f.Zone).FirstOrDefaultAsync(f => f.Id == request.FloorId && f.LotId == request.LotId, ct);
+        if (floor == null || !floor.IsActive || floor.ZoneId != request.ZoneId || floor.Zone is not { IsActive: true } || floor.Zone.LotId != request.LotId)
+            return (false, "Tầng và khu vực phải đang hoạt động, thuộc đúng bãi và đúng quan hệ tầng–khu.", null);
 
         var hasActiveAssignment = await _context.StaffLotAssignments
             .AnyAsync(a => a.UserId == targetUser.Id && a.LotId == targetLot.Id && a.IsActive, ct);
@@ -128,6 +145,10 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             {
                 UserId = targetUser.Id,
                 LotId = targetLot.Id,
+                FloorId = floor.Id,
+                ZoneId = floor.ZoneId,
+                Floor = floor,
+                Zone = floor.Zone,
                 Duty = duty,
                 AssignedBy = actorId,
                 AssignedAt = DateTime.UtcNow,
@@ -152,6 +173,9 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
                     targetUser.Username,
                     UserRole = roleCode,
                     assignment.LotId,
+                    assignment.FloorId,
+                    assignment.ZoneId,
+                    assignment.Duty,
                     targetLot.Name,
                     assignment.AssignedBy,
                     IpAddress = ipAddress
@@ -193,6 +217,8 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             .Include(a => a.User)
                 .ThenInclude(u => u.Role)
             .Include(a => a.Lot)
+            .Include(a => a.Floor)
+            .Include(a => a.Zone)
             .Include(a => a.AssignedByUser)
             .Include(a => a.RevokedByUser)
             .Where(a => a.User.Role.Code == Roles.Staff);
@@ -253,6 +279,8 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             .Include(a => a.User)
                 .ThenInclude(u => u.Role)
             .Include(a => a.Lot)
+            .Include(a => a.Floor)
+            .Include(a => a.Zone)
             .Include(a => a.AssignedByUser)
             .Include(a => a.RevokedByUser)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -392,6 +420,10 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             UserRole = user.Role?.Code ?? string.Empty,
             LotId = a.LotId,
             LotName = lot.Name,
+            FloorId = a.FloorId,
+            FloorName = a.Floor?.Name,
+            ZoneId = a.ZoneId,
+            ZoneName = a.Zone?.Name,
             AssignedBy = a.AssignedBy,
             AssignedByUsername = assignedByUsername,
             AssignedAt = a.AssignedAt,

@@ -14,6 +14,10 @@ public class StaffLotAssignmentDto
 
     public int LotId { get; set; }
     public string LotName { get; set; } = null!;
+    public int? FloorId { get; set; }
+    public string? FloorName { get; set; }
+    public int? ZoneId { get; set; }
+    public string? ZoneName { get; set; }
 
     public long AssignedBy { get; set; }
     public string AssignedByUsername { get; set; } = null!;
@@ -43,11 +47,18 @@ public class CreateStaffAssignmentRequestDto
     public int LotId { get; set; }
 
     /// <summary>
-    /// Nhiệm vụ phân công: Bắt buộc chọn GATE, SLOT_VERIFIER hoặc BOTH (không cấp mặc định).
+    /// Mỗi phân công chỉ có một nhiệm vụ.
     /// </summary>
-    [Required(ErrorMessage = "Nhiệm vụ trực ca (Duty) là bắt buộc. Phải chọn GATE, SLOT_VERIFIER hoặc BOTH.")]
-    [RegularExpression("^(GATE|SLOT_VERIFIER|BOTH)$", ErrorMessage = "Nhiệm vụ trực ca phải là GATE, SLOT_VERIFIER hoặc BOTH.")]
+    [Required(ErrorMessage = "Chọn nhiệm vụ trực cổng hoặc xác minh ô.")]
+    [RegularExpression("^(GATE|SLOT_VERIFIER)$", ErrorMessage = "Mỗi Staff chỉ nhận một nhiệm vụ: trực cổng hoặc xác minh ô.")]
     public string Duty { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Chọn tầng được phân công.")]
+    [Range(1, int.MaxValue)]
+    public int? FloorId { get; set; }
+    [Required(ErrorMessage = "Chọn khu vực được phân công.")]
+    [Range(1, int.MaxValue)]
+    public int? ZoneId { get; set; }
 
     [MaxLength(500, ErrorMessage = "Ghi chú không được vượt quá 500 ký tự.")]
     public string? Notes { get; set; }
@@ -99,3 +110,7 @@ public class StaffCandidateDto
     public string Email { get; set; } = "";
     public string Role => Roles.Staff;
 }
+
+public record AssignmentZoneDto(int Id, string Name, string Code);
+public record AssignmentFloorDto(int Id, string Name, IReadOnlyList<AssignmentZoneDto> Zones);
+public record AssignmentLocationsDto(IReadOnlyList<AssignmentFloorDto> Floors);
