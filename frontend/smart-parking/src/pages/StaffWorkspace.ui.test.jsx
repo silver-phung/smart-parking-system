@@ -234,7 +234,7 @@ afterEach(() => {
 describe("Staff workspace", () => {
   async function entryDraft(user, ticket = "VE-001") {
     await screen.findByRole("option", { name: "VL · Vãng lai" });
-    await user.selectOptions(screen.getByLabelText("Khu vãng lai"), "1");
+    await user.selectOptions(screen.getByLabelText("Khu bình thường"), "1");
     await user.type(screen.getByLabelText("Mã vé"), ticket);
     await user.type(screen.getByLabelText("Lý do tiếp nhận"), "Nhận xe theo vé tại cổng.");
   }

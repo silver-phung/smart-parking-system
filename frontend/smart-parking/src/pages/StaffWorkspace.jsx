@@ -18,7 +18,7 @@ import { staffApi } from "../services/staffApi.js";
 import "../staff.css";
 
 const views = [
-  { id: "entry", name: "Xe vào", description: "Tiếp nhận xe vãng lai" },
+  { id: "entry", name: "Xe vào", description: "Tiếp nhận xe vào khu bình thường" },
   { id: "exit", name: "Xe ra", description: "Đối chiếu tại cổng ra" },
   { id: "tickets", name: "Tra vé", description: "Tra cứu và báo mất vé" },
   {
@@ -156,7 +156,7 @@ function StaffContent() {
           </section>
           <div className="staff-metrics" aria-label="Tình trạng bãi">
             <article>
-              <span>Nhận thêm xe vãng lai</span>
+              <span>Chỗ trống khu bình thường</span>
               <strong>
                 {count("availableForWalkIn")}
                 <small>chỗ</small>

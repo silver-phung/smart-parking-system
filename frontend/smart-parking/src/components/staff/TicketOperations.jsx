@@ -49,7 +49,7 @@ export function TicketEntry({ lot, onChanged, onBusyChange }) {
       <button className="staff-button staff-button--primary" onClick={reset}>Tiếp nhận xe tiếp theo</button>
     </> : <form onSubmit={submit}>
       <fieldset disabled={locked || !lot.isActive} className="operations-fields">
-        <Field label="Khu vãng lai"><select required value={zoneId} onChange={e => setZone(e.target.value)}>
+        <Field label="Khu bình thường"><select required value={zoneId} onChange={e => setZone(e.target.value)}>
           <option value="">Chọn khu</option>{zones.data?.filter(z => z.type === "TRANSIENT" && z.isActive).map(z => <option key={z.id} value={z.id}>{z.code} · {z.name}</option>)}
         </select></Field>
         <Field label="Mã vé"><input required maxLength={40} value={ticket} onChange={e => setTicket(e.target.value)} autoComplete="off" /></Field>

@@ -104,7 +104,7 @@ function LotWorkspace({ lotId, revision, refresh, busy, action, view }) {
           </strong>
         </article>
         <article>
-          <span>Chỗ nhận xe vãng lai</span>
+          <span>Chỗ trống khu bình thường</span>
           <strong>{c?.availableForWalkIn ?? "—"}</strong>
         </article>
         <article>

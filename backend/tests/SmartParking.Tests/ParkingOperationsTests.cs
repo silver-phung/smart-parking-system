@@ -189,6 +189,73 @@ public class ParkingOperationsTests
         Assert.Equal(1L, (await f.Db.ParkingSessions.FindAsync(entry.Id))!.PolicyId);
     }
     [Fact]
+    public async Task Creating_zone_requires_a_floor_and_rejects_another_zones_or_lots_floor()
+    {
+        await using var f = await Create();
+        f.Db.ParkingFloors.Add(new ParkingFloor { Id = 3, LotId = 2, Name = "Tầng bãi khác" });
+        await f.Db.SaveChangesAsync();
+        var request = new ZoneRequest("NEW", "Khu mới", "FIXED", "INSIDE", true);
+        Assert.Equal("FLOOR_REQUIRED", (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.SaveZone(1, null, request, 1, "ADMIN", default))).Code);
+        Assert.Equal("FLOOR_ALREADY_ASSIGNED", (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.SaveZone(1, null, request with { FloorIds = [1] }, 1, "ADMIN", default))).Code);
+        Assert.Equal("INVALID_FLOORS", (await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.SaveZone(1, null, request with { FloorIds = [3] }, 1, "ADMIN", default))).Code);
+        Assert.Equal(2, await f.Db.ParkingZones.CountAsync());
+    }
+    [Fact]
+    public async Task Creating_zone_attaches_selected_unassigned_floors()
+    {
+        await using var f = await Create();
+        f.Db.ParkingFloors.AddRange(new ParkingFloor { Id = 3, LotId = 1, Name = "Tầng 3", FloorNumber = 3 },
+            new ParkingFloor { Id = 4, LotId = 1, Name = "Tầng 4", FloorNumber = 4 });
+        await f.Db.SaveChangesAsync();
+        await f.Service.SaveZone(1, null, new("NEW", "Khu vé tháng", "FIXED", "INSIDE", true, [3, 4]), 1, "ADMIN", default);
+        var zone = await f.Db.ParkingZones.SingleAsync(z => z.Code == "NEW");
+        Assert.Equal(new[] { 3, 4 }, await f.Db.ParkingFloors.Where(x => x.ZoneId == zone.Id).OrderBy(x => x.Id).Select(x => x.Id).ToArrayAsync());
+        Assert.Equal(2, await f.Db.AuditLogs.CountAsync(a => a.Action == "ASSIGN_FLOOR_ZONE"));
+    }
+    [Fact]
+    public async Task Creating_zone_can_create_its_floor_and_rejects_duplicate_floor_before_saving_zone()
+    {
+        await using var f = await Create();
+        var request = new ZoneRequest("NEW", "Khu mới", "FIXED", "INSIDE", true, [], new(" Tầng 3 ", 3));
+        await f.Service.SaveZone(1, null, request, 1, "ADMIN", default);
+        var zone = await f.Db.ParkingZones.SingleAsync(z => z.Code == "NEW");
+        var floor = await f.Db.ParkingFloors.SingleAsync(x => x.Name == "Tầng 3");
+        Assert.Equal(zone.Id, floor.ZoneId); Assert.Equal(1, floor.LotId); Assert.Equal(3, floor.FloorNumber);
+        Assert.Contains(await f.Db.AuditLogs.ToListAsync(), a => a.Action == "CREATE_PARKING_FLOOR");
+        var error = await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.SaveZone(1, null,
+            request with { Code = "DUP", NewFloor = new("Tên khác", 3) }, 1, "ADMIN", default));
+        Assert.Equal("DUPLICATE_FLOOR", error.Code);
+        Assert.False(await f.Db.ParkingZones.AnyAsync(z => z.Code == "DUP"));
+        error = await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.SaveZone(1, null,
+            request with { Code = "DUP", NewFloor = new("tầng 3", 4) }, 1, "ADMIN", default));
+        Assert.Equal("DUPLICATE_FLOOR", error.Code);
+        Assert.False(await f.Db.ParkingZones.AnyAsync(z => z.Code == "DUP"));
+    }
+    [Fact]
+    public async Task Zone_edit_preserves_existing_floors_and_rejects_removing_them()
+    {
+        await using var f = await Create();
+        var request = new ZoneRequest("VL", "Bình thường", "TRANSIENT", "INSIDE", true, [1]);
+        await f.Service.SaveZone(1, 1, request, 1, "ADMIN", default);
+        Assert.Equal(1, (await f.Db.ParkingFloors.FindAsync(1))!.ZoneId);
+        var error = await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.SaveZone(1, 1,
+            request with { FloorIds = [], NewFloor = new("Tầng 3", 3) }, 1, "ADMIN", default));
+        Assert.Equal("FLOOR_REMOVAL_NOT_ALLOWED", error.Code);
+        Assert.Equal(2, await f.Db.ParkingFloors.CountAsync());
+    }
+    [Fact]
+    public async Task Unassigned_floor_with_occupied_slot_cannot_be_attached_to_new_zone()
+    {
+        await using var f = await Create();
+        f.Db.ParkingFloors.Add(new ParkingFloor { Id = 3, LotId = 1, Name = "Tầng 3", FloorNumber = 3 });
+        f.Db.ParkingSlots.Add(new ParkingSlot { Id = 5, FloorId = 3, SlotCode = "OCC", PhysicalStatus = "OCCUPIED" });
+        await f.Db.SaveChangesAsync();
+        await Assert.ThrowsAsync<ParkingOperationException>(() => f.Service.SaveZone(1, null,
+            new("NEW", "Khu mới", "FIXED", "INSIDE", true, [3]), 1, "ADMIN", default));
+        Assert.Equal(2, await f.Db.ParkingZones.CountAsync());
+        Assert.Null((await f.Db.ParkingFloors.FindAsync(3))!.ZoneId);
+    }
+    [Fact]
     public async Task Closing_zone_preserves_sessions_and_disallows_further_admission()
     {
         await using var f = await Create(); var entry = await f.Enter();
