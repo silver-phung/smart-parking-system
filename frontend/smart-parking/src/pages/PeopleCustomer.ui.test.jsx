@@ -188,13 +188,25 @@ it("preserves a failed account draft and shows the server permission error", asy
   expect(screen.getByLabelText("Tên đăng nhập").value).toBe("draft");
 });
 it("confirms role changes with a reason before sending a PATCH", async () => {
+  let storedRole = "STAFF";
+  const fallback = fetcher.getMockImplementation();
+  fetcher.mockImplementation(async (url, options = {}) => {
+    if (url.endsWith("/admin/users/7/role") && options.method === "PATCH") {
+      storedRole = JSON.parse(options.body).role;
+      return Response.json({ data: { ...user, role: storedRole }, message: "Đã lưu thành công" });
+    }
+    if (url.includes("/admin/users?")) return Response.json({ data: page([{ ...user, role: storedRole }]) });
+    return fallback(url, options);
+  });
   auth("ADMIN");
   mount(<AdminPeople />);
   fireEvent.change(await screen.findByLabelText("Vai trò staffdemo"), {
     target: { value: "MANAGER" },
   });
+  expect(screen.getByLabelText("Vai trò staffdemo").value).toBe("MANAGER");
   expect(writes()).toHaveLength(0);
-  fireEvent.change(screen.getByLabelText("Lý do"), {
+  fireEvent.click(screen.getByRole("button", { name: "Lưu vai trò staffdemo" }));
+  fireEvent.change(screen.getByLabelText("Ghi chú thay đổi (không bắt buộc)"), {
     target: { value: "Phụ trách bãi demo" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Xác nhận thay đổi" }));
@@ -204,6 +216,36 @@ it("confirms role changes with a reason before sending a PATCH", async () => {
     role: "MANAGER",
     reason: "Phụ trách bãi demo",
   });
+  await waitFor(() => expect(screen.getByLabelText("Vai trò staffdemo").value).toBe("MANAGER"));
+  expect(screen.getByRole("button", { name: "Lưu vai trò staffdemo" }).disabled).toBe(true);
+});
+it("offers only Staff/Manager account roles and omits account approval information", async () => {
+  auth("ADMIN"); mount(<AdminPeople />);
+  await screen.findByLabelText("Vai trò staffdemo");
+  for (const label of ["Vai trò", "Vai trò staffdemo"]) {
+    expect([...screen.getByLabelText(label, { exact: true }).options].map(o => o.value)).toEqual(["STAFF", "MANAGER"]);
+  }
+  expect(screen.queryByRole("option", { name: "USER", exact: true })).toBeNull();
+  expect(screen.queryByText("APPROVED")).toBeNull();
+  expect(fetcher.mock.calls.some(([url]) => url.includes("internalOnly=true"))).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Nhân viên Demo" }));
+  await screen.findByRole("heading", { name: "Chi tiết tài khoản" });
+  expect(screen.queryByText("Phê duyệt")).toBeNull();
+});
+it("allows role changes without an approval reason and shows server failures for retry", async () => {
+  failWrite = true; auth("ADMIN"); mount(<AdminPeople />);
+  const roleSelect = await screen.findByLabelText("Vai trò staffdemo");
+  fireEvent.change(roleSelect, { target: { value: "MANAGER" } });
+  fireEvent.click(screen.getByRole("button", { name: "Lưu vai trò staffdemo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Xác nhận thay đổi" }));
+  await screen.findByRole("alert");
+  expect(roleSelect.value).toBe("MANAGER");
+  expect(screen.getByRole("region", { name: "Xác nhận đổi vai trò" })).toBeTruthy();
+  failWrite = false;
+  fireEvent.click(screen.getByRole("button", { name: "Xác nhận thay đổi" }));
+  await screen.findByText("Đã lưu thành công");
+  expect(writes()).toHaveLength(2);
+  expect(JSON.parse(writes()[1][1].body)).toEqual({ role: "MANAGER", reason: "" });
 });
 it("creates an explicit SLOT_VERIFIER duty assignment", async () => {
   auth("ADMIN");

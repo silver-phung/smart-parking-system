@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import {
@@ -12,7 +12,7 @@ import {
   write,
 } from "../components/WorkspaceUI.jsx";
 
-const roles = ["USER", "STAFF", "MANAGER", "ADMIN"];
+const roles = ["STAFF", "MANAGER"];
 const duties = {
   GATE: "Trực cổng",
   SLOT_VERIFIER: "Xác minh ô",
@@ -27,7 +27,7 @@ const emptyUser = {
 };
 
 export function People({ assignmentsOnly = false }) {
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const view = assignmentsOnly || params.get("view") === "assignments" ? "assignments" : "users";
   const [revision, refresh] = useState(0);
   const action = useMutation();
@@ -38,6 +38,11 @@ export function People({ assignmentsOnly = false }) {
   const [user, setUser] = useState(emptyUser);
   const [selected, setSelected] = useState(null);
   const [change, setChange] = useState(null);
+  const [roleDrafts, setRoleDrafts] = useState({});
+  const confirmPanel = useRef(null);
+  useEffect(() => {
+    if (change) confirmPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [change]);
   const [reason, setReason] = useState("");
   const [assignment, setAssignment] = useState({
     userId: "",
@@ -51,7 +56,7 @@ export function People({ assignmentsOnly = false }) {
   const [chosenStaff, setChosenStaff] = useState(null);
   const users = useResource(
     view === "users"
-      ? `/v1/admin/users?${query({ page, pageSize: 20, search, role, isActive: active })}`
+      ? `/v1/admin/users?${query({ page, pageSize: 20, search, role, isActive: active, internalOnly: true })}`
       : null,
     revision,
   );
@@ -93,13 +98,12 @@ export function People({ assignmentsOnly = false }) {
   const chosen = chosenStaff;
   const updated = () => refresh((n) => n + 1);
   const list = view === "users" ? users : assignments;
-  function switchView(next) {
-    setParams({ view: next });
+  useEffect(() => {
     setPage(1);
     setActive("");
     setChange(null);
     setSelected(null);
-  }
+  }, [view]);
   function confirmChange(event) {
     event.preventDefault();
     action.run(
@@ -115,6 +119,9 @@ export function People({ assignmentsOnly = false }) {
               "PATCH",
             ),
       () => {
+        if (change.kind === "role") setRoleDrafts(drafts => {
+          const next = { ...drafts }; delete next[change.id]; return next;
+        });
         setChange(null);
         updated();
       },
@@ -125,38 +132,19 @@ export function People({ assignmentsOnly = false }) {
       <header className="workspace-heading">
         <div>
           <span className="tag">{assignmentsOnly ? "Quản lý bãi" : "Quản trị nhân sự"}</span>
-          <h1>{assignmentsOnly ? "Phân công nhân viên" : "Tài khoản & phân công"}</h1>
-          <p>{assignmentsOnly ? "Phân công Staff tại các bãi bạn đang quản lý." : "Chuẩn bị tài khoản và phân công Staff tại từng bãi đỗ."}</p>
+          <h1>{view === "assignments" ? "Phân công nhân viên" : "Quản lý tài khoản"}</h1>
+          <p>{view === "assignments" ? assignmentsOnly ? "Phân công Staff tại các bãi bạn đang quản lý." : "Phân công Staff theo bãi, tầng, khu vực và nhiệm vụ." : "Tạo và quản lý tài khoản nội bộ cho Manager và Staff."}</p>
         </div>
         <Link className="btn btn--outline" to={assignmentsOnly ? "/manager" : "/admin"}>
           Tổng quan
         </Link>
       </header>
-      {!assignmentsOnly && <nav className="workspace-tabs" aria-label="Quản trị nhân sự">
-        <button
-          disabled={action.busy}
-          className="btn btn--outline"
-          onClick={() => switchView("users")}
-          aria-pressed={view === "users"}
-        >
-          Tài khoản
-        </button>
-        <button
-          disabled={action.busy}
-          className="btn btn--outline"
-          onClick={() => switchView("assignments")}
-          aria-pressed={view === "assignments"}
-        >
-          Phân công nhân viên
-        </button>
-      </nav>}
       <Feedback error={action.error} message={action.message} />
       {view === "users" ? (
         <section className="workspace-panel">
           <h2>Tạo tài khoản nội bộ</h2>
           <p className="workspace-note">
-            Tài khoản nội bộ được xác minh và phê duyệt ngay. Khách hàng tự đăng
-            ký qua email OTP.
+            Admin tạo trực tiếp tài khoản Manager và Staff. Tài khoản có thể đăng nhập ngay sau khi tạo.
           </p>
           <form
             className="workspace-form"
@@ -247,8 +235,8 @@ export function People({ assignmentsOnly = false }) {
                   value={user.role}
                   onChange={(e) => setUser({ ...user, role: e.target.value })}
                 >
-                  <option>STAFF</option>
-                  <option>MANAGER</option>
+                  <option value="STAFF">Staff</option>
+                  <option value="MANAGER">Manager</option>
                 </select>
               </label>
               <button className="btn btn--primary" disabled={action.busy}>
@@ -287,7 +275,7 @@ export function People({ assignmentsOnly = false }) {
             }}><strong>{staff.fullName}</strong><span>{staff.username} · {staff.email}</span></button></li>)}
             {!candidates.loading && !candidates.error && !eligible.length && <li>Không tìm thấy Staff phù hợp.</li>}
           </ul>}
-          {chosenStaff && <div className="assignment-selected-staff"><div><strong>{chosenStaff.fullName}</strong><small>{chosenStaff.username} · {chosenStaff.email}</small></div><button type="button" className="btn btn--outline" disabled={action.busy} onClick={() => { setChosenStaff(null); setStaffSearch(""); setAssignment(a => ({ ...a, userId: "" })); }}>Chọn lại nhân viên</button></div>}
+          {chosenStaff && <div className="assignment-selected-staff"><div><strong>{chosenStaff.fullName}</strong><small>{chosenStaff.username} · {chosenStaff.email}</small></div><button type="button" className="btn assignment-cancel" disabled={action.busy} onClick={() => { setChosenStaff(null); setStaffSearch(""); setAssignment(a => ({ ...a, userId: "" })); }}>Hủy</button></div>}
           <Feedback
             loading={candidates.loading || lots.loading || locations.loading}
             error={candidates.error || lots.error || locations.error}
@@ -386,8 +374,8 @@ export function People({ assignmentsOnly = false }) {
         </section>
       )}
       {change && (
-        <section className="workspace-panel workspace-confirm">
-          <h2>
+        <section ref={confirmPanel} role="region" aria-labelledby="account-change-title" className="workspace-panel workspace-confirm">
+          <h2 id="account-change-title">
             Xác nhận{" "}
             {change.kind === "role"
               ? "đổi vai trò"
@@ -412,9 +400,9 @@ export function People({ assignmentsOnly = false }) {
           </p>
           <form className="workspace-form" onSubmit={confirmChange}>
             <label>
-              Lý do
+              {change.kind === "revoke" ? "Lý do" : "Ghi chú thay đổi (không bắt buộc)"}
               <textarea
-                required
+                required={change.kind === "revoke"}
                 maxLength={change.kind === "revoke" ? 255 : 500}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -424,7 +412,7 @@ export function People({ assignmentsOnly = false }) {
             <div className="workspace-actions">
               <button
                 className="btn btn--primary"
-                disabled={action.busy || !reason.trim()}
+                disabled={action.busy || (change.kind === "revoke" && !reason.trim())}
               >
                 Xác nhận thay đổi
               </button>
@@ -478,7 +466,7 @@ export function People({ assignmentsOnly = false }) {
                   }}
                 >
                   <option value="">Tất cả vai trò</option>
-                  {roles.map((r) => (
+                  {[...roles, "ADMIN"].map((r) => (
                     <option key={r}>{r}</option>
                   ))}
                 </select>
@@ -534,33 +522,23 @@ export function People({ assignmentsOnly = false }) {
                         </small>
                       </td>
                       <td>
-                        <select
+                        {roles.includes(row.role) ? <div className="account-role-editor"><select
                           aria-label={`Vai trò ${row.username}`}
-                          value={row.role}
+                          value={roleDrafts[row.id] ?? row.role}
                           disabled={action.busy}
                           onChange={(e) => {
-                            setReason("");
-                            setChange({
-                              kind: "role",
-                              id: row.id,
-                              label: row.username,
-                              value: e.target.value,
-                            });
+                            setRoleDrafts(drafts => ({ ...drafts, [row.id]: e.target.value }));
                           }}
                         >
                           {roles.map((r) => (
                             <option key={r}>{r}</option>
                           ))}
-                        </select>
+                        </select><button type="button" className="btn btn--outline" aria-label={`Lưu vai trò ${row.username}`} disabled={action.busy || !roleDrafts[row.id] || roleDrafts[row.id] === row.role} onClick={() => {
+                          setReason(""); setChange({ kind: "role", id: row.id, label: row.username, value: roleDrafts[row.id] });
+                        }}>Lưu vai trò</button></div> : <strong>{row.role}</strong>}
                       </td>
                       <td>
                         {row.isActive ? "Hoạt động" : "Đã khóa"}
-                        <small>
-                          {row.isEmailVerified
-                            ? "Email đã xác minh"
-                            : "Chưa xác minh email"}{" "}
-                          · {row.approvalStatus}
-                        </small>
                       </td>
                       <td>
                         <button
@@ -650,7 +628,6 @@ export function People({ assignmentsOnly = false }) {
                 "Họ tên": detail.data.fullName,
                 Email: detail.data.email,
                 "Vai trò": detail.data.role,
-                "Phê duyệt": detail.data.approvalStatus,
                 "Ngày tạo": dateLabel(detail.data.createdAt),
                 "Số phân công đang hoạt động":
                   detail.data.activeAssignmentsCount,

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../services/api.js";
 import { calculateDashboardSummary } from "../services/dashboardSummary.js";
 import RequireRole from "../components/RequireRole.jsx";
-import { Link } from "react-router-dom";
 
 function getItems(response) {
   const data = response?.data;
@@ -92,9 +91,6 @@ function AdminDashboardContent() {
             BẢNG ĐIỀU KHIỂN ADMIN
           </span>
           <h1>Tổng quan vận hành</h1>
-          <Link to="/admin/people" className="btn btn--outline">
-            Quản lý tài khoản & phân công
-          </Link>
           <p>
             Theo dõi tình trạng các bãi đỗ và hoạt động đang diễn ra trên toàn
             hệ thống.
