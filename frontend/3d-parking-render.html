@@ -63,9 +63,9 @@
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       var NOTES = {
-        guest: 'Không thấy biển số xe trong nhãn slot (chỉ thấy trạng thái).',
-        user: 'Thấy biển số đã che một phần (51A-***.45).',
-        admin: 'Thấy đầy đủ biển số và trạng thái từng slot.'
+        guest: 'Không thấy biển số xe trong nhãn slot (chỉ thấy trạng thái). Nút "Xe của tôi" ẩn khi chưa đăng nhập.',
+        user: 'Đã đăng nhập: hiện nút "Xe của tôi", thấy biển số xe của mình và che một phần biển số xe khác (51A-***.45).',
+        admin: 'Quản trị viên: hiện nút "Xe của tôi", thấy đầy đủ biển số và trạng thái từng slot.'
       };
       var params = new URLSearchParams(location.search);
       var role = 'guest';
@@ -75,10 +75,12 @@
       sel.value = role; note.textContent = NOTES[role];
       var viewer = new ParkingRender({ container: '#render3d', role: role, lotId: params.get('lot') || undefined });
       window.parkingRender = viewer;
-      // Tham số tiện kiểm thử: ?lot=fptq9&floor=1&mode=orbit&go=core|entry|checkin|checkout|ramp&step=3
+      // Tham số tiện kiểm thử: ?lot=fptq9&floor=1&mode=orbit&go=core|entry|checkin|checkout|ramp&mycar=1&find=51G
       if (params.get('mode') === 'orbit') { viewer.setMode('orbit'); viewer.tr = null; }
       if (params.get('floor')) { viewer.lifting = false; viewer.setFloor(+params.get('floor')); viewer.tr = null; }
       if (params.get('go')) setTimeout(function () { viewer.lifting = false; viewer._goTo(params.get('go')); }, 1200);
+      if (params.get('mycar')) setTimeout(function () { viewer.lifting = false; viewer.goToMyCar(); }, 1200);
+      if (params.get('find')) setTimeout(function () { viewer.lifting = false; viewer.toggleSearch(true); viewer.elSearchIn.value = params.get('find'); viewer.findCarByPlate(params.get('find')); }, 1200);
       if (params.get('step')) {
         var steps = +params.get('step');
         setTimeout(function () {

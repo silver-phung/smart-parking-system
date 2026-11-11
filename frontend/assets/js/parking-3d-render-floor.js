@@ -24,16 +24,16 @@
   var T;
 
   /* ------------------------------------------------------------------ */
-  /* HÌNH HỌC BỐ CỤC GỌN (mét) - ĐÃ XOÁ THANG MÁY GIỮA BÃI               */
+  /* HÌNH HỌC BỐ CỤC GỌN (mét) - ĐÃ XOÁ THANG MÁY GIỮA & LỐI ĐI CUỐI BÃI */
   /* ------------------------------------------------------------------ */
   var SW = 2.6, SL = 5.0;
-  var WM = 8.8, XSR = 8 * SW, ECL = 5.2, COR = 8.4;              // 8.8 + 20.8 + 5.2 + 8.4 = 43.2m
-  var HX = (WM + XSR + ECL + COR) / 2, HZ = 23.0;                // HX = 21.6m, HZ = 23.0m
-  var XS0 = -HX + WM, XE = XS0 + XSR;                            // dãy slot: [-12.8 .. +8.0]
+  var WM = 8.8, XSR = 8 * SW, ECL = 0.8, COR = 8.6;              // Bỏ lối đi dọc cuối khu để xe (ECL = 0.8m sát đầu dãy xe)
+  var HX = (WM + XSR + ECL + COR) / 2, HZ = 23.0;                // HX = 19.5m, HZ = 23.0m
+  var XS0 = -HX + WM, XE = XS0 + XSR;                            // dãy slot: [-10.7 .. +10.1]
   var BX = -HX + 5.8;                                            // làn trục Tây (xe tháng sau check-in)
-  var XEC = XE + 2.4;                                            // làn gom phía Đông trong bãi
-  var XR = XE + ECL;                                             // gờ đỏ ngăn cách (x = +13.2)
-  var XY = XR + 2.1, XB = XR + 4.2, XG = XR + 6.3;               // làn vàng (15.3), cọc tiêu (17.4), làn xanh lá (19.5)
+  var XEC = XE - 1.3;                                            // điểm cuối trong từng lối đi 1-2-3 (không nối dọc trên B1)
+  var XR = XE + ECL;                                             // gờ đỏ ngăn cách sát cuối khu để xe (x = +10.9)
+  var XY = XR + 2.2, XB = XR + 4.3, XG = XR + 6.4;               // làn vàng (13.1), cọc tiêu (15.2), làn xanh lá (17.3)
 
   // Dốc chữ U gập đôi (tiết kiệm diện tích theo hình 14):
   //   - Làn TRÁI (TRONG, sát tường ngăn giữa z = -14.8): hướng TỪ TRÊN XUỐNG (ZD1 = -17.2 -> ZD2 = -12.4)
@@ -427,20 +427,16 @@
       b3(g, XR - openR,    0.26, 0.42, M.kerbRed, (openR + XR) / 2,  0.13, -15.6);
       lines.push({ x: (openR + XR) / 2, y: 0.012, z: -16.1, sx: XR - openR, sy: 1, sz: 0.18, color: 0xff3b3b });
 
-      // 2. Gờ đỏ dọc biên Đông (x = XR):
-      //    Chặn hoàn toàn từ z = -15.6 lên tới z = 12.6 (không cho xe từ Lối đi 1 & 2 cắt ngang sang làn ra!),
-      //    mở cửa tại Lối đi 3 (z = 12.6 .. 17.2) nơi đặt Booth Check-out nằm ngang, và chặn tiếp từ z = 17.2 tới HZ.
-      b3(g, 0.42, 0.26, 12.6 - (-15.6), M.kerbRed, XR, 0.13, (-15.6 + 12.6) / 2);
-      b3(g, 0.42, 0.26, HZ - 17.2,      M.kerbRed, XR, 0.13, (17.2 + HZ) / 2);
+      // 2. Gờ đỏ dọc biên Đông (x = XR = sát cuối các dãy đỗ xe, đã bỏ lối đi dọc cuối bãi):
+      //    Chặn liền mạch từ z = -15.6 lên tới z = 12.3 (mép Nam Lối đi 3) + khoá ngang đầu Nam làn vàng (XR -> XB),
+      //    mở cửa tại Lối đi 3 (z = 12.3 .. 16.5) để xe ra làn vàng XY qua Booth Check-out, rồi nối tiếp từ z = 19.9 tới HZ.
+      b3(g, 0.42, 0.26, 12.3 - (-15.6), M.kerbRed, XR, 0.13, (-15.6 + 12.3) / 2);
+      b3(g, XB - XR, 0.26, 0.42,        M.kerbRed, (XR + XB) / 2, 0.13, 12.3);
+      b3(g, 0.42, 0.26, HZ - 19.9,      M.kerbRed, XR, 0.13, (19.9 + HZ) / 2);
 
-      // 3. Chặn đường đi thẳng phía Bắc trên làn gom nội bộ XEC (sau khi rẽ phải vào Lối đi 3 ra Check-out)
-      //    để xe trong bãi buộc phải đi thẳng qua Booth Check-out, không chạy cắt ngang phía sau booth (hình 9 & 10)
-      b3(g, 3.6, 0.26, 0.42, M.kerbRed, XEC, 0.13, 17.4);
-      [-1.1, 0, 1.1].forEach(function (dx) { cones.push({ x: XEC + dx, y: 0.35, z: 17.0, sx: 1, sy: 1, sz: 1 }); });
-
-      // 4. Booth CHECK-IN Xe Tháng:
-      //    Đặt bên PHẢI làn rẽ vào (side = +1 -> phía Đông của BX, nơi trống trải trong hình 2),
-      //    máy quẹt thẻ đặt nằm ngang dọc làn xe, bỏ bảng xanh Check-in và gắn bảng LED báo số Slot trống ngay tại Booth Check-in!
+      // 3. Booth CHECK-IN Xe Tháng:
+      //    Đặt bên PHẢI làn rẽ vào (side = +1 -> phía Đông của BX),
+      //    máy quẹt thẻ đặt nằm ngang dọc làn xe, gắn bảng LED báo số Slot trống ngay tại Booth Check-in!
       var free0 = lot.free[0], tot0 = lot.slots[0].length;
       buildGate(g, fl, {
         kind: 'checkin', x: BX, z: -13.2, dir: [0, 1], side: 1,
@@ -451,11 +447,11 @@
         readerLine: 'CHECK-IN THÁNG'
       });
 
-      // 5. Booth CHECK-OUT Xe Tháng:
-      //    Đặt NẰM NGANG như Booth Check-in (dir = [1, 0], side = +1 ở mép Nam Lối đi 3, x = XR - 0.8, z = 15.0)
-      //    Xe từ trong bãi đi dọc Lối đi 3 hướng Đông (+x) quẹt thẻ ngang qua barrier rồi rẽ trái lên làn vàng!
+      // 4. Booth CHECK-OUT Xe Tháng:
+      //    Dời sang chiều ngang trên làn ra xe tháng (XY, dir = [0, 1], side = +1 tương tự Booth Check-in):
+      //    Đảo booth nằm dọc sát biên Đông dãy D (x = XR), thanh chắn barrier vươn ngang qua làn vàng XY!
       buildGate(g, fl, {
-        kind: 'checkout-m', x: XR - 0.8, z: 15.0, dir: [1, 0], side: 1,
+        kind: 'checkout-m', x: XY + 0.1, z: 18.2, dir: [0, 1], side: 1,
         showRoofSign: false, readerLine: 'CHECK-OUT THÁNG'
       });
 
@@ -479,34 +475,34 @@
       lines.push({ x: XG + 1.5, y: 0.012, z: 0.5,  sx: 0.14, sy: 1, sz: 34.0, color: 0x2fcf6a });
 
       // Mũi tên XANH DƯƠNG: làn bypass xe vãng lai đi thẳng vào làn TRONG (ZD1 = -17.2) để xuống dốc B2
-      for (var ax = -HX + 3; ax <= HX - 3; ax += 6.5) arrowC(g, ax, 0, ZD1, ROT_E, '#2d8cff', 1.2, 2.4);
-      // Mũi tên VÀNG: nhánh rẽ phải vào Check-in xe tháng
-      arrowC(g, BX - 2.2, 0, ZD1 + 0.8, ROT_E, '#f2c200', 1.0, 2.0);
-      arrowC(g, BX, 0, -16.2, ROT_N, '#f2c200', 1.1, 2.2);
+      //   (tách biệt hoàn toàn khỏi mũi tên VÀNG ở khúc rẽ Check-in đầu tiên, bỏ bảng Vãng lai dưới đất)
+      [-HX + 1.5, BX - 1.6, -6.2, 1.5, 8.5, 15.0].forEach(function (ax) {
+        arrowC(g, ax, 0, ZD1 - 0.8, ROT_E, '#2d8cff', 1.15, 2.3);
+      });
+      // Mũi tên VÀNG: nhánh rẽ phải vào Check-in xe tháng (đặt riêng ở phần đường rẽ vào BX)
+      arrowC(g, BX, 0, -15.4, ROT_N, '#f2c200', 1.1, 2.2);
       arrowC(g, BX, 0, -10.2, ROT_N, '#f2c200', 1.1, 2.2);
       floorText(g, BX, -9.8, ROT_N, 3.0, 1.3, ['XE THÁNG'], '#0b5cad', '#ffffff');
-      floorText(g, -3, ZD1, ROT_E, 4.4, 1.5, ['LÀN VÃNG LAI ➔ ' + (def.ids[1] || 'B2')], '#145a32', '#ffffff');
 
-      // Mũi tên VÀNG: xe tháng qua Check-out đi làn trái ra dốc mặt đất
-      arrowC(g, XEC - 2.2, 0, 15.0, ROT_E, '#f2c200', 1.1, 2.2);
-      arrowC(g, XY, 0, 15.2, ROT_N, '#f2c200', 1.15, 2.3);
-      arrowC(g, XY, 0, 18.2, ROT_N, '#f2c200', 1.15, 2.3);
+      // Mũi tên VÀNG: xe tháng từ Lối đi 3 qua Check-out đi làn trái (XY) ra dốc mặt đất
+      arrowC(g, XE - 2.0, 0, 15.0, ROT_E, '#f2c200', 1.1, 2.2);
+      arrowC(g, XY, 0, 15.5, ROT_N, '#f2c200', 1.15, 2.3);
+      arrowC(g, XY, 0, 18.4, ROT_N, '#f2c200', 1.15, 2.3);
       arrowC(g, XY + 1.5, 0, ZEY, ROT_E, '#f2c200', 1.15, 2.3);
-      arrowC(g, HX - 1.8, 0, ZEY, ROT_E, '#f2c200', 1.15, 2.3);
+      arrowC(g, HX - 1.5, 0, ZEY, ROT_E, '#f2c200', 1.15, 2.3);
 
       // Mũi tên XANH LÁ: xe vãng lai từ làn NGOÀI dốc B2 (ZU1 = -21.0) đi thẳng làn phải (XG) ra dốc mặt đất
       arrowC(g, HX - 1.8, 0, ZU1, ROT_W, '#2fcf6a', 1.15, 2.3);
       for (var gz = -13; gz <= 13; gz += 6.5) arrowC(g, XG, 0, gz, ROT_N, '#2fcf6a', 1.15, 2.3);
       arrowC(g, XG + 1.2, 0, ZEG, ROT_E, '#2fcf6a', 1.15, 2.3);
 
-      // Mũi tên trắng chỉ hướng trong khu đỗ xe tháng (hướng rõ về phía Lối đi 3 & Check-out)
+      // Mũi tên trắng chỉ hướng trong khu đỗ xe tháng (trục Tây BX dẫn lên Lối đi 3 -> Check-out)
       [0, 5, 11].forEach(function (z) { U.floorArrow(g, BX, 0, z, ROT_N); });
-      [-5, 5].forEach(function (x) {
-        U.floorArrow(g, x, 0, AZ[0], ROT_E);
-        U.floorArrow(g, x, 0, AZ[1], ROT_E);
+      [-4, 4].forEach(function (x) {
+        U.floorArrow(g, x, 0, AZ[0], ROT_W);
+        U.floorArrow(g, x, 0, AZ[1], ROT_W);
         U.floorArrow(g, x, 0, AZ[2], ROT_E);
       });
-      [-2, 9].forEach(function (z) { U.floorArrow(g, XEC, 0, z, ROT_N); });
     } else {
       /* ================================================================== */
       /*  PHÂN LUỒNG CÁC TẦNG VÃNG LAI (B2, B3, B4):                        */
@@ -667,18 +663,14 @@
         hang(HX - 8.5, ZD1, 3.3, 0.90, null, S(['XUỐNG ' + ids[1] + ' ➔', ids[1] + ': ' + availLine(1)], avail(1), 560, 165), 'x', 0.65);
       }
 
-      // 5. Bảng chỉ dẫn hướng các xe DI CHUYỂN RA KHỎI BÃI khi đang ở trong khu Xe Tháng
+      // 4. Bảng chỉ dẫn hướng các xe DI CHUYỂN RA KHỎI BÃI khi đang ở trong khu Xe Tháng
       hang(BX, -2.5, 2.9, 0.78, null, S(['HƯỚNG RA BÃI ▲', 'Đi thẳng tới Lối đi 3 ➔'], GREEN, 520, 145), 'z', 0.42);
-      hang(0.0, AZ[0], 2.9, 0.78, null, S(['LỐI RA XE THÁNG ➔', 'Rẽ trái lên Lối đi 3'], GREEN, 520, 145), 'x', 0.42);
-      hang(0.0, AZ[1], 2.9, 0.78, null, S(['LỐI RA XE THÁNG ➔', 'Rẽ trái lên Lối đi 3'], GREEN, 520, 145), 'x', 0.42);
-      hang(XEC, 9.5,   2.9, 0.78, null, S(['▲ LỐI RA CHECK-OUT', 'Đi thẳng tới Lối đi 3'], AMB, 520, 145), 'z', 0.42);
+      hang(0.0, AZ[0], 2.9, 0.78, S(['◀ RA TRỤC TÂY · LÊN LỐI ĐI 3'], GREEN, 520, 145), null, 'x', 0.42);
+      hang(0.0, AZ[1], 2.9, 0.78, S(['◀ RA TRỤC TÂY · LÊN LỐI ĐI 3'], GREEN, 520, 145), null, 'x', 0.42);
       hang(0.0, AZ[2], 3.1, 0.82, null, S(['CHECK-OUT XE THÁNG ➔', 'Quẹt thẻ · Ra mặt đất'], AMB, 540, 150), 'x', 0.40);
 
-      // 6. Bảng tại khu vực 2 lane sau Check-out (làn vàng xe tháng / làn xanh lá xe vãng lai)
-      hang((XY + XG) / 2, 11.5, 3.6, 0.92,
-        S(['◀ XE THÁNG (Làn vàng)', 'VÃNG LAI từ ' + (ids[1] || 'B2') + ' (Làn xanh) ▶'], DARK, 620, 165),
-        S(['◀ XE THÁNG (Làn vàng)', 'VÃNG LAI từ ' + (ids[1] || 'B2') + ' (Làn xanh) ▶'], DARK, 620, 165), 'z', 0.38);
-      hang(HX - 2.5, (ZEG + ZEY) / 2, 3.2, 0.88, null, S(['LỐI RA MẶT ĐẤT ➔', '2 làn phân cách cọc tiêu'], GREEN, 540, 155), 'x', 0.35);
+      // 5. Bảng màu xanh lá (Lối ra Mặt đất): chỉ giữ đúng 4 chữ "LỐI RA MẶT ĐẤT" và đổi mũi tên hướng lên trên (▲)
+      hang(HX - 3.2, 19.5, 3.0, 0.82, null, S(['▲ LỐI RA MẶT ĐẤT'], GREEN, 500, 135), 'x', 0.68);
     } else {
       // Các tầng vãng lai (B2, B3, B4):
       // Ngay cửa vào từ dốc chữ U (làn Trái/Trong ZD2 = -12.4): mặt hướng dốc báo số chỗ trống, mặt hướng B2 chỉ dẫn làn lên/xuống
@@ -948,11 +940,10 @@
 
     lot.floors.forEach(function (fl) {
       var k = fl.k, y = fl.y, mon = k === 0;
-      // 3 lối đi chính (Lối đi 1, 2, 3) nối từ trục Tây (BX) sang trục gom Đông (XEC)
+      // 3 lối đi chính (Lối đi 1, 2, 3): trên tầng B1 đã bỏ lối đi dọc ở cuối khu để xe (chỉ Lối đi 3 thông qua Booth Check-out sang XY)
       AZ.forEach(function (z, ai) {
-        var pts = [[BX, z], [-2.5, z], [XEC, z]];
+        var pts = [[BX, z], [-1.0, z], [XEC, z]];
         if (mon && ai === 2) {
-          // Chỉ duy nhất Lối đi 3 (z = 15) đi thẳng qua Booth Check-out sang làn vàng XY!
           pts.push([XY, z]);
         } else if (!mon) {
           pts.push([XG, z]);
@@ -960,9 +951,11 @@
         path(k, pts);
       });
 
-      // Trục Tây (BX) và trục gom Đông (XEC: chặn ở z = 15 trên tầng B1 để không đi cắt ngang sau Booth Check-out)
+      // Trục Tây (BX) nối 3 lối đi; trên B1 KHÔNG nối dọc ở cuối khu để xe (XEC) theo yêu cầu
       path(k, [[BX, AZ[0]], [BX, AZ[1]], [BX, AZ[2]]]);
-      path(k, [[XEC, AZ[0]], [XEC, AZ[1]], [XEC, AZ[2]]]);
+      if (!mon) {
+        path(k, [[XEC, AZ[0]], [XEC, AZ[1]], [XEC, AZ[2]]]);
+      }
 
       // Phòng thang máy: tạo điểm đứng NGOÀI cửa kính (outNode) nối vào điểm đứng TRONG phòng kính (inNode, type='core')
       fl.lobbies.forEach(function (lb) {
@@ -1042,7 +1035,7 @@
     lot.pois = {
       entry:    { node: nearest(0, -HX, Z_ENTRY),   yaw: -Math.PI / 2 },
       checkin:  { node: nearest(0, BX, ZD1),        yaw: Math.PI },
-      checkout: { node: nearest(0, XEC, AZ[2]),     yaw: -Math.PI / 2 },
+      checkout: { node: nearest(0, XY, AZ[2]),      yaw: Math.PI - 0.16 },
       ramp:     { node: nearest(1, XEC, ZU2),       yaw: -Math.PI / 2 }
     };
     lot.entryNode = lot.pois.entry.node;
