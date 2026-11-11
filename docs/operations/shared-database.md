@@ -5,7 +5,7 @@
 
 Mỗi thành viên cài **.NET 10 SDK**, có Internet và nhận **username/password DB** từ người quản lý Neon. Không cần cài PostgreSQL, Docker hoặc deploy web.
 
-Thông tin đích của nhóm nằm trong `scripts/shared-database.json`: branch Neon `production`, database `smartparking`. Đây là branch của Neon, khác với nhánh code GitHub `duong`/`develop`. Username của các thành viên có thể khác nhau, nhưng phải có quyền truy cập cùng database này.
+Thông tin đích của nhóm nằm trong `scripts/shared-database.json`. Database `smartparking` thuộc branch Neon `production`. Các nhánh GitHub quản lý mã nguồn riêng. Mỗi thành viên dùng tài khoản được cấp quyền trên database chung.
 
 ## Windows — chạy lần đầu
 
@@ -62,7 +62,7 @@ Khi dùng tùy chọn chạy backend, script truyền cấu hình đã kiểm tr
 
 ## Phạm vi của bộ script
 
-- Bộ script kiểm tra khả năng đăng nhập/query DB và cấp cấu hình cho backend. Bản backend nền tảng hiện tại **chưa đăng ký DbContext/repository PostgreSQL**; phần đó cần dùng `ConnectionStrings:DefaultConnection` khi triển khai chức năng dữ liệu. API báo `Healthy` không có nghĩa đã truy cập DB.
+- Bộ script xác thực kết nối bằng truy vấn PostgreSQL và cấp `ConnectionStrings:DefaultConnection` cho Parking Core. Persistence của Core đọc kết nối đó. Dùng kết quả truy vấn của script để kiểm tra DB và dùng `/health` để kiểm tra tiến trình API.
 - Script không tạo/xóa bảng, không chạy migration, không seed dữ liệu và không kiểm tra quyền trên từng bảng nghiệp vụ. Nếu DB đã bị xóa bảng, người phụ trách DB cần triển khai schema phù hợp một lần.
 - Không commit mật khẩu, connection string có mật khẩu hoặc `secrets.json`. Hostname/database trong file cấu hình chung không chứa mật khẩu.
 - Đóng terminal chỉ dừng backend local; dữ liệu Neon đã lưu vẫn nằm trên cloud.

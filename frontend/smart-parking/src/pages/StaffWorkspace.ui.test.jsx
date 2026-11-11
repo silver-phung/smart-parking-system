@@ -99,6 +99,20 @@ beforeEach(() => {
         { lotId: 1, lotName: "Bãi Trung Tâm", isActive: true },
         { lotId: 2, lotName: "Bãi Phía Đông", isActive: true },
       ]);
+    if (path.endsWith("/operations/zones")) return result([{ id: 1, code: "VL", name: "Vãng lai", type: "TRANSIENT", isActive: true }]);
+    if (path.endsWith("/operations/sessions")) return result(model.sessions);
+    if (path.endsWith("/operations/layout")) return result({ floors: [{ id: 1, zoneId: 1, name: "Tầng B1", isActive: true }], slots: model.slots.map(s => ({ ...s, zoneId: 1, floorName: "Tầng B1", floorActive: true, zoneActive: true, allowedFuelType: "ANY" })) });
+    if (path.endsWith("/operations/entries")) {
+      if (model.denyCheckIn) return Response.json({ message: "Bạn không có quyền nghiệp vụ cổng tại bãi này." }, { status: 403 });
+      const session = { ...primary, id: 20, eventId: body.eventId, plateNumber: "", zoneId: body.zoneId, revision: 1,
+        temporaryPlateNumber: null, verificationStatus: "WAITING_VERIFICATION", ticketCode: body.ticketCode, ticketStatus: "ISSUED" };
+      model.sessions.push(session); return result(session);
+    }
+    if (/\/operations\/sessions\/\d+\/verify$/.test(path)) {
+      const session = model.sessions.find(s => s.id === Number(path.split("/").at(-2)));
+      Object.assign(session, { plateNumber: body.plateNumber, fuelType: body.fuelType, currentSlotId: body.actualSlotId, verificationStatus: "VERIFIED", revision: session.revision + 1 });
+      return result(session);
+    }
     if (path.endsWith("/capacity"))
       return result({
         availableForWalkIn: 3,
@@ -218,108 +232,99 @@ afterEach(() => {
 });
 
 describe("Staff workspace", () => {
-  it("receives a walk-in vehicle without assigning a physical slot", async () => {
-    const user = userEvent.setup();
-    mount();
-    await screen.findByRole("option", { name: "Bãi Trung Tâm" });
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Xác nhận nhận xe" }).disabled,
-      ).toBe(false),
-    );
-    await user.type(screen.getByLabelText("Biển số xe"), "51a-99999");
-    await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: "Xác nhận nhận xe" }));
-    await screen.findByText(/Đã nhận xe thành công/);
-    expect(JSON.parse(requests("/check-in")[0][1].body)).toEqual({
-      lotId: 1,
-      plateNumber: "51A-99999",
-    });
-    expect(screen.getByLabelText("Biển số xe").value).toBe("");
-  });
+  async function entryDraft(user, ticket = "VE-001") {
+    await screen.findByRole("option", { name: "VL · Vãng lai" });
+    await user.selectOptions(screen.getByLabelText("Khu bình thường"), "1");
+    await user.type(screen.getByLabelText("Mã vé"), ticket);
+    await user.type(screen.getByLabelText("Lý do tiếp nhận"), "Nhận xe theo vé tại cổng.");
+  }
 
-  it("shows backend duty rejection and keeps the entry draft for correction", async () => {
-    model.denyCheckIn = true;
-    const user = userEvent.setup();
-    mount();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Xác nhận nhận xe" }).disabled,
-      ).toBe(false),
-    );
-    await user.type(screen.getByLabelText("Biển số xe"), "51A99999");
-    await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: "Xác nhận nhận xe" }));
-    await screen.findByText(/không có quyền nghiệp vụ cổng/);
-    expect(screen.getByLabelText("Biển số xe").value).toBe("51A99999");
-    expect(screen.queryByText(/Đã nhận xe thành công/)).toBeNull();
-  });
-
-  it("confirms an OCR correction with a reason and attaches the uploaded image", async () => {
-    const user = userEvent.setup();
-    mount();
-    await screen.findByLabelText("Biển số xe");
-    await user.upload(
-      screen.getByLabelText(/Chọn \/ chụp ảnh/),
-      new File(["jpeg"], "entry.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Nhận diện biển số" }));
-    await waitFor(() =>
-      expect(screen.getByLabelText("Biển số xe").value).toBe("51F12345"),
-    );
-    await user.clear(screen.getByLabelText("Biển số xe"));
-    await user.type(screen.getByLabelText("Biển số xe"), "51F12346");
-    await user.type(
-      screen.getByLabelText("Lý do sửa biển số AI"),
-      "Đối chiếu số cuối trên xe.",
-    );
-    await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: "Xác nhận nhận xe" }));
-    await screen.findByText(/Đã nhận xe thành công/);
-    expect(JSON.parse(requests("/confirm")[0][1].body)).toEqual({
-      plateNumber: "51F12346",
-      note: "Đối chiếu số cuối trên xe.",
-    });
-    expect(JSON.parse(requests("/check-in")[0][1].body).checkInImageUrl).toBe(
-      "https://images.example.invalid/entry.jpg",
-    );
-  });
-
-  it("does not report a successful entry when photo persistence fails", async () => {
-    model.failUpload = true;
-    const user = userEvent.setup();
-    mount();
-    await screen.findByLabelText("Biển số xe");
-    await user.upload(
-      screen.getByLabelText(/Chọn \/ chụp ảnh/),
-      new File(["jpeg"], "entry.jpg", { type: "image/jpeg" }),
-    );
-    await user.type(screen.getByLabelText("Biển số xe"), "51F12345");
-    await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: "Xác nhận nhận xe" }));
-    await screen.findByText("Dịch vụ lưu ảnh đang gián đoạn.");
+  it("issues a ticket and leaves the plate for verification at the slot", async () => {
+    const user = userEvent.setup(); mount(); await entryDraft(user);
+    await user.click(screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" }));
+    await screen.findByText(/Đã cấp vé VE-001/);
+    const body = JSON.parse(requests("/entries")[0][1].body);
+    expect(body).toMatchObject({ ticketCode: "VE-001", zoneId: 1 });
+    expect(body.recognitionId).toBeUndefined();
+    expect(body.eventId).toBeTruthy(); expect(body.plateNumber).toBeUndefined();
     expect(requests("/check-in")).toHaveLength(0);
-    expect(screen.queryByText(/Đã nhận xe thành công/)).toBeNull();
   });
 
-  it("clears the old OCR plate when a different photo is chosen", async () => {
-    const user = userEvent.setup();
-    mount();
-    await screen.findByLabelText("Biển số xe");
-    await user.upload(
-      screen.getByLabelText(/Chọn \/ chụp ảnh/),
-      new File(["one"], "one.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Nhận diện biển số" }));
-    await waitFor(() =>
-      expect(screen.getByLabelText("Biển số xe").value).toBe("51F12345"),
-    );
-    await user.upload(
-      screen.getByLabelText("Đổi ảnh"),
-      new File(["two"], "two.jpg", { type: "image/jpeg" }),
-    );
-    expect(screen.getByLabelText("Biển số xe").value).toBe("");
-    expect(screen.queryByText(/AI đọc được/)).toBeNull();
+  it("keeps the event ID and exact payload when retrying an uncertain entry response", async () => {
+    const original = fetchMock.getMockImplementation(); let failed = false;
+    fetchMock.mockImplementation((url, options) => {
+      if (url.endsWith("/entries") && !failed) { failed = true; throw new TypeError("network failed"); }
+      return original(url, options);
+    });
+    const user = userEvent.setup(); mount(); await entryDraft(user);
+    await user.click(screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" }));
+    await screen.findByText(/Không thể kết nối máy chủ/);
+    expect(screen.getByLabelText("Mã vé").closest("fieldset").disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Gửi lại cùng lượt xe" }));
+    await screen.findByText(/Đã cấp vé VE-001/);
+    expect(requests("/entries")).toHaveLength(2);
+    expect(requests("/entries")[0][1].body).toBe(requests("/entries")[1][1].body);
+  });
+
+  it("shows duty rejection without reporting a successful intake", async () => {
+    model.denyCheckIn = true; const user = userEvent.setup(); mount(); await entryDraft(user);
+    await user.click(screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" }));
+    await screen.findByText(/không có quyền nghiệp vụ cổng/);
+    expect(screen.getByLabelText("Mã vé").value).toBe("VE-001");
+    expect(screen.queryByText(/Đã cấp vé/)).toBeNull();
+  });
+
+  it("attaches the uploaded photo without invoking recognition at the gate", async () => {
+    const user = userEvent.setup(); mount(); await entryDraft(user);
+    await user.upload(screen.getByLabelText("Ảnh xe"), new File(["photo"], "entry.jpg", { type: "image/jpeg" }));
+    await user.click(screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" }));
+    await screen.findByText(/Đã cấp vé/);
+    expect(JSON.parse(requests("/entries")[0][1].body)).toMatchObject({ imageId: 88 });
+    expect(requests("/detect")).toHaveLength(0);
+  });
+
+  it("does not issue an entry when image persistence fails", async () => {
+    model.failUpload = true; const user = userEvent.setup(); mount(); await entryDraft(user);
+    await user.upload(screen.getByLabelText("Ảnh xe"), new File(["photo"], "entry.jpg", { type: "image/jpeg" }));
+    await user.click(screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" }));
+    await screen.findByText("Dịch vụ lưu ảnh đang gián đoạn.");
+    expect(requests("/entries")).toHaveLength(0);
+    expect(screen.queryByText(/Đã cấp vé/)).toBeNull();
+  });
+
+  it("locks lot navigation and suppresses duplicate submits during intake", async () => {
+    let resolveWrite; const original = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((url, options) => url.endsWith("/entries") ? new Promise(resolve => { resolveWrite = resolve; }) : original(url, options));
+    const user = userEvent.setup(); mount(); await entryDraft(user);
+    const button = screen.getByRole("button", { name: "Cấp vé và đưa vào hàng chờ" });
+    fireEvent.submit(button.closest("form")); fireEvent.submit(button.closest("form"));
+    await waitFor(() => expect(requests("/entries")).toHaveLength(1));
+    expect(screen.getByRole("combobox", { name: "Bãi đang làm việc" }).disabled).toBe(true);
+    expect(screen.getByRole("tab", { name: "Xe ra" }).disabled).toBe(true);
+    resolveWrite(result({ id: 20, ticketCode: "VE-001", verificationStatus: "WAITING_VERIFICATION" }));
+    await screen.findByText(/Đã cấp vé VE-001/);
+    expect(screen.getByRole("combobox", { name: "Bãi đang làm việc" }).disabled).toBe(false);
+  });
+
+  it("clears photos and ticket drafts when switching assigned lots", async () => {
+    const user = userEvent.setup(); mount(); await entryDraft(user);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Bãi đang làm việc" }), "2");
+    expect(screen.getByLabelText("Mã vé").value).toBe("");
+    expect(screen.getByLabelText("Lý do tiếp nhận").value).toBe("");
+    expect(requests("/entries")).toHaveLength(0);
+  });
+
+  it("confirms plate fuel and actual slot with the server revision", async () => {
+    model.sessions = [{ ...primary, eventId: "event-1", ticketCode: "VE-001", temporaryPlateNumber: "51F12345", zoneId: 1, revision: 1, verificationStatus: "WAITING_VERIFICATION" }];
+    const user = userEvent.setup(); mount("verify");
+    await user.click(await screen.findByRole("button", { name: /VE-001 · #10/ }));
+    await user.selectOptions(screen.getByLabelText("Nhiên liệu đã xác nhận"), "PETROL");
+    await user.selectOptions(screen.getByLabelText("Ô thực tế"), "101");
+    await user.click(screen.getByRole("checkbox", { name: /Đã đối chiếu xe thực tế/ }));
+    await user.click(screen.getByRole("button", { name: "Xác minh và ghi nhận Có xe" }));
+    await waitFor(() => expect(requests("/verify")).toHaveLength(1));
+    expect(JSON.parse(requests("/verify")[0][1].body)).toMatchObject({ actualSlotId: 101, plateNumber: "51F12345", fuelType: "PETROL", expectedRevision: 1, vehicleObserved: true });
+    expect(requests("/verify-slot")).toHaveLength(0);
   });
 
   it("blocks exit while payment is unconfirmed", async () => {
@@ -460,50 +465,4 @@ describe("Staff workspace", () => {
     ).toBeTruthy();
   });
 
-  it("locks lot switching while a mutation is pending and prevents duplicate submission", async () => {
-    let resolveWrite;
-    const original = fetchMock.getMockImplementation();
-    fetchMock.mockImplementation((url, options) =>
-      url.endsWith("/check-in")
-        ? new Promise((resolve) => {
-            resolveWrite = resolve;
-          })
-        : original(url, options),
-    );
-    const user = userEvent.setup();
-    mount();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Xác nhận nhận xe" }).disabled,
-      ).toBe(false),
-    );
-    await user.type(screen.getByLabelText("Biển số xe"), "51F12345");
-    await user.click(screen.getByRole("checkbox"));
-    const form = screen.getByRole("form", { name: "Nhận xe vào bãi" });
-    fireEvent.submit(form);
-    fireEvent.submit(form);
-    await waitFor(() => expect(requests("/check-in")).toHaveLength(1));
-    expect(
-      screen.getByRole("combobox", { name: "Bãi đang làm việc" }).disabled,
-    ).toBe(true);
-    expect(screen.getByRole("tab", { name: "Xe ra" }).disabled).toBe(true);
-    resolveWrite(result({ ...primary, id: 20 }));
-    await screen.findByText(/Đã nhận xe thành công/);
-    expect(
-      screen.getByRole("combobox", { name: "Bãi đang làm việc" }).disabled,
-    ).toBe(false);
-  });
-
-  it("clears the entry draft when switching to a different assigned lot", async () => {
-    const user = userEvent.setup();
-    mount();
-    await screen.findByLabelText("Biển số xe");
-    await user.type(screen.getByLabelText("Biển số xe"), "51F12345");
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Bãi đang làm việc" }),
-      "2",
-    );
-    expect(screen.getByLabelText("Biển số xe").value).toBe("");
-    expect(requests("/check-in")).toHaveLength(0);
-  });
 });

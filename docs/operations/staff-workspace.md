@@ -14,7 +14,7 @@ dotnet run --project backend/src/SmartParking.Api --launch-profile http
 
 Mở `http://localhost:5295/app/login`, đăng nhập bằng tài khoản STAFF đã được Admin phân công bãi, sau đó vào `/app/staff`. Khi phát triển riêng, `npm --prefix frontend/smart-parking run dev` chạy web ở cổng 5173 và proxy `/api` về backend 5295.
 
-API chính cần database core đã migrate, trong đó có cột `staff_lot_assignments.duty`. Nhận diện ảnh cần FastAPI ở địa chỉ `AiService:BaseUrl`, database AI đã migrate và cấu hình `AiRecognitionConnection`. Lưu ảnh dùng cấu hình Cloudinary hiện có. Nhập biển số không kèm ảnh vẫn dùng được khi không dùng AI hoặc dịch vụ ảnh.
+Vận hành bãi dùng database Core đã migrate, trong đó có cột `staff_lot_assignments.duty`. Cấp vé và xác minh dùng dữ liệu nhân viên nhập. Lưu ảnh dùng cấu hình Cloudinary hiện có. Luồng nhận dạng trên các phiên cũ dùng cấu hình riêng của Recognition Service qua `Recognition:BaseUrl` và `ConnectionStrings:AiRecognitionConnection`.
 
 ## Các khu chức năng
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using SmartParking.Application.DTOs.StaffAssignments;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
@@ -9,6 +10,137 @@ namespace SmartParking.Tests;
 
 public class StaffLotAssignmentTests
 {
+    [Theory]
+    [InlineData(StaffDuties.GateIn)]
+    [InlineData(StaffDuties.GateOut)]
+    public async Task GateAssignment_RequiresFloorWithoutZone_GrantsOnlyItsDirection(string duty)
+    {
+        var (service, context, admin, _, staff, _, lot, _) = await SetupContextAsync();
+        var request = new CreateStaffAssignmentRequestDto { UserId = staff.Id, LotId = lot.Id, Duty = duty, FloorId = lot.Id, ZoneId = lot.Id };
+        Assert.False((await service.CreateAssignmentAsync(request, admin.Id, null)).Success);
+        request.ZoneId = null; request.FloorId = null;
+        Assert.False((await service.CreateAssignmentAsync(request, admin.Id, null)).Success);
+        request.FloorId = lot.Id;
+        var saved = await service.CreateAssignmentAsync(request, admin.Id, null);
+        Assert.True(saved.Success); Assert.Null(saved.Data!.ZoneId); Assert.Null(saved.Data.ZoneName);
+        Assert.Equal(lot.Id, saved.Data.FloorId);
+        var auth = new ParkingAuthorizationService(context);
+        Assert.Equal(duty == StaffDuties.GateIn, await auth.CanOperateGateInAsync(staff.Id, Roles.Staff, lot.Id));
+        Assert.Equal(duty == StaffDuties.GateOut, await auth.CanOperateGateOutAsync(staff.Id, Roles.Staff, lot.Id));
+        Assert.False(await auth.CanOperateSlotVerificationAsync(staff.Id, Roles.Staff, lot.Id));
+        Assert.True(await auth.CanOperateAreaAsync(staff.Id, Roles.Staff, lot.Id, duty, lot.Id, lot.Id));
+        Assert.False(await auth.CanOperateAreaAsync(staff.Id, Roles.Staff, lot.Id, duty, 999, lot.Id));
+    }
+
+    [Theory]
+    [InlineData(StaffDuties.GateIn, null, true)]
+    [InlineData(StaffDuties.GateOut, null, true)]
+    [InlineData(StaffDuties.GateIn, 1, false)]
+    [InlineData(StaffDuties.SlotVerifier, null, false)]
+    [InlineData(StaffDuties.SlotVerifier, 1, true)]
+    [InlineData(StaffDuties.Gate, null, false)]
+    public void AssignmentDto_ValidatesConditionalZone(string duty, int? zoneId, bool expected)
+    {
+        var request = new CreateStaffAssignmentRequestDto { UserId = 1, LotId = 1, Duty = duty, FloorId = 1, ZoneId = zoneId };
+        Assert.Equal(expected, System.ComponentModel.DataAnnotations.Validator.TryValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), [], true));
+    }
+    [Fact]
+    public async Task AssignmentRequiresOneDutyAndValidLotFloorZoneHierarchy()
+    {
+        var (service, context, admin, manager, staff, _, lot, _) = await SetupContextAsync();
+        var request = new CreateStaffAssignmentRequestDto { UserId = staff.Id, LotId = lot.Id, Duty = "BOTH", FloorId = 1, ZoneId = 1 };
+        Assert.False((await service.CreateAssignmentAsync(request, admin.Id, null)).Success);
+        request.Duty = "SLOT_VERIFIER"; request.FloorId = 2;
+        Assert.False((await service.CreateAssignmentAsync(request, admin.Id, null)).Success);
+        request.FloorId = 1; request.ZoneId = 2;
+        Assert.False((await service.CreateAssignmentAsync(request, admin.Id, null)).Success);
+        request.ZoneId = 1;
+        var saved = await service.CreateAssignmentAsync(request, admin.Id, null);
+        Assert.True(saved.Success); Assert.Equal(1, saved.Data!.FloorId); Assert.Equal("Khu 1", saved.Data.ZoneName);
+        Assert.Null(await service.GetLocationsAsync(lot.Id, manager.Id));
+        var locations = await service.GetLocationsAsync(lot.Id, admin.Id);
+        Assert.Equal(1, Assert.Single(locations!.Floors).Id);
+        Assert.Equal(1, Assert.Single(locations.Floors[0].Zones).Id);
+        var auth = new ParkingAuthorizationService(context);
+        Assert.True(await auth.CanOperateAreaAsync(staff.Id, "STAFF", 1, "SLOT_VERIFIER", 1, 1));
+        Assert.False(await auth.CanOperateAreaAsync(staff.Id, "ADMIN", 1, "SLOT_VERIFIER", 2, 1));
+        Assert.False(await auth.CanOperateAreaAsync(staff.Id, "STAFF", 1, "GATE_IN", 1, 1));
+    }
+    [Fact]
+    public async Task ManagerCanAssignAndRevokeStaffOnlyWithinManagedLots()
+    {
+        var (service, context, admin, manager, staff, _, lot1, lot2) = await SetupContextAsync();
+        // Existing management access remains the source of the Manager's lot scope.
+        context.StaffLotAssignments.Add(new StaffLotAssignment { UserId = manager.Id, LotId = lot1.Id, AssignedBy = admin.Id, Duty = StaffDuties.Both, IsActive = true });
+        await context.SaveChangesAsync();
+        var request = new CreateStaffAssignmentRequestDto { UserId = staff.Id, LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier };
+        var (success, _, own) = await service.CreateAssignmentAsync(request, manager.Id, null);
+        Assert.True(success); Assert.Equal(manager.Id, own!.AssignedBy);
+        Assert.Equal(StaffDuties.SlotVerifier, own.Duty);
+        var denied = await service.CreateAssignmentAsync(new() { UserId = staff.Id, LotId = lot2.Id, FloorId = lot2.Id, ZoneId = lot2.Id, Duty = StaffDuties.SlotVerifier }, manager.Id, null);
+        Assert.False(denied.Success); Assert.Contains("không có quyền", denied.Message);
+        var foreign = await service.CreateAssignmentAsync(new() { UserId = staff.Id, LotId = lot2.Id, FloorId = lot2.Id, ZoneId = lot2.Id, Duty = StaffDuties.SlotVerifier }, admin.Id, null);
+        Assert.True(foreign.Success);
+        var revokeDenied = await service.RevokeAssignmentAsync(foreign.Data!.Id, new() { Reason = "Bãi khác" }, manager.Id, null);
+        Assert.False(revokeDenied.Success);
+        Assert.Null(await service.GetAssignmentByIdAsync(foreign.Data.Id, manager.Id, Roles.Admin));
+        var list = await service.GetAssignmentsAsync(new(), manager.Id, Roles.Admin);
+        Assert.Equal(own.Id, Assert.Single(list.Items).Id);
+        var revoke = await service.RevokeAssignmentAsync(own.Id, new() { Reason = "Đổi ca" }, manager.Id, null);
+        Assert.True(revoke.Success);
+        Assert.False((await context.StaffLotAssignments.FindAsync(own.Id))!.IsActive);
+    }
+
+    [Fact]
+    public async Task StaffCannotAssignOrRevokeEvenWhenCallerSuppliesAdminRole()
+    {
+        var (service, _, admin, _, staff, regular, lot, _) = await SetupContextAsync();
+        var request = new CreateStaffAssignmentRequestDto { UserId = staff.Id, LotId = lot.Id, FloorId = lot.Id, ZoneId = lot.Id, Duty = StaffDuties.SlotVerifier };
+        var created = await service.CreateAssignmentAsync(request, admin.Id, null);
+        Assert.True(created.Success);
+        foreach (var actor in new[] { staff.Id, regular.Id, 999L })
+        {
+            Assert.False((await service.CreateAssignmentAsync(request, actor, null)).Success);
+            Assert.False((await service.RevokeAssignmentAsync(created.Data!.Id, new(), actor, null)).Success);
+            Assert.Empty((await service.GetAssignmentsAsync(new(), actor, Roles.Admin)).Items);
+            Assert.Empty((await service.GetCandidatesAsync(new(), actor)).Items);
+        }
+    }
+
+    [Fact]
+    public async Task RevokedManagerAccessImmediatelyBlocksAssignmentChangesAndReads()
+    {
+        var (service, context, admin, manager, staff, _, lot, _) = await SetupContextAsync();
+        var scope = new StaffLotAssignment { UserId = manager.Id, LotId = lot.Id, AssignedBy = admin.Id, IsActive = true };
+        context.StaffLotAssignments.Add(scope); await context.SaveChangesAsync();
+        var created = await service.CreateAssignmentAsync(new() { UserId = staff.Id, LotId = lot.Id, FloorId = lot.Id, ZoneId = lot.Id, Duty = StaffDuties.SlotVerifier }, manager.Id, null);
+        Assert.True(created.Success);
+        scope.IsActive = false; await context.SaveChangesAsync();
+        Assert.False((await service.RevokeAssignmentAsync(created.Data!.Id, new(), manager.Id, null)).Success);
+        Assert.False((await service.CreateAssignmentAsync(new() { UserId = staff.Id, LotId = lot.Id, FloorId = lot.Id, ZoneId = lot.Id }, manager.Id, null)).Success);
+        Assert.Empty((await service.GetAssignmentsAsync(new(), manager.Id, Roles.Manager)).Items);
+        Assert.Null(await service.GetAssignmentByIdAsync(created.Data.Id, manager.Id, Roles.Manager));
+        manager.IsActive = false; await context.SaveChangesAsync();
+        Assert.Empty((await service.GetCandidatesAsync(new(), manager.Id)).Items);
+    }
+
+    [Fact]
+    public async Task CandidatesContainOnlyApprovedActiveStaffAndSupportSearch()
+    {
+        var (service, context, admin, manager, staff, _, _, _) = await SetupContextAsync();
+        context.Users.AddRange(new User { Id = 5, Username = "disabled", FullName = "Disabled Staff", Email = "disabled@test.com", PasswordHash = "hash", RoleId = 3, IsActive = false, ApprovalStatus = "APPROVED" },
+            new User { Id = 6, Username = "pending", FullName = "Pending Staff", Email = "pending@test.com", PasswordHash = "hash", RoleId = 3, IsActive = true, ApprovalStatus = "PENDING" });
+        await context.SaveChangesAsync();
+        foreach (var actor in new[] { admin.Id, manager.Id })
+        {
+            var result = await service.GetCandidatesAsync(new() { Search = " STAFF@SMARTPARKING.TEST " }, actor);
+            Assert.Equal(staff.Id, Assert.Single(result.Items).Id);
+            Assert.Equal(Roles.Staff, result.Items[0].Role);
+            Assert.Equal(1, result.TotalCount);
+        }
+        Assert.Empty((await service.GetCandidatesAsync(new() { Search = "manager" }, admin.Id)).Items);
+    }
     private async Task<(StaffLotAssignmentService Service, TestSmartParkingDbContext Context, User Admin, User Manager, User Staff, User RegularUser, ParkingLot Lot1, ParkingLot Lot2)> SetupContextAsync()
     {
         var context = await TestDbHelper.CreateInMemoryDbContextAsync();
@@ -82,36 +214,35 @@ public class StaffLotAssignmentTests
 
         context.Users.AddRange(admin, manager, staff, user);
         context.ParkingLots.AddRange(lot1, lot2);
+        context.ParkingZones.AddRange(new ParkingZone { Id = 1, LotId = 1, Code = "Z1", Name = "Khu 1" }, new ParkingZone { Id = 2, LotId = 2, Code = "Z2", Name = "Khu 2" });
+        context.ParkingFloors.AddRange(new ParkingFloor { Id = 1, LotId = 1, ZoneId = 1, Name = "Tầng 1" }, new ParkingFloor { Id = 2, LotId = 2, ZoneId = 2, Name = "Tầng 2" });
         await context.SaveChangesAsync();
 
         return (service, context, admin, manager, staff, user, lot1, lot2);
     }
 
     [Fact]
-    public async Task CreateAssignment_ValidManagerOrStaff_Succeeds()
+    public async Task CreateAssignment_RejectsManagerAndAllowsStaff()
     {
         var (service, context, admin, manager, staff, _, lot1, _) = await SetupContextAsync();
 
         var req1 = new CreateStaffAssignmentRequestDto
         {
             UserId = manager.Id,
-            LotId = lot1.Id,
-            Notes = "Phân công quản lý bãi 1"
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id,
+            Notes = "Phân công quản lý bãi 1", Duty = StaffDuties.SlotVerifier
         };
         var (s1, msg1, d1) = await service.CreateAssignmentAsync(req1, admin.Id, "127.0.0.1");
 
-        Assert.True(s1);
-        Assert.NotNull(d1);
-        Assert.Equal(manager.Id, d1.UserId);
-        Assert.Equal(lot1.Id, d1.LotId);
-        Assert.True(d1.IsActive);
-        Assert.Equal(admin.Id, d1.AssignedBy);
+        Assert.False(s1);
+        Assert.Null(d1);
+        Assert.Contains("STAFF", msg1);
 
         var req2 = new CreateStaffAssignmentRequestDto
         {
             UserId = staff.Id,
-            LotId = lot1.Id,
-            Notes = "Phân công nhân viên vận hành bãi 1"
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id,
+            Notes = "Phân công nhân viên vận hành bãi 1", Duty = StaffDuties.SlotVerifier
         };
         var (s2, _, d2) = await service.CreateAssignmentAsync(req2, admin.Id, "127.0.0.1");
 
@@ -128,26 +259,26 @@ public class StaffLotAssignmentTests
         var req = new CreateStaffAssignmentRequestDto
         {
             UserId = regularUser.Id,
-            LotId = lot1.Id
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier
         };
         var (s, msg, d) = await service.CreateAssignmentAsync(req, admin.Id, "127.0.0.1");
 
         Assert.False(s);
         Assert.Null(d);
-        Assert.Contains("MANAGER hoặc STAFF", msg);
+        Assert.Contains("STAFF", msg);
     }
 
     [Fact]
     public async Task CreateAssignment_InactiveLot_Fails()
     {
-        var (service, context, admin, manager, _, _, lot1, _) = await SetupContextAsync();
+        var (service, context, admin, _, staff, _, lot1, _) = await SetupContextAsync();
         lot1.IsActive = false;
         await context.SaveChangesAsync();
 
         var req = new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id,
-            LotId = lot1.Id
+            UserId = staff.Id,
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier
         };
         var (s, msg, _) = await service.CreateAssignmentAsync(req, admin.Id, "127.0.0.1");
 
@@ -158,12 +289,12 @@ public class StaffLotAssignmentTests
     [Fact]
     public async Task CreateAssignment_DuplicateActiveAssignment_ReturnsConflict()
     {
-        var (service, _, admin, manager, _, _, lot1, _) = await SetupContextAsync();
+        var (service, _, admin, _, staff, _, lot1, _) = await SetupContextAsync();
 
         var req = new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id,
-            LotId = lot1.Id
+            UserId = staff.Id,
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier
         };
         var (s1, _, _) = await service.CreateAssignmentAsync(req, admin.Id, "127.0.0.1");
         Assert.True(s1);
@@ -177,12 +308,12 @@ public class StaffLotAssignmentTests
     [Fact]
     public async Task RevokeAssignment_SetsActiveFalse_AndAuditDetails()
     {
-        var (service, context, admin, manager, _, _, lot1, _) = await SetupContextAsync();
+        var (service, context, admin, _, staff, _, lot1, _) = await SetupContextAsync();
 
         var (s1, _, created) = await service.CreateAssignmentAsync(new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id,
-            LotId = lot1.Id
+            UserId = staff.Id,
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier
         }, admin.Id, "127.0.0.1");
         Assert.True(s1);
 
@@ -204,12 +335,12 @@ public class StaffLotAssignmentTests
     [Fact]
     public async Task RevokeAssignment_AlreadyRevoked_Fails()
     {
-        var (service, _, admin, manager, _, _, lot1, _) = await SetupContextAsync();
+        var (service, _, admin, _, staff, _, lot1, _) = await SetupContextAsync();
 
         var (s1, _, created) = await service.CreateAssignmentAsync(new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id,
-            LotId = lot1.Id
+            UserId = staff.Id,
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier
         }, admin.Id, "127.0.0.1");
         Assert.True(s1);
 
@@ -226,12 +357,12 @@ public class StaffLotAssignmentTests
     [Fact]
     public async Task Reassign_AfterRevocation_SucceedsWithoutConflict()
     {
-        var (service, _, admin, manager, _, _, lot1, _) = await SetupContextAsync();
+        var (service, _, admin, _, staff, _, lot1, _) = await SetupContextAsync();
 
         var req = new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id,
-            LotId = lot1.Id
+            UserId = staff.Id,
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier
         };
         var (s1, _, created) = await service.CreateAssignmentAsync(req, admin.Id, "127.0.0.1");
         Assert.True(s1);
@@ -250,45 +381,45 @@ public class StaffLotAssignmentTests
     [Fact]
     public async Task GetMyAssignedLots_ReturnsOnlyActiveAssignmentsForUser()
     {
-        var (service, _, admin, manager, _, _, lot1, lot2) = await SetupContextAsync();
+        var (service, _, admin, _, staff, _, lot1, lot2) = await SetupContextAsync();
 
         // Gán Lot 1
         var (s1, _, a1) = await service.CreateAssignmentAsync(new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id,
-            LotId = lot1.Id
+            UserId = staff.Id,
+            LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = StaffDuties.SlotVerifier
         }, admin.Id, "127.0.0.1");
         Assert.True(s1);
 
         // Gán Lot 2 rồi thu hồi
         var (s2, _, a2) = await service.CreateAssignmentAsync(new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id,
-            LotId = lot2.Id
+            UserId = staff.Id,
+            LotId = lot2.Id, FloorId = lot2.Id, ZoneId = lot2.Id, Duty = StaffDuties.SlotVerifier
         }, admin.Id, "127.0.0.1");
         Assert.True(s2);
 
         await service.RevokeAssignmentAsync(a2!.Id, new RevokeStaffAssignmentRequestDto { Reason = "Hết hạn" }, admin.Id, "127.0.0.1");
 
         // Tra cứu my-lots
-        var myLots = await service.GetMyAssignedLotsAsync(manager.Id);
+        var myLots = await service.GetMyAssignedLotsAsync(staff.Id);
         Assert.Single(myLots);
         Assert.Equal(lot1.Id, myLots[0].LotId);
         Assert.Equal(lot1.Name, myLots[0].LotName);
     }
 
     [Fact]
-    public async Task GetMyAssignedLots_KeepsClosedLotVisibleForManagerToReopen()
+    public async Task GetMyAssignedLots_KeepsClosedLotVisibleForAssignedStaff()
     {
-        var (service, context, admin, manager, _, _, lot1, _) = await SetupContextAsync();
+        var (service, context, admin, _, staff, _, lot1, _) = await SetupContextAsync();
         var (success, _, _) = await service.CreateAssignmentAsync(new CreateStaffAssignmentRequestDto
         {
-            UserId = manager.Id, LotId = lot1.Id, Duty = "BOTH"
+            UserId = staff.Id, LotId = lot1.Id, FloorId = lot1.Id, ZoneId = lot1.Id, Duty = "SLOT_VERIFIER"
         }, admin.Id, "127.0.0.1");
         Assert.True(success);
         lot1.IsActive = false;
         await context.SaveChangesAsync();
-        var lots = await service.GetMyAssignedLotsAsync(manager.Id);
+        var lots = await service.GetMyAssignedLotsAsync(staff.Id);
         var closed = Assert.Single(lots);
         Assert.Equal(lot1.Id, closed.LotId);
         Assert.False(closed.IsActive);

@@ -6,8 +6,8 @@ using Microsoft.Extensions.Configuration;
 using SmartParking.Application.Common.Exceptions;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.DTOs.StaffAssignments;
-using SmartParking.Infrastructure.Data;
-using SmartParking.Infrastructure.Entities;
+using SmartParking.Persistence.Data;
+using SmartParking.Persistence.Entities;
 
 namespace SmartParking.Infrastructure.Services;
 
@@ -65,6 +65,7 @@ public sealed class StaffDetectionService : IStaffDetectionService
         var record = new AiRecognitionRecord
         {
             StaffUserId = staffUserId,
+            ContentSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)),
             PlateNumber = recognized ? data!.PlateNumber : null,
             RawPlateNumber = recognized ? data!.RawPlateNumber : null,
             FailureReason = recognized ? null : result.Message,
@@ -154,9 +155,4 @@ public sealed class StaffDetectionService : IStaffDetectionService
         string PlateNumber, string RawPlateNumber, double Confidence, bool IsLegit,
         double? VehicleConfidence, IReadOnlyList<int>? VehicleBbox,
         IReadOnlyList<int>? PlateBbox, double InferenceTimeMs);
-}
-
-public sealed class AiServiceException(HttpStatusCode statusCode, string message) : Exception(message)
-{
-    public HttpStatusCode StatusCode { get; } = statusCode;
 }

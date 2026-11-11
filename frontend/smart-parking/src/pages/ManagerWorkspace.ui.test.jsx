@@ -178,13 +178,13 @@ it("scopes sessions to the selected lot and resets details when switching lots",
 });
 it("uses active navigation for query tabs and exposes only Manager links", () => {
   render(
-    <MemoryRouter initialEntries={["/manager?view=slots"]}>
+    <MemoryRouter initialEntries={["/parking"]}>
       <Header />
     </MemoryRouter>,
   );
   expect(
     screen
-      .getByRole("link", { name: "Ô đỗ / bảo trì" })
+      .getByRole("link", { name: "Quản lý ô đỗ" })
       .getAttribute("aria-current"),
   ).toBe("page");
   expect(screen.queryByRole("link", { name: "Tài khoản" })).toBeNull();

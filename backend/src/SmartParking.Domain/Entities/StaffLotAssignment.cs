@@ -10,6 +10,10 @@ public class StaffLotAssignment
 
     public int LotId { get; set; }
     public ParkingLot Lot { get; set; } = null!;
+    public int? FloorId { get; set; }
+    public ParkingFloor? Floor { get; set; }
+    public int? ZoneId { get; set; }
+    public ParkingZone? Zone { get; set; }
 
     public long AssignedBy { get; set; }
     public User AssignedByUser { get; set; } = null!;

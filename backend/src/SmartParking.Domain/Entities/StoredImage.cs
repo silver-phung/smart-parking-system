@@ -7,6 +7,7 @@ public class StoredImage
     public User User { get; set; } = null!;
     public string PublicId { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
+    public string? ContentSha256 { get; set; }
     public string Format { get; set; } = string.Empty;
     public long Bytes { get; set; }
     public int Width { get; set; }

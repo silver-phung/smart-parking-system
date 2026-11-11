@@ -583,7 +583,7 @@ public class BookingAndCapacityTests
     public async Task ConcurrentBooking_LastAvailableCapacity_OnlyOneSucceeds()
     {
         var dbName = Guid.NewGuid().ToString();
-        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<SmartParking.Infrastructure.Data.SmartParkingDbContext>()
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<SmartParking.Persistence.Data.SmartParkingDbContext>()
             .UseInMemoryDatabase(databaseName: dbName)
             .Options;
 
@@ -1378,7 +1378,7 @@ public class BookingAndCapacityTests
         lot4.IsActive = true;
         await context.SaveChangesAsync();
 
-        var calc = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot4.Id, lot4);
+        var calc = await ParkingLotCapacityHelper.CalculateAsync(context, lot4.Id, lot4);
         Assert.Equal(0, calc.TotalCapacity);
         Assert.Equal(0, calc.AvailableCapacity);
         Assert.Equal(100000, calc.ConfiguredCapacity);

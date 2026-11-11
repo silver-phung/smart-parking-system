@@ -48,6 +48,9 @@ public class ParkingDispatchService : IParkingDispatchService
             return (false, $"Không tìm thấy phiên gửi xe với ID: {request.SessionId}.", null);
         }
 
+        if (session.EntryEventId.HasValue)
+            return (false, "Lượt có vé phải dùng API operations để xác minh xe tại ô.", null);
+
         if (session.Status != SessionStatuses.Active)
         {
             return (false, $"Chỉ có thể tạo lệnh điều phối cho phiên gửi xe đang hoạt động (ACTIVE). Trạng thái hiện tại: {session.Status}.", null);

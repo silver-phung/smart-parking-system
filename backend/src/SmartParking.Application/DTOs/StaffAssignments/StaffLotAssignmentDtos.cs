@@ -14,6 +14,10 @@ public class StaffLotAssignmentDto
 
     public int LotId { get; set; }
     public string LotName { get; set; } = null!;
+    public int? FloorId { get; set; }
+    public string? FloorName { get; set; }
+    public int? ZoneId { get; set; }
+    public string? ZoneName { get; set; }
 
     public long AssignedBy { get; set; }
     public string AssignedByUsername { get; set; } = null!;
@@ -32,7 +36,7 @@ public class StaffLotAssignmentDto
     public DateTime UpdatedAt { get; set; }
 }
 
-public class CreateStaffAssignmentRequestDto
+public class CreateStaffAssignmentRequestDto : IValidatableObject
 {
     [Required(ErrorMessage = "Mã người dùng (userId) là bắt buộc.")]
     [Range(1, long.MaxValue, ErrorMessage = "Mã người dùng không hợp lệ.")]
@@ -43,11 +47,25 @@ public class CreateStaffAssignmentRequestDto
     public int LotId { get; set; }
 
     /// <summary>
-    /// Nhiệm vụ phân công: Bắt buộc chọn GATE, SLOT_VERIFIER hoặc BOTH (không cấp mặc định).
+    /// Mỗi phân công chỉ có một nhiệm vụ.
     /// </summary>
-    [Required(ErrorMessage = "Nhiệm vụ trực ca (Duty) là bắt buộc. Phải chọn GATE, SLOT_VERIFIER hoặc BOTH.")]
-    [RegularExpression("^(GATE|SLOT_VERIFIER|BOTH)$", ErrorMessage = "Nhiệm vụ trực ca phải là GATE, SLOT_VERIFIER hoặc BOTH.")]
+    [Required(ErrorMessage = "Chọn loại phân công.")]
+    [RegularExpression("^(GATE_IN|GATE_OUT|SLOT_VERIFIER)$", ErrorMessage = "Chọn trực cổng vào, trực cổng ra hoặc quản lý khu vực.")]
     public string Duty { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Chọn tầng được phân công.")]
+    [Range(1, int.MaxValue)]
+    public int? FloorId { get; set; }
+    [Range(1, int.MaxValue)]
+    public int? ZoneId { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Duty == StaffDuties.SlotVerifier && ZoneId is not > 0)
+            yield return new ValidationResult("Chọn khu vực được phân công.", [nameof(ZoneId)]);
+        if (Duty is StaffDuties.GateIn or StaffDuties.GateOut && ZoneId.HasValue)
+            yield return new ValidationResult("Phân công trực cổng chỉ chọn tầng, không chọn khu vực.", [nameof(ZoneId)]);
+    }
 
     [MaxLength(500, ErrorMessage = "Ghi chú không được vượt quá 500 ký tự.")]
     public string? Notes { get; set; }
@@ -80,3 +98,26 @@ public class AssignedLotSummaryDto
     public bool IsActive { get; set; }
     public DateTime AssignedAt { get; set; }
 }
+
+public class StaffCandidateFilterDto
+{
+    [MaxLength(255)]
+    public string? Search { get; set; }
+    [Range(1, int.MaxValue)]
+    public int Page { get; set; } = 1;
+    [Range(1, 100)]
+    public int PageSize { get; set; } = 20;
+}
+
+public class StaffCandidateDto
+{
+    public long Id { get; set; }
+    public string Username { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Role => Roles.Staff;
+}
+
+public record AssignmentZoneDto(int Id, string Name, string Code);
+public record AssignmentFloorDto(int Id, string Name, IReadOnlyList<AssignmentZoneDto> Zones);
+public record AssignmentLocationsDto(IReadOnlyList<AssignmentFloorDto> Floors);

@@ -6,6 +6,7 @@ namespace SmartParking.Application.DTOs.Bookings;
 public class BookingDto
 {
     public long Id { get; set; }
+    public long? PolicyId { get; set; }
     public int LotId { get; set; }
     public string LotName { get; set; } = null!;
     public string? LotAddress { get; set; }
@@ -70,6 +71,9 @@ public class BookingFilterDto
 
 public class LotCapacityDto
 {
+    public long? PolicyId { get; set; }
+    public int? NearFullThreshold { get; set; }
+    public bool? IsNearFull { get; set; }
     public int LotId { get; set; }
     public string LotName { get; set; } = null!;
     public string? LotAddress { get; set; }

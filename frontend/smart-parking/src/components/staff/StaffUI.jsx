@@ -4,6 +4,23 @@ import { staffError } from "../../services/staffApi.js";
 
 export function StaffIcon({ name, size = 20 }) {
   const paths = {
+    floors: (
+      <>
+        <path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5" />
+      </>
+    ),
+    slots: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+        <path d="M9 3v18m6-18v18M3 12h18" />
+      </>
+    ),
+    tickets: (
+      <>
+        <path d="M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4V5Z" />
+        <path d="M15 5v2m0 4v2m0 4v2" />
+      </>
+    ),
     entry: (
       <>
         <path d="M3 12h13m-5-5 5 5-5 5" />

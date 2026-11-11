@@ -98,14 +98,17 @@ public class StaffAssignmentsController : ControllerBase
         {
             return BadRequest(new { message = exception.Message });
         }
+        catch (AiServiceException exception)
+        {
+            return StatusCode((int)exception.StatusCode, new { message = exception.Message });
+        }
     }
 
     /// <summary>
-    /// Phân công nhân sự (MANAGER hoặc STAFF) vào làm việc tại một bãi đỗ xe cụ thể.
-    /// Chỉ dành riêng cho ADMIN.
+    /// Admin phân công Staff tại mọi bãi; Manager chỉ phân công Staff tại bãi mình quản lý.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(typeof(StaffLotAssignmentDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -130,6 +133,7 @@ public class StaffAssignmentsController : ControllerBase
         var (success, message, assignment) = await _assignmentService.CreateAssignmentAsync(request, actorId.Value, clientIp, ct);
         if (!success)
         {
+            if (message.StartsWith("Bạn không có quyền")) return StatusCode(StatusCodes.Status403Forbidden, new { message });
             if (message.Contains("Không tìm thấy"))
             {
                 return NotFound(new { message });
@@ -150,10 +154,10 @@ public class StaffAssignmentsController : ControllerBase
 
     /// <summary>
     /// Tra cứu danh sách phân công nhân sự bãi đỗ xe theo bộ lọc phân trang.
-    /// Chỉ dành riêng cho ADMIN.
+    /// Admin xem toàn bộ; Manager chỉ xem bãi mình quản lý.
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(typeof(PagedResult<StaffLotAssignmentDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -173,6 +177,25 @@ public class StaffAssignmentsController : ControllerBase
             message = "Lấy danh sách phân công nhân sự thành công.",
             data = result
         });
+    }
+
+    [HttpGet("candidates")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<IActionResult> GetCandidates([FromQuery] StaffCandidateFilterDto filter, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue) return Unauthorized(new { message = "Không xác định được danh tính người dùng." });
+        return Ok(new { data = await _assignmentService.GetCandidatesAsync(filter, actorId.Value, ct) });
+    }
+
+    [HttpGet("locations/{lotId:int}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<IActionResult> GetLocations(int lotId, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue) return Unauthorized();
+        var locations = await _assignmentService.GetLocationsAsync(lotId, actorId.Value, ct);
+        return locations == null ? NotFound(new { message = "Bãi không hoạt động hoặc bạn không có quyền quản lý bãi này." }) : Ok(new { data = locations });
     }
 
     /// <summary>
@@ -201,10 +224,10 @@ public class StaffAssignmentsController : ControllerBase
 
     /// <summary>
     /// Xem chi tiết một bản ghi phân công theo ID.
-    /// Chỉ dành riêng cho ADMIN.
+    /// Admin hoặc Manager quản lý bãi tương ứng.
     /// </summary>
     [HttpGet("{id:long}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(typeof(StaffLotAssignmentDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -235,10 +258,10 @@ public class StaffAssignmentsController : ControllerBase
     /// <summary>
     /// Thu hồi quyền phân công nhân sự tại bãi xe (Soft-Revoke).
     /// Phân công sẽ bị vô hiệu hóa (is_active = false) và có hiệu lực ngay lập tức ở request tiếp theo.
-    /// Chỉ dành riêng cho ADMIN.
+    /// Admin hoặc Manager quản lý bãi tương ứng; chỉ thu hồi phân công Staff.
     /// </summary>
     [HttpPost("{id:long}/revoke")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -262,6 +285,7 @@ public class StaffAssignmentsController : ControllerBase
         var (success, message) = await _assignmentService.RevokeAssignmentAsync(id, request, actorId.Value, clientIp, ct);
         if (!success)
         {
+            if (message.StartsWith("Bạn không có quyền")) return StatusCode(StatusCodes.Status403Forbidden, new { message });
             if (message.Contains("Không tìm thấy"))
             {
                 return NotFound(new { message });

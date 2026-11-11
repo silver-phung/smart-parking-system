@@ -13,6 +13,20 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         _context = context;
     }
 
+    public async Task<bool> CanOperateAreaAsync(long userId, string userRole, int lotId, string duty, int? floorId, int? zoneId, CancellationToken ct = default)
+    {
+        var role = await ResolveEffectiveRoleAsync(userId, ct);
+        if (role == Roles.Admin) return true;
+        if (role == Roles.Manager) return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
+        if (role != Roles.Staff) return false;
+        return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
+            (a.Duty == duty || a.Duty == StaffDuties.Both ||
+                ((duty == StaffDuties.GateIn || duty == StaffDuties.GateOut) && a.Duty == StaffDuties.Gate)) &&
+            (a.FloorId == null || (floorId != null ? a.FloorId == floorId : zoneId == null ||
+                _context.ParkingFloors.Any(f => f.Id == a.FloorId && f.LotId == lotId && f.ZoneId == zoneId))) &&
+            (a.ZoneId == null || (zoneId != null && a.ZoneId == zoneId)), ct);
+    }
+
     private async Task<string?> ResolveEffectiveRoleAsync(long userId, CancellationToken ct)
     {
         var user = await _context.Users
@@ -126,7 +140,16 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         return false;
     }
 
-    public async Task<bool> CanOperateGateAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
+    public Task<bool> CanOperateGateAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
+        => CanOperateGateDutyAsync(userId, userRole, lotId, null, ct);
+
+    public Task<bool> CanOperateGateInAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
+        => CanOperateGateDutyAsync(userId, userRole, lotId, StaffDuties.GateIn, ct);
+
+    public Task<bool> CanOperateGateOutAsync(long userId, string userRole, int lotId, CancellationToken ct = default)
+        => CanOperateGateDutyAsync(userId, userRole, lotId, StaffDuties.GateOut, ct);
+
+    private async Task<bool> CanOperateGateDutyAsync(long userId, string userRole, int lotId, string? duty, CancellationToken ct)
     {
         var effectiveRole = await ResolveEffectiveRoleAsync(userId, ct);
         if (effectiveRole == null)
@@ -149,7 +172,8 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         {
             return await _context.StaffLotAssignments
                 .AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
-                               (a.Duty == StaffDuties.Gate || a.Duty == StaffDuties.Both), ct);
+                               (a.Duty == StaffDuties.Gate || a.Duty == StaffDuties.Both || a.Duty == duty ||
+                                   (duty == null && (a.Duty == StaffDuties.GateIn || a.Duty == StaffDuties.GateOut))), ct);
         }
 
         return false;
