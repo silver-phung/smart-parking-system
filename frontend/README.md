@@ -25,12 +25,12 @@ Mở dự án sẽ vào trang đăng nhập. Nhập tài khoản đã có để 
 Nên chạy bằng máy chủ tĩnh (để hai trang dùng chung dữ liệu và bản đồ tải ổn định):
 
 ```bash
-cd smart-parking
+cd frontend
 python3 -m http.server 8080
 # hoặc: npx serve
 ```
 
-Mở `http://localhost:8080` (trang đăng nhập). Phiên đăng nhập lưu theo từng tab, nên bạn đăng nhập tài khoản Khách ở một tab và tài khoản Ban quản lý ở tab khác để xem đồng bộ. Đóng tab là phải đăng nhập lại.
+Mở `http://localhost:8080` (trang đăng nhập) hoặc `http://localhost:8080/3d-parking-render.html` (trang Render 3D Hầm & Bãi đỗ xe cao tầng). Phiên đăng nhập lưu theo từng tab, nên bạn đăng nhập tài khoản Khách ở một tab và tài khoản Ban quản lý ở tab khác để xem đồng bộ. Đóng tab là phải đăng nhập lại.
 Cần có mạng để tải bản đồ (Leaflet + OpenStreetMap), thư viện tạo QR và phông chữ.
 
 ## Cấu trúc thư mục
