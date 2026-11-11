@@ -73,7 +73,7 @@ export default function ParkingSlotManagement({ role }) {
   return <section className="workspace container"><header className="workspace-heading"><div><span className="tag">{role === "ADMIN" ? "Quản trị bãi" : "Quản lý bãi"}</span><h1>Quản lý ô đỗ</h1><p>Thêm, sửa, xóa và cập nhật trạng thái ô tại bãi được phép quản lý.</p></div></header>
     <Feedback loading={lots.loading || floors.loading} error={lots.error || floors.error || action.error} message={action.message} />
     {!lots.loading && !lots.error && !availableLots.length && <section className="workspace-panel">Chưa có bãi được phép quản lý.</section>}
-    {lot && <section className="workspace-panel"><h2>Chọn bãi và tầng</h2><div className="workspace-filters">
+    {lot && <section className="workspace-panel"><h2>Chọn bãi và tầng</h2>{floor && <a className="btn btn--outline" href={`/3d-viewer.html?lotId=${lot.id}&floorId=${floor.id}`}>Xem tầng này bằng 3D</a>}<div className="workspace-filters">
       <label>Bãi đỗ<select disabled={action.busy} value={lot.id} onChange={e => { setLotId(e.target.value); setFloorId(""); }} >{availableLots.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
       <label>Tầng<select value={floor?.id || ""} disabled={action.busy || floors.loading || !floor} onChange={e => setFloorId(e.target.value)}>{!floor && <option value="">Chưa có tầng</option>}{itemsOf(floors.data).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
     </div></section>}

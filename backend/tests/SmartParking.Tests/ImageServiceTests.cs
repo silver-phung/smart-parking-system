@@ -11,6 +11,21 @@ namespace SmartParking.Tests;
 public class ImageServiceTests
 {
     [Fact]
+    public async Task TicketEvidenceImageIsReadableByAssignedStaffAndCannotBeDeleted()
+    {
+        await using var db = await TestDbHelper.CreateInMemoryDbContextAsync();
+        db.Users.Add(new User { Id = 8, RoleId = 3, Username = "staff_evidence", Email = "staff_evidence@test", FullName = "Staff", PasswordHash = "x" });
+        db.StaffLotAssignments.Add(new StaffLotAssignment { UserId = 8, LotId = 1, IsActive = true });
+        var service = CreateService(db, 16);
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        var image = await service.UploadAsync(new MemoryStream(png), "image/png", png.Length, 7, CancellationToken.None);
+        db.ParkingSessions.Add(new ParkingSession { LotId = 1, EntryImageId = image.Id });
+        await db.SaveChangesAsync();
+        Assert.NotNull(await service.GetContentAsync(image.Url.Split('/').Last(), 8, Roles.Staff, CancellationToken.None));
+        Assert.Equal(SmartParking.Application.Common.Interfaces.ImageDeleteResult.Forbidden,
+            await service.DeleteAsync(image.Id, 7, true, CancellationToken.None));
+    }
+    [Fact]
     public async Task UploadAsync_RejectsUnsupportedContentType()
     {
         await using var db = await TestDbHelper.CreateInMemoryDbContextAsync();

@@ -236,8 +236,7 @@ public class ParkingSessionService : IParkingSessionService
                 {
                     LotId = lot.Id,
                     VehicleId = vehicle.Id,
-                    BookingId = booking?.Id,
-                    PolicyId = booking?.PolicyId ?? (await ParkingPolicyResolver.ResolveAsync(_context, lot.Id, null, DateTime.UtcNow, ct))?.Id,
+                    PolicyId = (await ParkingPolicyResolver.ResolveAsync(_context, lot.Id, null, DateTime.UtcNow, ct))?.Id,
                     PlateNumber = normalizedPlate,
                     CheckInTime = DateTime.UtcNow,
                     CurrentSlotId = slot?.Id,
@@ -880,6 +879,7 @@ public class ParkingSessionService : IParkingSessionService
 
                 var booking = await _context.Bookings
                     .Include(b => b.Lot)
+                    .Include(b => b.Policy)
                     .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
                 if (booking == null)
                 {
@@ -904,7 +904,8 @@ public class ParkingSessionService : IParkingSessionService
                 }
 
                 var now = DateTime.UtcNow;
-                if (booking.StartTime <= now.AddMinutes(-BookingStatuses.NoShowGracePeriodMinutes))
+                var graceMinutes = booking.Policy?.LateArrivalMinutes ?? BookingStatuses.NoShowGracePeriodMinutes;
+                if (booking.StartTime <= now.AddMinutes(-graceMinutes))
                 {
                     booking.Status = BookingStatuses.Expired;
                     booking.UpdatedAt = now;
@@ -917,14 +918,14 @@ public class ParkingSessionService : IParkingSessionService
                         NewValues = JsonSerializer.Serialize(new
                         {
                             Status = BookingStatuses.Expired,
-                            Reason = $"Không xác nhận xe trong vòng {BookingStatuses.NoShowGracePeriodMinutes} phút kể từ giờ bắt đầu.",
+                            Reason = $"Không xác nhận xe trong vòng {graceMinutes} phút kể từ giờ bắt đầu.",
                             ExpiredAt = now
                         }, JsonOptions),
                         CreatedAt = now
                     });
                     await _context.SaveChangesAsync(ct);
                     await transaction.CommitAsync(ct);
-                    return (false, $"Booking đã hết hạn vì quá {BookingStatuses.NoShowGracePeriodMinutes} phút kể từ giờ bắt đầu.", null);
+                    return (false, $"Booking đã hết hạn vì quá {graceMinutes} phút kể từ giờ bắt đầu.", null);
                 }
 
                 var activePlateSession = await _context.ParkingSessions
@@ -949,10 +950,17 @@ public class ParkingSessionService : IParkingSessionService
                     await transaction.RollbackAsync(ct);
                     return (false, "Ô đỗ không hoạt động hoặc không thuộc bãi của booking.", null);
                 }
-                if (slot.PhysicalStatus is SlotPhysicalStatuses.Maintenance or SlotPhysicalStatuses.Unavailable)
+                if (slot.PhysicalStatus is SlotPhysicalStatuses.Maintenance or SlotPhysicalStatuses.Unavailable or SlotPhysicalStatuses.Reserved)
                 {
                     await transaction.RollbackAsync(ct);
                     return (false, $"Ô đỗ '{slot.SlotCode}' đang bảo trì hoặc không khả dụng.", null);
+                }
+
+                if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, booking.LotId,
+                    StaffDuties.SlotVerifier, slot.FloorId, slot.Floor.ZoneId, ct))
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, "Ô nằm ngoài tầng hoặc khu vực được phân công.", null);
                 }
 
                 var slotSession = await _context.ParkingSessions
@@ -987,6 +995,11 @@ public class ParkingSessionService : IParkingSessionService
                     LotId = booking.LotId,
                     VehicleId = vehicle.Id,
                     BookingId = booking.Id,
+                    PolicyId = booking.PolicyId,
+                    ZoneId = slot.Floor.ZoneId,
+                    VerificationStatus = "VERIFIED",
+                    VerifiedBy = actorId,
+                    VerifiedAt = now,
                     PlateNumber = normalizedPlate,
                     CheckInTime = now,
                     CurrentSlotId = slot.Id,

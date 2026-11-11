@@ -140,6 +140,24 @@ public class BookingAndCapacityTests
     #region Phase 3 & 4: Booking Creation & Capacity Validation
 
     [Fact]
+    public async Task ExpirationUsesTheBookedPolicyVersionInsteadOfTheCurrentPolicy()
+    {
+        var (service, _, _, context) = await CreateServicesAsync();
+        SeedLotWithSlots(context, 1, "Policy test", 2, 2);
+        context.Vehicles.Add(new Vehicle { Id = 101, UserId = 10, PlateNumber = "51A10101" });
+        context.ParkingPolicies.AddRange(
+            new ParkingPolicy { Id = 101, LotId = 1, CreatedBy = 1, ApprovedBy = 1, ApprovedAt = DateTime.UtcNow, LateArrivalMinutes = 60 },
+            new ParkingPolicy { Id = 102, LotId = 1, CreatedBy = 1, ApprovedBy = 1, ApprovedAt = DateTime.UtcNow, LateArrivalMinutes = 1 });
+        var booking = new Booking { Id = 201, LotId = 1, UserId = 10, VehicleId = 101, PlateNumber = "51A10101", PolicyId = 101, StartTime = DateTime.UtcNow.AddMinutes(-40) };
+        context.Bookings.Add(booking); await context.SaveChangesAsync();
+        Assert.Equal(0, await service.ExpireNoShowBookingsAsync());
+        Assert.Equal(BookingStatuses.Pending, booking.Status);
+        booking.StartTime = DateTime.UtcNow.AddMinutes(-61); await context.SaveChangesAsync();
+        Assert.Equal(1, await service.ExpireNoShowBookingsAsync());
+        Assert.Equal(BookingStatuses.Expired, booking.Status);
+    }
+
+    [Fact]
     public async Task ExpireNoShowBookings_ExpiresPendingBookingsAfterThirtyMinutesOnly()
     {
         var (bookingService, _, _, context) = await CreateServicesAsync();

@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Domain.Constants;
-using SmartParking.Infrastructure.Data;
+using SmartParking.Persistence.Data;
 
 namespace SmartParking.Tests;
 

@@ -267,7 +267,7 @@ describe("Staff workspace", () => {
   it("notifies other pages of new bookings and opens the booking page", async () => {
     const user = userEvent.setup();
     mount();
-    await screen.findByRole("form", { name: "Nhận xe vào bãi" });
+    await screen.findByRole("heading", { name: "Cấp vé và tiếp nhận xe" });
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.includes("/v1/bookings?"))).toBe(true));
     model.bookings.push({
       id: 504, lotId: 1, username: "customer", plateNumber: "51A-50404",
@@ -593,7 +593,7 @@ describe("Staff workspace", () => {
       slotId: 101,
       notes: "",
     });
-    await user.click(screen.getByRole("button", { name: "Theo dõi điều phối" }));
+    await user.click(screen.getByRole("tab", { name: "Điều phối" }));
     await screen.findByText("Đã xác minh", { selector: ".staff-badge" });
     expect(screen.getByText("Đã lưu kết quả")).toBeTruthy();
   });

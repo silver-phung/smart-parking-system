@@ -14,6 +14,13 @@ namespace SmartParking.Tests;
 public class DependencyInjectionTests
 {
     [Fact]
+    public void MergedPersistenceModelMatchesMigrationSnapshot()
+    {
+        using var db = new SmartParkingDbContext(new DbContextOptionsBuilder<SmartParkingDbContext>()
+            .UseNpgsql("Host=127.0.0.1;Database=model_check;Username=model_check;Password=unused").Options);
+        Assert.False(db.Database.HasPendingModelChanges());
+    }
+    [Fact]
     public void AddApplicationServices_ShouldRegisterServicesWithoutExceptions()
     {
         // Arrange

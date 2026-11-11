@@ -435,6 +435,7 @@ function DashboardContent({ publicView = false }) {
             {publicView ? "Bãi đỗ công khai" : "Khu vực khách hàng"}
           </span>
           <h1>Bãi đỗ xe</h1>
+          {selectedLotId && selectedFloorId && <a className="btn btn--outline" href={`/3d-viewer.html?lotId=${encodeURIComponent(selectedLotId)}&floorId=${encodeURIComponent(selectedFloorId)}`}>Xem tầng này bằng 3D</a>}
           <p className="muted">
             Xem sức chứa và trạng thái từng vị trí từ dữ liệu hệ thống.
           </p>

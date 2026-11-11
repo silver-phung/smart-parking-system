@@ -71,6 +71,8 @@ public class BookingService : IBookingService
             return (false, 400, "Thời gian kết thúc đặt chỗ phải sau thời gian bắt đầu.", null);
         }
 
+        await ExpireNoShowBookingsAsync(request.LotId, ct);
+
         // 1. Resolve vehicle and validate ownership
         Vehicle? vehicle = null;
         string normalizedPlate = string.Empty;
@@ -248,6 +250,44 @@ public class BookingService : IBookingService
         {
             lotLock.Release();
         }
+    }
+
+    public async Task<int> ExpireNoShowBookingsAsync(int? lotId = null, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var lots = await _context.Bookings.AsNoTracking()
+            .Where(b => b.Status == BookingStatuses.Pending && b.StartTime <= now && (!lotId.HasValue || b.LotId == lotId))
+            .Select(b => b.LotId).Distinct().OrderBy(id => id).ToListAsync(ct);
+        var expired = 0;
+        foreach (var id in lots)
+        {
+            var gate = ParkingLotLockHelper.GetSemaphore(id);
+            await gate.WaitAsync(ct);
+            try
+            {
+                await using var transaction = await _context.BeginTransactionAsync(ct);
+                if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { ParkingLotLockHelper.LotLockBase + id }, ct);
+                var pending = await _context.Bookings.Include(b => b.Policy)
+                    .Where(b => b.LotId == id && b.Status == BookingStatuses.Pending && b.StartTime <= now).ToListAsync(ct);
+                foreach (var booking in pending)
+                {
+                    var grace = booking.Policy?.LateArrivalMinutes ?? BookingStatuses.NoShowGracePeriodMinutes;
+                    if (booking.StartTime.AddMinutes(grace) > now) continue;
+                    booking.Status = BookingStatuses.Expired;
+                    booking.UpdatedAt = now;
+                    _context.AuditLogs.Add(new AuditLog { Action = "EXPIRE_BOOKING_NO_SHOW", TargetEntity = "bookings",
+                        TargetId = booking.Id.ToString(), CreatedAt = now,
+                        OldValues = JsonSerializer.Serialize(new { Status = BookingStatuses.Pending }, JsonOptions),
+                        NewValues = JsonSerializer.Serialize(new { Status = BookingStatuses.Expired, GraceMinutes = grace, booking.PolicyId }, JsonOptions) });
+                    expired++;
+                }
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            finally { gate.Release(); }
+        }
+        return expired;
     }
 
     public async Task<PagedResult<BookingDto>> GetMyBookingsAsync(
@@ -552,6 +592,7 @@ public class BookingService : IBookingService
         string? currentUserRole = null,
         CancellationToken ct = default)
     {
+        await ExpireNoShowBookingsAsync(lotId, ct);
         var lot = await _context.ParkingLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct);
         if (lot == null)
         {
