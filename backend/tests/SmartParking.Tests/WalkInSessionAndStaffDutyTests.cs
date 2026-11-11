@@ -537,19 +537,19 @@ public class WalkInSessionAndStaffDutyTests
         (await context.ParkingFloors.FindAsync(2111))!.ZoneId = 211;
         await context.SaveChangesAsync();
 
-        // 1. Unspecified duty -> defaults to GATE (least privilege, NOT BOTH)
+        // 1. Unspecified duty -> defaults to GATE_IN (least privilege, NOT BOTH)
         var defaultDutyRes = await assignmentService.CreateAssignmentAsync(
             new SmartParking.Application.DTOs.StaffAssignments.CreateStaffAssignmentRequestDto
             {
                 UserId = 2111,
-                LotId = 211, FloorId = 2111, ZoneId = 211,
+                LotId = 211, FloorId = 2111, ZoneId = null,
                 Duty = ""
             },
             actorId: 1,
             ipAddress: "127.0.0.1");
 
         Assert.True(defaultDutyRes.Success);
-        Assert.Equal(StaffDuties.Gate, defaultDutyRes.Data!.Duty);
+        Assert.Equal(StaffDuties.GateIn, defaultDutyRes.Data!.Duty);
 
         // 2. Invalid duty -> rejected
         var invalidDutyRes = await assignmentService.CreateAssignmentAsync(

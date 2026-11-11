@@ -23,6 +23,7 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
         var permitted = duty switch {
             "ADMIN" => role == Roles.Admin && await db.Users.AnyAsync(u => u.Id == actor && u.IsActive && u.Role.Code == Roles.Admin, ct),
             "GATE" => await auth.CanOperateGateAsync(actor, role, lotId, ct),
+            "GATE_IN" => await auth.CanOperateGateInAsync(actor, role, lotId, ct),
             "VERIFY" => await auth.CanOperateSlotVerificationAsync(actor, role, lotId, ct),
             _ => await auth.HasLotAccessAsync(actor, role, lotId, ct)
         };
@@ -220,7 +221,7 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
 
     public async Task<OperationSessionDto> Enter(int lotId, EntryRequest r, long actor, string role, CancellationToken ct)
     {
-        await Access(lotId, actor, role, "GATE", ct);
+        await Access(lotId, actor, role, StaffDuties.GateIn, ct);
         Require(r.EventId != Guid.Empty && r.ZoneId > 0, "Thiếu EventId hoặc khu.", status: 400);
         var code = TicketCode(r.TicketCode);
         // Preserve the fingerprint of manual entries issued before the intake contract changed.
@@ -235,7 +236,7 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
             }
             Require(await db.ParkingLots.AnyAsync(l => l.Id == lotId && l.IsActive, ct), "Bãi đang đóng nhận xe.");
             var zone = await db.ParkingZones.FirstOrDefaultAsync(z => z.Id == r.ZoneId && z.LotId == lotId, ct);
-            Require(await auth.CanOperateAreaAsync(actor, role, lotId, "GATE", null, r.ZoneId, ct), "Bạn không có nhiệm vụ tại khu vực này.", "FORBIDDEN", 403);
+            Require(await auth.CanOperateAreaAsync(actor, role, lotId, StaffDuties.GateIn, null, r.ZoneId, ct), "Bạn không có nhiệm vụ tại tầng này.", "FORBIDDEN", 403);
             Require(zone is { IsActive: true, Type: "TRANSIENT" }, "Chỉ nhận vãng lai vào khu TRANSIENT đang hoạt động.");
             Require(!await db.ParkingTickets.AnyAsync(t => t.Code == code && t.Status == "ISSUED", ct), "Vé đang dùng cho lượt khác.", "TICKET_IN_USE");
             // Historical ticket codes are immutable; a replacement/new printed code is required.

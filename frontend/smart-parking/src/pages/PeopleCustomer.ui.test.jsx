@@ -254,12 +254,10 @@ it("creates an explicit SLOT_VERIFIER duty assignment", async () => {
   fireEvent.click(await screen.findByRole("button", { name: /Nhân viên Demo/ }));
   expect(screen.queryByRole("combobox", { name: "Nhân sự" })).toBeNull();
   fireEvent.change(screen.getByLabelText("Bãi đỗ"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Phân công", { exact: true }), { target: { value: "SLOT_VERIFIER" } });
   await screen.findByRole("option", { name: "Tầng 1A" });
   fireEvent.change(screen.getByLabelText("Tầng"), { target: { value: "10" } });
-  fireEvent.change(screen.getByLabelText("Khu vực"), { target: { value: "100" } });
-  fireEvent.change(screen.getByLabelText("Nhiệm vụ"), {
-    target: { value: "SLOT_VERIFIER" },
-  });
+  fireEvent.change(screen.getByLabelText("Khu vực (Zone)"), { target: { value: "100" } });
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Lưu phân công" }).disabled).toBe(
       false,
@@ -282,14 +280,14 @@ it("lets Manager assign only Staff at managed lots without calling account-manag
   expect(screen.queryByRole("button", { name: "Tài khoản", exact: true })).toBeNull();
   expect(screen.queryByRole("heading", { name: "Tạo tài khoản nội bộ" })).toBeNull();
   fireEvent.change(screen.getByLabelText("Bãi đỗ"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Phân công", { exact: true }), { target: { value: "GATE_IN" } });
   await screen.findByRole("option", { name: "Tầng 1A" });
   fireEvent.change(screen.getByLabelText("Tầng"), { target: { value: "10" } });
-  fireEvent.change(screen.getByLabelText("Khu vực"), { target: { value: "100" } });
-  fireEvent.change(screen.getByLabelText("Nhiệm vụ"), { target: { value: "GATE" } });
+  expect(screen.queryByLabelText("Khu vực (Zone)")).toBeNull();
   await waitFor(() => expect(screen.getByRole("button", { name: "Lưu phân công" }).disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: "Lưu phân công" }));
   await screen.findByText("Đã lưu thành công");
-  expect(JSON.parse(writes()[0][1].body)).toMatchObject({ userId: 7, lotId: 1, duty: "GATE" });
+  expect(JSON.parse(writes()[0][1].body)).toMatchObject({ userId: 7, lotId: 1, floorId: 10, zoneId: null, duty: "GATE_IN" });
   expect(fetcher.mock.calls.some(([url]) => url.includes("/admin/users"))).toBe(false);
 });
 it("requires confirmation for revoking an assignment", async () => {
@@ -307,24 +305,44 @@ it("requires confirmation for revoking an assignment", async () => {
   expect(writes()[0][0]).toBe("/api/v1/staff-assignments/3/revoke");
 });
 
+it.each(["GATE_IN", "GATE_OUT"])("clears a previous zone and submits %s with only a floor", async (duty) => {
+  auth("ADMIN"); mount(<AdminPeople />, "/admin/people?view=assignments");
+  fireEvent.change(screen.getByLabelText("Tìm Staff theo tên/email"), { target: { value: "staff" } });
+  fireEvent.click(await screen.findByRole("button", { name: /Nhân viên Demo/ }));
+  fireEvent.change(screen.getByLabelText("Bãi đỗ"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Phân công", { exact: true }), { target: { value: "SLOT_VERIFIER" } });
+  await screen.findByRole("option", { name: "Tầng 1A" });
+  fireEvent.change(screen.getByLabelText("Tầng"), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText("Khu vực (Zone)"), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText("Phân công", { exact: true }), { target: { value: duty } });
+  expect(screen.queryByLabelText("Khu vực (Zone)")).toBeNull();
+  expect(screen.getByLabelText("Tầng").value).toBe("");
+  expect(screen.getByRole("button", { name: "Lưu phân công" }).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Tầng"), { target: { value: "10" } });
+  fireEvent.click(screen.getByRole("button", { name: "Lưu phân công" }));
+  await screen.findByText("Đã lưu thành công");
+  expect(JSON.parse(writes()[0][1].body)).toMatchObject({ duty, floorId: 10, zoneId: null });
+});
+
 it("filters assignment areas by floor and resets descendants when lot or floor changes", async () => {
   auth("ADMIN"); mount(<AdminPeople />, "/admin/people?view=assignments");
-  expect(screen.getByLabelText("Tầng").disabled).toBe(true);
-  expect(screen.getByLabelText("Khu vực").disabled).toBe(true);
+  expect(screen.queryByLabelText("Tầng")).toBeNull();
+  expect(screen.queryByLabelText("Khu vực (Zone)")).toBeNull();
   expect(screen.queryByRole("option", { name: "Cổng và xác minh ô" })).toBeNull();
   await screen.findByRole("option", { name: "Bãi Trung Tâm" });
   fireEvent.change(screen.getByLabelText("Bãi đỗ"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Phân công", { exact: true }), { target: { value: "SLOT_VERIFIER" } });
   await screen.findByRole("option", { name: "Tầng 1A" });
   fireEvent.change(screen.getByLabelText("Tầng"), { target: { value: "10" } });
   expect(screen.getByRole("option", { name: "Khu 1A" })).toBeTruthy();
   expect(screen.queryByRole("option", { name: "Khu 1B" })).toBeNull();
-  fireEvent.change(screen.getByLabelText("Khu vực"), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText("Khu vực (Zone)"), { target: { value: "100" } });
   fireEvent.change(screen.getByLabelText("Tầng"), { target: { value: "11" } });
-  expect(screen.getByLabelText("Khu vực").value).toBe("");
+  expect(screen.getByLabelText("Khu vực (Zone)").value).toBe("");
   expect(screen.getByRole("option", { name: "Khu 1B" })).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Bãi đỗ"), { target: { value: "" } });
   expect(screen.getByLabelText("Tầng").value).toBe("");
-  expect(screen.getByLabelText("Khu vực").disabled).toBe(true);
+  expect(screen.queryByLabelText("Khu vực (Zone)")).toBeNull();
 });
 it("uses only my-sessions and displays the authorized session detail", async () => {
   auth("USER");

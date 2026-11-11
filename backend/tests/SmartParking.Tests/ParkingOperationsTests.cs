@@ -60,6 +60,30 @@ public class ParkingOperationsTests
         var ex = await Assert.ThrowsAsync<ParkingOperationException>(() => f.Enter("OTHER", eventId));
         Assert.Equal("EVENT_MISMATCH", ex.Code);
     }
+    [Theory]
+    [InlineData("GATE_IN", true, false)]
+    [InlineData("GATE_OUT", false, true)]
+    [InlineData("SLOT_VERIFIER", false, false)]
+    public async Task Gate_operations_enforce_entry_and_exit_assignments(string duty, bool entryAllowed, bool exitAllowed)
+    {
+        await using var f = await Create();
+        var assignment = await f.Db.StaffLotAssignments.SingleAsync();
+        assignment.Duty = duty; assignment.FloorId = 1; assignment.ZoneId = duty == "SLOT_VERIFIER" ? 1 : null;
+        await f.Db.SaveChangesAsync();
+        Task<OperationSessionDto> EnterAsStaff() => f.Service.Enter(1,
+            new(Guid.NewGuid(), 1, "STAFF-ENTRY", null, "Tiếp nhận theo vé"), 2, "STAFF", default);
+        if (entryAllowed) await EnterAsStaff();
+        else Assert.Equal(403, (await Assert.ThrowsAsync<ParkingOperationException>(EnterAsStaff)).Status);
+        var vehicle = await f.Verify(await f.Enter("EXIT-TICKET"));
+        var session = await f.Db.ParkingSessions.FindAsync(vehicle.Id);
+        session!.Status = "PAID"; session.PaidAt = DateTime.UtcNow;
+        await f.Db.SaveChangesAsync();
+        var service = new ParkingSessionService(f.Db, new ParkingAuthorizationService(f.Db), NullLogger<ParkingSessionService>.Instance);
+        var result = await service.CheckOutAsync(vehicle.Id, new CheckOutRequestDto {
+            TicketCode = "EXIT-TICKET", ConfirmedPlateNumber = vehicle.PlateNumber }, 2, "STAFF", null);
+        Assert.Equal(exitAllowed, result.Success);
+        Assert.Equal(exitAllowed ? "COMPLETED" : "PAID", (await f.Db.ParkingSessions.FindAsync(vehicle.Id))!.Status);
+    }
     [Fact]
     public async Task Separate_manual_entries_count_capacity_without_occupying_slots()
     {

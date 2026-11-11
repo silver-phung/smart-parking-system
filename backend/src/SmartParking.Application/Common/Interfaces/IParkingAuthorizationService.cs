@@ -14,6 +14,8 @@ public interface IParkingAuthorizationService
     Task<bool> CanOperateSessionOrDispatchAsync(long userId, string userRole, int lotId, CancellationToken ct = default);
 
     Task<bool> CanOperateGateAsync(long userId, string userRole, int lotId, CancellationToken ct = default);
+    Task<bool> CanOperateGateInAsync(long userId, string userRole, int lotId, CancellationToken ct = default);
+    Task<bool> CanOperateGateOutAsync(long userId, string userRole, int lotId, CancellationToken ct = default);
 
     Task<bool> CanOperateSlotVerificationAsync(long userId, string userRole, int lotId, CancellationToken ct = default);
 }

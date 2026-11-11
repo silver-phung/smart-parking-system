@@ -14,8 +14,9 @@ import {
 
 const roles = ["STAFF", "MANAGER"];
 const duties = {
-  GATE: "Trực cổng",
-  SLOT_VERIFIER: "Xác minh ô",
+  GATE_IN: "Trực cổng vào",
+  GATE_OUT: "Trực cổng ra",
+  SLOT_VERIFIER: "Quản lý khu vực",
 };
 const emptyUser = {
   username: "",
@@ -91,6 +92,7 @@ export function People({ assignmentsOnly = false }) {
   const floors = locations.data?.floors || [];
   const selectedFloor = floors.find(f => String(f.id) === assignment.floorId);
   const zones = selectedFloor?.zones || [];
+  const requiresZone = assignment.duty === "SLOT_VERIFIER";
   const eligible = itemsOf(candidates.data).filter((u) => u.role === "STAFF");
   const availableLots = assignmentsOnly
     ? itemsOf(lots.data).filter(l => l.isActive).map(l => ({ id: l.lotId, name: l.lotName }))
@@ -249,7 +251,7 @@ export function People({ assignmentsOnly = false }) {
         <section className="workspace-panel">
           <h2>Phân công mới</h2>
           <p className="workspace-note">
-            Chỉ phân công cho Staff. Chọn bãi và nhiệm vụ; để đổi nhiệm vụ, thu hồi phân công cũ rồi tạo lại.
+            Chọn Staff, bãi, loại phân công và tầng. Quản lý khu vực cần chọn thêm Zone. Để đổi phân công, thu hồi phân công cũ rồi tạo lại.
           </p>
           <div className="workspace-filters">
             <label>
@@ -290,7 +292,7 @@ export function People({ assignmentsOnly = false }) {
                     userId: Number(assignment.userId),
                     lotId: Number(assignment.lotId),
                     floorId: Number(assignment.floorId),
-                    zoneId: Number(assignment.zoneId),
+                    zoneId: requiresZone ? Number(assignment.zoneId) : null,
                     duty: assignment.duty,
                     notes: assignment.notes || null,
                   }),
@@ -320,22 +322,17 @@ export function People({ assignmentsOnly = false }) {
                   ))}
                 </select>
               </label>
-              <label>Tầng<select required value={assignment.floorId} disabled={!assignment.lotId || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, floorId: e.target.value, zoneId: "" })}>
-                <option value="">Chọn tầng</option>{floors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select></label>
-              <label>Khu vực<select required value={assignment.zoneId} disabled={!selectedFloor || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, zoneId: e.target.value })}>
-                <option value="">Chọn khu vực</option>{zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-              </select></label>
               <label>
-                Nhiệm vụ
+                Phân công
                 <select
                   required
+                  disabled={!assignment.lotId}
                   value={assignment.duty}
                   onChange={(e) =>
-                    setAssignment({ ...assignment, duty: e.target.value })
+                    setAssignment({ ...assignment, duty: e.target.value, floorId: "", zoneId: "" })
                   }
                 >
-                  <option value="">Chọn nhiệm vụ</option>
+                  <option value="">Chọn phân công</option>
                   {Object.entries(duties).map(([key, label]) => (
                     <option key={key} value={key}>
                       {label}
@@ -343,6 +340,12 @@ export function People({ assignmentsOnly = false }) {
                   ))}
                 </select>
               </label>
+              {assignment.duty && <label>Tầng<select required value={assignment.floorId} disabled={!assignment.lotId || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, floorId: e.target.value, zoneId: "" })}>
+                <option value="">Chọn tầng</option>{floors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select></label>}
+              {requiresZone && assignment.floorId && <label>Khu vực (Zone)<select required value={assignment.zoneId} disabled={!selectedFloor || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, zoneId: e.target.value })}>
+                <option value="">Chọn khu vực</option>{zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select></label>}
               <label>
                 Ghi chú
                 <textarea
@@ -359,7 +362,7 @@ export function People({ assignmentsOnly = false }) {
                   action.busy ||
                   !chosen ||
                   !assignment.lotId ||
-                  !selectedFloor || !zones.some(z => String(z.id) === assignment.zoneId) ||
+                  !selectedFloor || (requiresZone && !zones.some(z => String(z.id) === assignment.zoneId)) ||
                   !assignment.duty ||
                   Boolean(candidates.error || lots.error || locations.error) || locations.loading ||
                   !availableLots.some(l => String(l.id) === assignment.lotId) ||
@@ -499,7 +502,7 @@ export function People({ assignmentsOnly = false }) {
               <tr>
                 {(view === "users"
                   ? ["Tài khoản", "Vai trò", "Trạng thái", "Thao tác"]
-                  : ["Nhân sự", "Bãi / Nhiệm vụ", "Thời gian", "Thao tác"]
+                  : ["Nhân sự", "Bãi / Phân công", "Thời gian", "Thao tác"]
                 ).map((h) => (
                   <th key={h}>{h}</th>
                 ))}
@@ -568,8 +571,8 @@ export function People({ assignmentsOnly = false }) {
                       </td>
                       <td>
                         {row.lotName}
-                        <small>{row.floorName || "Chưa chọn tầng"} · {row.zoneName || "Chưa chọn khu vực"}</small>
-                        <small>{duties[row.duty] || "Cần chọn lại nhiệm vụ"}</small>
+                        <small>{row.floorName || "Chưa chọn tầng"}{row.zoneName ? ` · ${row.zoneName}` : ""}</small>
+                        <small>{duties[row.duty] || (row.duty === "GATE" ? "Trực cổng (phân công cũ)" : "Cần chọn lại phân công")}</small>
                       </td>
                       <td>
                         {dateLabel(row.assignedAt)}

@@ -101,12 +101,12 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
         }
 
         var duty = string.IsNullOrWhiteSpace(request.Duty)
-            ? StaffDuties.Gate
+            ? StaffDuties.GateIn
             : request.Duty.Trim().ToUpperInvariant();
 
         if (!StaffDuties.IsAssignable(duty))
         {
-            return (false, "Nhiệm vụ không hợp lệ. Mỗi Staff chỉ nhận GATE hoặc SLOT_VERIFIER.", null);
+            return (false, "Phân công không hợp lệ. Chọn trực cổng vào, trực cổng ra hoặc quản lý khu vực.", null);
         }
 
         var targetLot = await _context.ParkingLots
@@ -122,11 +122,16 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             return (false, $"Bãi đỗ xe '{targetLot.Name}' hiện đang tạm đóng hoặc ngừng hoạt động.", null);
         }
 
-        if (request.FloorId is not > 0 || request.ZoneId is not > 0)
-            return (false, "Chọn tầng và khu vực được phân công.", null);
+        if (request.FloorId is not > 0)
+            return (false, "Chọn tầng được phân công.", null);
         var floor = await _context.ParkingFloors.Include(f => f.Zone).FirstOrDefaultAsync(f => f.Id == request.FloorId && f.LotId == request.LotId, ct);
-        if (floor == null || !floor.IsActive || floor.ZoneId != request.ZoneId || floor.Zone is not { IsActive: true } || floor.Zone.LotId != request.LotId)
+        if (floor == null || !floor.IsActive)
+            return (false, "Tầng phải đang hoạt động và thuộc đúng bãi được phân công.", null);
+        var isArea = duty == StaffDuties.SlotVerifier;
+        if (isArea && (request.ZoneId is not > 0 || floor.ZoneId != request.ZoneId || floor.Zone is not { IsActive: true } || floor.Zone.LotId != request.LotId))
             return (false, "Tầng và khu vực phải đang hoạt động, thuộc đúng bãi và đúng quan hệ tầng–khu.", null);
+        if (!isArea && request.ZoneId.HasValue)
+            return (false, "Phân công trực cổng chỉ chọn tầng, không chọn khu vực.", null);
 
         var hasActiveAssignment = await _context.StaffLotAssignments
             .AnyAsync(a => a.UserId == targetUser.Id && a.LotId == targetLot.Id && a.IsActive, ct);
@@ -146,9 +151,9 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
                 UserId = targetUser.Id,
                 LotId = targetLot.Id,
                 FloorId = floor.Id,
-                ZoneId = floor.ZoneId,
+                ZoneId = isArea ? floor.ZoneId : null,
                 Floor = floor,
-                Zone = floor.Zone,
+                Zone = isArea ? floor.Zone : null,
                 Duty = duty,
                 AssignedBy = actorId,
                 AssignedAt = DateTime.UtcNow,

@@ -58,7 +58,7 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Bãi đỗ xe '{lot.Name}' hiện đang đóng hoặc tạm ngừng hoạt động.", null);
         }
 
-        if (!await _authService.CanOperateGateAsync(actorId ?? 0, actorRole, request.LotId, ct))
+        if (!await _authService.CanOperateGateInAsync(actorId ?? 0, actorRole, request.LotId, ct))
         {
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng (GATE) tại bãi đỗ xe này.", null);
         }
@@ -280,11 +280,11 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Phiên gửi xe này đã kết thúc trước đó với trạng thái: {session.Status}.", null);
         }
 
-        if (!await _authService.CanOperateGateAsync(actorId ?? 0, actorRole, session.LotId, ct))
+        if (!await _authService.CanOperateGateOutAsync(actorId ?? 0, actorRole, session.LotId, ct))
         {
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng ra (GATE) tại bãi đỗ xe này.", null);
         }
-        if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, session.LotId, StaffDuties.Gate,
+        if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, session.LotId, StaffDuties.GateOut,
             session.CurrentSlot?.FloorId, session.ZoneId ?? session.CurrentSlot?.Floor.ZoneId, ct))
             return (false, "Phiên xe nằm ngoài tầng hoặc khu vực được phân công.", null);
 

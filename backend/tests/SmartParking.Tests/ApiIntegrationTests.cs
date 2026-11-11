@@ -644,7 +644,7 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         await db.SaveChangesAsync();
         var rejectManager = await admin.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9002, lotId = lot.Id, duty = "BOTH" });
         Assert.Equal(HttpStatusCode.BadRequest, rejectManager.StatusCode);
-        var created = await manager.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = lot.Id, floorId = floor.Id, zoneId = zone.Id, duty = "GATE" });
+        var created = await manager.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = lot.Id, floorId = floor.Id, zoneId = zone.Id, duty = "SLOT_VERIFIER" });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var body = await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
         var assignmentId = body.GetProperty("data").GetProperty("id").GetInt64();
@@ -654,9 +654,9 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         db.ParkingZones.Add(foreignZone); await db.SaveChangesAsync();
         var foreignFloor = new ParkingFloor { LotId = foreign.Id, ZoneId = foreignZone.Id, Name = "Tầng khác" };
         db.ParkingFloors.Add(foreignFloor); await db.SaveChangesAsync();
-        var denied = await manager.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = foreign.Id, floorId = foreignFloor.Id, zoneId = foreignZone.Id, duty = "GATE" });
+        var denied = await manager.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = foreign.Id, floorId = foreignFloor.Id, zoneId = foreignZone.Id, duty = "SLOT_VERIFIER" });
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
-        var adminCreated = await admin.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = foreign.Id, floorId = foreignFloor.Id, zoneId = foreignZone.Id, duty = "GATE" });
+        var adminCreated = await admin.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = foreign.Id, floorId = foreignFloor.Id, zoneId = foreignZone.Id, duty = "SLOT_VERIFIER" });
         Assert.Equal(HttpStatusCode.Created, adminCreated.StatusCode);
         var foreignBody = await adminCreated.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
         var foreignId = foreignBody.GetProperty("data").GetProperty("id").GetInt64();
