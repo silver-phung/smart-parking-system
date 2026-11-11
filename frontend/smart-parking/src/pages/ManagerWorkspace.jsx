@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import { apiRequest } from "../services/api.js";
 import { staffApi } from "../services/staffApi.js";
@@ -466,6 +466,7 @@ function ManagerContent() {
               </label>
             </div>
             <nav className="workspace-tabs" aria-label="Điều hành bãi">
+              <Link className="btn btn--outline" to="/manager/assignments">Phân công</Link>
               {[
                 ["overview", "Tổng quan"],
                 ["slots", "Ô đỗ / bảo trì"],

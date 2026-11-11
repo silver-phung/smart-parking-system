@@ -5,6 +5,9 @@ namespace SmartParking.Application.Common.Interfaces;
 
 public interface IStaffLotAssignmentService
 {
+    Task<PagedResult<StaffCandidateDto>> GetCandidatesAsync(
+        StaffCandidateFilterDto filter, long actorId, CancellationToken ct = default);
+
     Task<(bool Success, string Message, StaffLotAssignmentDto? Data)> CreateAssignmentAsync(
         CreateStaffAssignmentRequestDto request,
         long actorId,

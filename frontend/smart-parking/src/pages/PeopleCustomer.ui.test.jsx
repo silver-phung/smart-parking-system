@@ -2,6 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import AdminPeople from "./AdminPeople.jsx";
+import ManagerStaffAssignments from "./ManagerStaffAssignments.jsx";
 import CustomerSessions from "./CustomerSessions.jsx";
 import CustomerDashboard from "./CustomerDashboard.jsx";
 import Register from "./Register.jsx";
@@ -57,6 +58,8 @@ beforeEach(() => {
       if (url.includes("/admin/users/7"))
         data = { ...user, activeAssignmentsCount: 1 };
       else if (url.includes("/admin/users?")) data = page([user]);
+      else if (url.includes("/staff-assignments/candidates?")) data = page([user, { id: 8, fullName: "Quản lý Demo", username: "managerdemo", role: "MANAGER" }]);
+      else if (url.endsWith("/staff-assignments/my-lots")) data = [{ lotId: 1, lotName: "Bãi Trung Tâm", isActive: true }];
       else if (url.includes("/staff-assignments?"))
         data = page([
           {
@@ -199,6 +202,7 @@ it("creates an explicit SLOT_VERIFIER duty assignment", async () => {
   auth("ADMIN");
   mount(<AdminPeople />, "/admin/people?view=assignments");
   await screen.findByRole("option", { name: /Nhân viên Demo/ });
+  expect(screen.queryByRole("option", { name: /Quản lý Demo/ })).toBeNull();
   fireEvent.change(screen.getByLabelText("Nhân sự"), {
     target: { value: "7" },
   });
@@ -218,6 +222,22 @@ it("creates an explicit SLOT_VERIFIER duty assignment", async () => {
     lotId: 1,
     duty: "SLOT_VERIFIER",
   });
+});
+it("lets Manager assign only Staff at managed lots without calling account-management APIs", async () => {
+  auth("MANAGER");
+  mount(<ManagerStaffAssignments />, "/manager/assignments");
+  await screen.findByRole("option", { name: /Nhân viên Demo/ });
+  expect(screen.queryByRole("option", { name: /Quản lý Demo/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Tài khoản", exact: true })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Tạo tài khoản nội bộ" })).toBeNull();
+  fireEvent.change(screen.getByLabelText("Nhân sự"), { target: { value: "7" } });
+  fireEvent.change(screen.getByLabelText("Bãi đỗ"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Nhiệm vụ"), { target: { value: "GATE" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Lưu phân công" }).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "Lưu phân công" }));
+  await screen.findByText("Đã lưu thành công");
+  expect(JSON.parse(writes()[0][1].body)).toMatchObject({ userId: 7, lotId: 1, duty: "GATE" });
+  expect(fetcher.mock.calls.some(([url]) => url.includes("/admin/users"))).toBe(false);
 });
 it("requires confirmation for revoking an assignment", async () => {
   auth("ADMIN");

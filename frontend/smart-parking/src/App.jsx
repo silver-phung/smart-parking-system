@@ -8,6 +8,7 @@ import Register from "./pages/Register.jsx";
 import CustomerDashboard from "./pages/CustomerDashboard.jsx";
 import CustomerProfile from "./pages/CustomerProfile.jsx";
 import ManagerWorkspace from "./pages/ManagerWorkspace.jsx";
+import ManagerStaffAssignments from "./pages/ManagerStaffAssignments.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminParkingSettings from "./pages/AdminParkingSettings.jsx";
 import StaffWorkspace from "./pages/StaffWorkspace.jsx";
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/admin/parking-settings" element={<AdminParkingSettings />} />
           <Route path="/admin/people" element={<AdminPeople />} />
           <Route path="/manager" element={<ManagerWorkspace />} />
+          <Route path="/manager/assignments" element={<ManagerStaffAssignments />} />
           <Route path="/staff" element={<StaffWorkspace />} />
           <Route
             path="*"
@@ -59,7 +61,7 @@ export default function App() {
           />
         </Routes>
       </main>
-      {!pathname.startsWith("/admin") &&
+      {!pathname.startsWith("/admin") && !pathname.startsWith("/manager") &&
         !["/manager", "/staff", "/login", "/register"].includes(pathname) && (
           <Footer />
         )}

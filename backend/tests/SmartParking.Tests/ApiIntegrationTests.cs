@@ -591,7 +591,6 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Theory]
-    [InlineData(Roles.Manager)]
     [InlineData(Roles.Staff)]
     [InlineData(Roles.User)]
     public async Task GetStaffAssignments_NonAdmin_Returns403Forbidden(string role)
@@ -599,6 +598,64 @@ public class ApiIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var client = CreateClientForRole(role);
         var response = await client.GetAsync("/api/v1/staff-assignments");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetStaffAssignments_Manager_Returns200Ok()
+    {
+        var response = await CreateClientForRole(Roles.Manager).GetAsync("/api/v1/staff-assignments");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(Roles.Admin, HttpStatusCode.OK)]
+    [InlineData(Roles.Manager, HttpStatusCode.OK)]
+    [InlineData(Roles.Staff, HttpStatusCode.Forbidden)]
+    [InlineData(Roles.User, HttpStatusCode.Forbidden)]
+    public async Task StaffAssignmentCandidates_EnforcesRolesAndReturnsOnlyStaff(string role, HttpStatusCode expected)
+    {
+        var response = await CreateClientForRole(role).GetAsync("/api/v1/staff-assignments/candidates");
+        Assert.Equal(expected, response.StatusCode);
+        if (expected == HttpStatusCode.OK)
+        {
+            var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            foreach (var candidate in body.GetProperty("data").GetProperty("items").EnumerateArray())
+            {
+                Assert.Equal(Roles.Staff, candidate.GetProperty("role").GetString());
+                Assert.False(candidate.TryGetProperty("passwordHash", out _));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task StaffAssignmentMutations_ManagerIsScopedAndCannotAssignManager()
+    {
+        var manager = CreateClientForRole(Roles.Manager);
+        var admin = CreateClientForRole(Roles.Admin);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartParkingDbContext>();
+        var lot = new ParkingLot { Name = "Assignment API scope", IsActive = true };
+        db.ParkingLots.Add(lot); await db.SaveChangesAsync();
+        db.StaffLotAssignments.Add(new StaffLotAssignment { UserId = 9002, LotId = lot.Id, AssignedBy = 9001, IsActive = true, Duty = StaffDuties.Both });
+        await db.SaveChangesAsync();
+        var rejectManager = await admin.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9002, lotId = lot.Id, duty = "BOTH" });
+        Assert.Equal(HttpStatusCode.BadRequest, rejectManager.StatusCode);
+        var created = await manager.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = lot.Id, duty = "GATE" });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var body = await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var assignmentId = body.GetProperty("data").GetProperty("id").GetInt64();
+        var foreign = new ParkingLot { Name = "Assignment API other lot", IsActive = true };
+        db.ParkingLots.Add(foreign); await db.SaveChangesAsync();
+        var denied = await manager.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = foreign.Id, duty = "GATE" });
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        var adminCreated = await admin.PostAsJsonAsync("/api/v1/staff-assignments", new { userId = 9003, lotId = foreign.Id, duty = "GATE" });
+        Assert.Equal(HttpStatusCode.Created, adminCreated.StatusCode);
+        var foreignBody = await adminCreated.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var foreignId = foreignBody.GetProperty("data").GetProperty("id").GetInt64();
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.GetAsync($"/api/v1/staff-assignments/{foreignId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await manager.PostAsJsonAsync($"/api/v1/staff-assignments/{foreignId}/revoke", new { reason = "Other lot" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await manager.PostAsJsonAsync($"/api/v1/staff-assignments/{assignmentId}/revoke", new { reason = "Đổi ca" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await manager.GetAsync("/api/v1/admin/users")).StatusCode);
     }
 
     #endregion

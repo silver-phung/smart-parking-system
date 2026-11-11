@@ -27,9 +27,9 @@ const emptyUser = {
   role: "STAFF",
 };
 
-function People() {
+export function People({ assignmentsOnly = false }) {
   const [params, setParams] = useSearchParams();
-  const view = params.get("view") === "assignments" ? "assignments" : "users";
+  const view = assignmentsOnly || params.get("view") === "assignments" ? "assignments" : "users";
   const [revision, refresh] = useState(0);
   const action = useMutation();
   const [page, setPage] = useState(1);
@@ -61,14 +61,14 @@ function People() {
   );
   const candidates = useResource(
     view === "assignments"
-      ? `/v1/admin/users?${query({ search: staffSearch, page: 1, pageSize: 100, isActive: true })}`
+      ? `/v1/staff-assignments/candidates?${query({ search: staffSearch, page: 1, pageSize: 100 })}`
       : null,
     revision,
     { allPages: "page" },
   );
   const lots = useResource(
     view === "assignments"
-      ? "/v1/parking-lots?pageNumber=1&pageSize=100&isActive=true"
+      ? assignmentsOnly ? "/v1/staff-assignments/my-lots" : "/v1/parking-lots?pageNumber=1&pageSize=100&isActive=true"
       : null,
     revision,
     { allPages: "pageNumber" },
@@ -77,9 +77,10 @@ function People() {
     selected ? `/v1/admin/users/${selected}` : null,
     revision,
   );
-  const eligible = itemsOf(candidates.data).filter((u) =>
-    ["STAFF", "MANAGER"].includes(u.role),
-  );
+  const eligible = itemsOf(candidates.data).filter((u) => u.role === "STAFF");
+  const availableLots = assignmentsOnly
+    ? itemsOf(lots.data).filter(l => l.isActive).map(l => ({ id: l.lotId, name: l.lotName }))
+    : itemsOf(lots.data);
   const chosen = eligible.find((u) => String(u.id) === assignment.userId);
   const updated = () => refresh((n) => n + 1);
   const list = view === "users" ? users : assignments;
@@ -114,15 +115,15 @@ function People() {
     <section className="workspace container">
       <header className="workspace-heading">
         <div>
-          <span className="tag">Quản trị nhân sự</span>
-          <h1>Tài khoản & phân công</h1>
-          <p>Chuẩn bị tài khoản và quyền vận hành tại từng bãi đỗ.</p>
+          <span className="tag">{assignmentsOnly ? "Quản lý bãi" : "Quản trị nhân sự"}</span>
+          <h1>{assignmentsOnly ? "Phân công nhân viên" : "Tài khoản & phân công"}</h1>
+          <p>{assignmentsOnly ? "Phân công Staff tại các bãi bạn đang quản lý." : "Chuẩn bị tài khoản và phân công Staff tại từng bãi đỗ."}</p>
         </div>
-        <Link className="btn btn--outline" to="/admin">
+        <Link className="btn btn--outline" to={assignmentsOnly ? "/manager" : "/admin"}>
           Tổng quan
         </Link>
       </header>
-      <nav className="workspace-tabs" aria-label="Quản trị nhân sự">
+      {!assignmentsOnly && <nav className="workspace-tabs" aria-label="Quản trị nhân sự">
         <button
           disabled={action.busy}
           className="btn btn--outline"
@@ -137,9 +138,9 @@ function People() {
           onClick={() => switchView("assignments")}
           aria-pressed={view === "assignments"}
         >
-          Phân công bãi / duty
+          Phân công nhân viên
         </button>
-      </nav>
+      </nav>}
       <Feedback error={action.error} message={action.message} />
       {view === "users" ? (
         <section className="workspace-panel">
@@ -251,8 +252,7 @@ function People() {
         <section className="workspace-panel">
           <h2>Phân công mới</h2>
           <p className="workspace-note">
-            Chọn nhiệm vụ cho Staff. Manager điều hành cả bãi. Để đổi duty, thu
-            hồi phân công cũ rồi tạo lại.
+            Chỉ phân công cho Staff. Chọn bãi và nhiệm vụ; để đổi nhiệm vụ, thu hồi phân công cũ rồi tạo lại.
           </p>
           <div className="workspace-filters">
             <label>
@@ -280,7 +280,7 @@ function People() {
                   write("/v1/staff-assignments", {
                     userId: Number(assignment.userId),
                     lotId: Number(assignment.lotId),
-                    duty: chosen?.role === "MANAGER" ? "BOTH" : assignment.duty,
+                    duty: assignment.duty,
                     notes: assignment.notes || null,
                   }),
                 () => {
@@ -304,7 +304,7 @@ function People() {
                     })
                   }
                 >
-                  <option value="">Chọn Staff / Manager</option>
+                  <option value="">Chọn Staff</option>
                   {eligible.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.fullName} · {u.username} · {u.role}
@@ -323,7 +323,7 @@ function People() {
                   }}
                 >
                   <option value="">Chọn bãi</option>
-                  {itemsOf(lots.data).map((l) => (
+                  {availableLots.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
                     </option>
@@ -334,8 +334,7 @@ function People() {
                 Nhiệm vụ
                 <select
                   required
-                  disabled={chosen?.role === "MANAGER"}
-                  value={chosen?.role === "MANAGER" ? "BOTH" : assignment.duty}
+                  value={assignment.duty}
                   onChange={(e) =>
                     setAssignment({ ...assignment, duty: e.target.value })
                   }
@@ -364,6 +363,9 @@ function People() {
                   action.busy ||
                   !chosen ||
                   !assignment.lotId ||
+                  !assignment.duty ||
+                  Boolean(candidates.error || lots.error) ||
+                  !availableLots.some(l => String(l.id) === assignment.lotId) ||
                   candidates.loading ||
                   lots.loading
                 }
@@ -395,7 +397,9 @@ function People() {
                 : ""}
           </p>
           <p className="workspace-note">
-            Thay đổi vai trò có thể thu hồi phân công hiện tại của tài khoản.
+            {change.kind === "revoke"
+              ? "Staff sẽ ngừng có quyền theo phân công này sau khi thu hồi."
+              : "Thay đổi vai trò có thể thu hồi phân công hiện tại của tài khoản."}
           </p>
           <form className="workspace-form" onSubmit={confirmChange}>
             <label>

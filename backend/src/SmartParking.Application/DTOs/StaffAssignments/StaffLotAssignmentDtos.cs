@@ -80,3 +80,22 @@ public class AssignedLotSummaryDto
     public bool IsActive { get; set; }
     public DateTime AssignedAt { get; set; }
 }
+
+public class StaffCandidateFilterDto
+{
+    [MaxLength(255)]
+    public string? Search { get; set; }
+    [Range(1, int.MaxValue)]
+    public int Page { get; set; } = 1;
+    [Range(1, 100)]
+    public int PageSize { get; set; } = 20;
+}
+
+public class StaffCandidateDto
+{
+    public long Id { get; set; }
+    public string Username { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Role => Roles.Staff;
+}

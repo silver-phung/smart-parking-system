@@ -17,6 +17,7 @@ export const roleNavigation = {
     ["/manager", "Tổng quan"],
     ["/manager?view=slots", "Ô đỗ / bảo trì"],
     ["/manager?view=sessions", "Xe đang gửi"],
+    ["/manager/assignments", "Phân công"],
   ],
   STAFF: [
     ["/staff?view=entry", "Xe vào"],
