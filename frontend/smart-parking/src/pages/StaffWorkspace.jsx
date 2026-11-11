@@ -40,7 +40,7 @@ function StaffContent() {
   const [params, setParams] = useSearchParams();
   const selectedView = params.get("view") || "entry";
   const view = views.find((item) => item.id === selectedView) || views.find(item => item.id === "entry");
-  const [selectedLotId, setSelectedLotId] = useState("");
+  const [selectedLotId, setSelectedLotId] = useState(params.get("lotId") || "");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
   const tabRefs = useRef({});

@@ -101,6 +101,7 @@ public static class DependencyInjection
         // Sprint 3 Day 8 – Thức: Bridge to Phung's DB/Service
         services.AddScoped<IParkingEventBridge, NoOpParkingEventBridge>();
 
+        services.AddScoped<ParkingSceneService>();
         return services;
     }
 }

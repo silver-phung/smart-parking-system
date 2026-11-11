@@ -5,7 +5,7 @@
  * CẬP NHẬT LAYOUT v3:
  *  - Tối ưu diện tích hầm: xoá thang máy trung tâm, giữ 2 phòng thang máy vách kính sát tường
  *    (khu Tây & khu Bắc), 4 dãy đỗ xe A-D liền mạch có chặn lùi bánh xe (wheel-stop).
- *  - Khu Check-in B1: bảng xanh đầu dốc ghi "XE THÁNG | Rẽ phải ➔"; Booth Check-in dời sang
+ *  - Khu Check-in B1: bảng xanh đầu dốc ghi "KHU ĐỖ XE | Rẽ phải ➔"; Booth Check-in dời sang
  *    bên phải làn xe, máy quẹt thẻ đặt nằm ngang dọc làn xe, bỏ bảng xanh trên nóc booth,
  *    đặt bảng LED báo số slot trống ngay tại Booth Check-in.
  *  - Khu Check-out B1: có bảng chỉ dẫn lối ra dọc các lối đi trong bãi; Booth Check-out đặt
@@ -326,24 +326,19 @@
   /*  DỮ LIỆU SLOT DEMO                                                   */
   /* ================================================================== */
   function makeSlots(lot, k) {
-    var def = lot.def, fid = def.ids[k], y = lot.ys[k], kind = k === 0 ? 'MONTHLY' : 'VISITOR';
-    var R = U.rng(def.seed * 100 + k * 7 + 3), out = [];
-    var provinces = ['51A', '51F', '51G', '59A', '59C', '50A', '51K', '52A', '60A', '61A'];
+    var def = lot.def, floor = def.liveFloors[k], rows = def.counts[k], offset = 0, out = [];
     ROWS.forEach(function (row, ri) {
-      var n = def.counts[k][ri];
-      for (var i = 1; i <= n; i++) {
-        var r = R(), occ = r < 0.55, mnt = !occ && r > 0.96;
-        var plate = occ ? provinces[Math.floor(R() * provinces.length)] + '-' + Math.floor(100 + R() * 899) + '.' + U.pad2(Math.floor(R() * 99)) : null;
-        var x = slotX(i, n);
-        out.push({
-          code: fid + '-' + row.id + U.pad2(i), floor: fid, floorIdx: k, row: row.id, idx: i, zone: kind,
-          status: occ ? 'OCCUPIED' : (mnt ? 'MAINTENANCE' : 'EMPTY'), plate: plate,
-          vehicle: occ ? (R() < 0.15 ? 'SUV 7 chỗ' : 'Sedan 4-5 chỗ') : null, carColor: 0,
-          x: x, zc: row.zc, z: row.zc - row.face * 0.12, face: row.face, world: new T.Vector3(x, y + 0.9, row.zc)
-        });
-      }
+      var count = rows[ri];
+      floor.slots.slice(offset, offset + count).forEach(function (slot, index) {
+        var x = slotX(index + 1, count);
+        out.push({ id: slot.id, code: slot.code, floor: def.ids[k], floorIdx: k,
+          row: row.id, idx: index + 1, zone: floor.zoneName, status: slot.status,
+          plate: slot.plate || null, vehicle: slot.plate ? 'Xe đang gửi' : '', isMine: slot.isMine === true,
+          source: slot, carColor: 0xaebccd, x: x, zc: row.zc, z: row.zc - row.face * 0.12,
+          face: row.face, world: new T.Vector3(x, lot.ys[k] + 0.9, row.zc) });
+      });
+      offset += count;
     });
-    out.forEach(function (s, i) { s.carColor = U.CAR_COLORS[(i * 7 + k * 3 + s.idx * 13) % U.CAR_COLORS.length]; });
     return out;
   }
   function freeOf(slots) { return slots.filter(function (s) { return s.status === 'EMPTY'; }).length; }
@@ -352,10 +347,11 @@
   /*  1 TẦNG                                                              */
   /* ================================================================== */
   function buildFloor(lot, k) {
-    var def = lot.def, n = lot.n, under = lot.under, fid = def.ids[k], y = lot.ys[k], monthly = k === 0;
+    var def = lot.def, n = lot.n, under = lot.under, fid = def.ids[k], y = lot.ys[k],
+      monthly = def.liveFloors[k].kind === 'MONTHLY';
     var g = new T.Group(); g.position.y = y;
     var ceil = new T.Group(); g.add(ceil);
-    var fl = { k: k, id: fid, y: y, group: g, ceil: ceil, kind: monthly ? 'MONTHLY' : 'VISITOR', slots: lot.slots[k], lobbies: [], gates: [] };
+    var fl = { k: k, id: fid, y: y, group: g, ceil: ceil, kind: def.liveFloors[k].kind, slots: lot.slots[k], lobbies: [], gates: [] };
     var ctx = { g: g, under: under, fins: [] };
 
     /* ---- sàn sảnh chính ---- */
@@ -399,7 +395,7 @@
       }
     });
     fl.slots.forEach(function (s) {
-      var col = s.status === 'OCCUPIED' ? 0xd9534f : (s.status === 'EMPTY' ? 0x2eb872 : 0xf0ad4e);
+      var col = s.status === 'OCCUPIED' ? 0xd9534f : s.status === 'RESERVED' ? 0x3b82f6 : s.status === 'EMPTY' ? 0x2eb872 : 0xf0ad4e;
       pads.push({ x: s.x, y: 0.006, z: s.zc, sx: SW - 0.34, sy: 1, sz: SL - 0.34, color: col });
       // Chặn lùi bánh xe (wheel-stop vàng đen kiểu hầm CGTrader)
       var zStop = s.zc - s.face * (SL / 2 - 0.55);
@@ -417,7 +413,7 @@
     });
 
     /* ================================================================== */
-    /*  PHÂN LUỒNG TẦNG B1 (XE THÁNG + LÀN BYPASS VÃNG LAI + 2 LANE RA)    */
+    /*  PHÂN LUỒNG TẦNG B1 (KHU ĐỖ XE + LÀN BYPASS VÃNG LAI + 2 LANE RA)    */
     /* ================================================================== */
     if (monthly) {
       // 1. Gờ đỏ ngăn cách hoàn toàn làn bypass xe vãng lai (phía Nam) với khu đỗ xe tháng:
@@ -441,7 +437,7 @@
       buildGate(g, fl, {
         kind: 'checkin', x: BX, z: -13.2, dir: [0, 1], side: 1,
         showRoofSign: true,
-        label: 'TẦNG ' + fid + ' · XE THÁNG',
+        label: 'TẦNG ' + fid + ' · ' + def.liveFloors[k].zoneName,
         label2: 'Còn trống ' + free0 + '/' + tot0 + ' chỗ',
         color: free0 > 5 ? '#0b8a43' : (free0 > 0 ? '#c46a00' : '#b83227'),
         readerLine: 'CHECK-IN THÁNG'
@@ -482,7 +478,7 @@
       // Mũi tên VÀNG: nhánh rẽ phải vào Check-in xe tháng (đặt riêng ở phần đường rẽ vào BX)
       arrowC(g, BX, 0, -15.4, ROT_N, '#f2c200', 1.1, 2.2);
       arrowC(g, BX, 0, -10.2, ROT_N, '#f2c200', 1.1, 2.2);
-      floorText(g, BX, -9.8, ROT_N, 3.0, 1.3, ['XE THÁNG'], '#0b5cad', '#ffffff');
+      floorText(g, BX, -9.8, ROT_N, 3.0, 1.3, ['KHU ĐỖ XE'], '#0b5cad', '#ffffff');
 
       // Mũi tên VÀNG: xe tháng từ Lối đi 3 qua Check-out đi làn trái (XY) ra dốc mặt đất
       arrowC(g, XE - 2.0, 0, 15.0, ROT_E, '#f2c200', 1.1, 2.2);
@@ -517,8 +513,8 @@
       if (k === 1) {
         buildGate(g, fl, {
           kind: 'checkout-v', x: HX - 4.2, z: ZU2, dir: [1, 0], side: 1,
-          showRoofSign: true, label: 'CHECK-OUT VÃNG LAI', label2: 'QUẸT THẺ LÊN ' + def.ids[0],
-          color: '#b83227', readerLine: 'CHECK-OUT VÃNG LAI'
+          showRoofSign: true, label: 'CỔNG RA', label2: 'QUẸT THẺ LÊN ' + def.ids[0],
+          color: '#b83227', readerLine: 'CỔNG RA'
         });
       }
 
@@ -651,14 +647,14 @@
     hang(-7.5, 4.0, 2.5, 0.68, elW, elW, 'x', 0.45);
 
     if (k === 0) {
-      // 1. Điểm vừa xuống dốc vào bãi B1: bảng xanh CHỈ GHI "XE THÁNG | Rẽ phải ➔" đúng hướng rẽ phải, hạ cao độ vừa tầm mắt
-      hang(-HX + 5.2, ZD1 + 0.4, 3.0, 0.86, null, S(['XE THÁNG', 'Rẽ phải ➔'], BLUE, 520, 160), 'x', 0.72);
+      // 1. Điểm vừa xuống dốc vào bãi B1: bảng xanh CHỈ GHI "KHU ĐỖ XE | Rẽ phải ➔" đúng hướng rẽ phải, hạ cao độ vừa tầm mắt
+      hang(-HX + 5.2, ZD1 + 0.4, 3.0, 0.86, null, S(['KHU ĐỖ XE', 'Rẽ phải ➔'], BLUE, 520, 160), 'x', 0.72);
 
       // 2. Bảng hướng dẫn Xe Vãng Lai đi thẳng xuống B2 (đặt lệch khỏi đèn trần để không bị cắt)
-      hang(-HX + 12.5, ZD1, 3.3, 0.88, null, S(['XE VÃNG LAI ➔', 'Đi thẳng · xuống ' + (ids[1] || 'B2')], GREEN, 560, 160), 'x', 0.68);
+      hang(-HX + 12.5, ZD1, 3.3, 0.88, null, S(['XE VÀO ➔', 'Đi thẳng · xuống ' + (ids[1] || ids[0])], GREEN, 560, 160), 'x', 0.68);
 
       // 3. Bảng trên làn bypass vãng lai báo số slot trống tầng B2 trước khi vào dốc
-      hang(1.5, ZD1, 3.2, 0.85, null, S(['LÀN VÃNG LAI ➔ ' + (ids[1] || 'B2'), 'Không vào khu xe tháng'], GREEN, 560, 155), 'x', 0.65);
+      hang(1.5, ZD1, 3.2, 0.85, null, S(['LÀN LƯU THÔNG ➔ ' + (ids[1] || ids[0]), 'Đi theo lối chỉ dẫn'], GREEN, 560, 155), 'x', 0.65);
       if (n > 1) {
         hang(HX - 8.5, ZD1, 3.3, 0.90, null, S(['XUỐNG ' + ids[1] + ' ➔', ids[1] + ': ' + availLine(1)], avail(1), 560, 165), 'x', 0.65);
       }
@@ -667,7 +663,7 @@
       hang(BX, -2.5, 2.9, 0.78, null, S(['HƯỚNG RA BÃI ▲', 'Đi thẳng tới Lối đi 3 ➔'], GREEN, 520, 145), 'z', 0.42);
       hang(0.0, AZ[0], 2.9, 0.78, S(['◀ RA TRỤC TÂY · LÊN LỐI ĐI 3'], GREEN, 520, 145), null, 'x', 0.42);
       hang(0.0, AZ[1], 2.9, 0.78, S(['◀ RA TRỤC TÂY · LÊN LỐI ĐI 3'], GREEN, 520, 145), null, 'x', 0.42);
-      hang(0.0, AZ[2], 3.1, 0.82, null, S(['CHECK-OUT XE THÁNG ➔', 'Quẹt thẻ · Ra mặt đất'], AMB, 540, 150), 'x', 0.40);
+      hang(0.0, AZ[2], 3.1, 0.82, null, S(['CỔNG RA ➔', 'Quẹt thẻ · Ra mặt đất'], AMB, 540, 150), 'x', 0.40);
 
       // 5. Bảng màu xanh lá (Lối ra Mặt đất): chỉ giữ đúng 4 chữ "LỐI RA MẶT ĐẤT" và đổi mũi tên hướng lên trên (▲)
       hang(HX - 3.2, 19.5, 3.0, 0.82, null, S(['▲ LỐI RA MẶT ĐẤT'], GREEN, 500, 135), 'x', 0.68);
@@ -675,7 +671,7 @@
       // Các tầng vãng lai (B2, B3, B4):
       // Ngay cửa vào từ dốc chữ U (làn Trái/Trong ZD2 = -12.4): mặt hướng dốc báo số chỗ trống, mặt hướng B2 chỉ dẫn làn lên/xuống
       hang(HX - 2.5, -10.5, 3.4, 0.88,
-        S(['TẦNG ' + ids[k] + ' · VÃNG LAI', availLine(k)], avail(k), 580, 165),
+        S(['TẦNG ' + ids[k] + ' · ' + def.liveFloors[k].zoneName, availLine(k)], avail(k), 580, 165),
         S(['◀ TRÁI: XUỐNG ' + ids[k], 'PHẢI: LÊN ' + ids[k - 1] + ' ▶'], AMB, 600, 165),
         'x', 0.55);
       if (k < n - 1) {
@@ -861,6 +857,12 @@
   /* ================================================================== */
   function buildLot(def, THREE) {
     T = THREE; I.setThree(THREE); I.initMaterials(); extraMaterials();
+    var columns = Math.max(8, ...def.counts.flat());
+    XSR = columns * SW; HX = (WM + XSR + ECL + COR) / 2;
+    XS0 = -HX + WM; XE = XS0 + XSR; BX = -HX + 5.8; XEC = XE - 1.3;
+    XR = XE + ECL; XY = XR + 2.2; XB = XR + 4.3; XG = XR + 6.4; XT = HX + RL + R_OUT;
+    COLX = [XS0 + XSR / 4, XS0 + XSR / 2, XS0 + XSR * .75];
+    Object.assign(LAYOUT, { HX: HX, XT: XT, BX: BX, XR: XR, XG: XG, XY: XY, XEC: XEC });
     var n = def.ids.length, under = def.type === 'underground';
     var lot = { def: def, n: n, under: under, dir: under ? -1 : 1, group: new T.Group(), ys: [], floors: [], nodes: [], cores: [], gates: [], slots: [], free: [], layout: LAYOUT };
     for (var k = 0; k < n; k++) lot.ys.push((under ? -1 : 1) * k * FH);
@@ -880,20 +882,8 @@
 
   /* ---------- mô tả vị trí đang đứng ---------- */
   function describe(lot, x, z, k) {
-    if (x < -HX) return lot.under ? 'Dốc vào hầm ' + lot.def.ids[0] : 'Đường vào bãi ' + lot.def.ids[0];
-    if (x > HX) {
-      if (z > 10) return 'Dốc ra mặt đất (làn vàng · xanh lá)';
-      if (x > HX + RL - 0.5) return 'Chiếu nghỉ vòng cung chữ U';
-      return 'Dốc chữ U liên tầng';
-    }
-    if (k === 0) {
-      if (z < -15.6) return 'Làn xe VÃNG LAI (đi thẳng xuống ' + (lot.def.ids[1] || 'B2') + ')';
-      if (x > XR) return x < XB ? 'Làn ra xe THÁNG (mũi tên vàng)' : 'Làn ra xe VÃNG LAI (mũi tên xanh lá)';
-      return 'Khu xe THÁNG · ' + rowName(z);
-    }
-    if (z < -10.5 && x > XEC) return 'Cửa ra Check-out / Lên ' + lot.def.ids[k - 1];
-    if (z >= -10.5 && z < -6.0 && x > XEC) return 'Cửa vào tầng ' + lot.def.ids[k];
-    return 'Khu VÃNG LAI (' + lot.def.ids[k] + ') · ' + rowName(z);
+    var floor = lot.def.liveFloors[k];
+    return lot.def.name + ' · ' + floor.name + ' · ' + floor.zoneName + ' · ' + rowName(z);
   }
   function rowName(z) {
     return z < -15 ? 'Làn phía Nam' : z < -10 ? 'Dãy A' : z < -4 ? 'Lối đi 1' : z < 1 ? 'Dãy B' : z < 7 ? 'Lối đi 2' : z < 12 ? 'Dãy C' : z < 18 ? 'Lối đi 3' : 'Dãy D';

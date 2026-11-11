@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import RequireCustomer from "../components/RequireCustomer.jsx";
 import ParkingSlotManagement from "./ParkingSlotManagement.jsx";
 import { getAuthSession, subscribeAuthSession } from "../services/authSession.js";
@@ -38,12 +38,13 @@ const bookingStatusLabels = {
 };
 
 function DashboardContent({ publicView = false }) {
-  const floorLotIdRef = useRef("");
+  const [params] = useSearchParams();
+  const floorLotIdRef = useRef(params.get("lotId") || "");
   const [revision, setRevision] = useState(0);
   const [lots, setLots] = useState([]);
-  const [selectedLotId, setSelectedLotId] = useState("");
+  const [selectedLotId, setSelectedLotId] = useState(params.get("lotId") || "");
   const [floors, setFloors] = useState([]);
-  const [selectedFloorId, setSelectedFloorId] = useState("");
+  const [selectedFloorId, setSelectedFloorId] = useState(params.get("floorId") || "");
   const [slots, setSlots] = useState([]);
   const [slotsUpdatedAt, setSlotsUpdatedAt] = useState(null);
   const [slotRevision, setSlotRevision] = useState(0);
@@ -435,7 +436,7 @@ function DashboardContent({ publicView = false }) {
             {publicView ? "Bãi đỗ công khai" : "Khu vực khách hàng"}
           </span>
           <h1>Bãi đỗ xe</h1>
-          {selectedLotId && selectedFloorId && <a className="btn btn--outline" href={`/3d-viewer.html?lotId=${encodeURIComponent(selectedLotId)}&floorId=${encodeURIComponent(selectedFloorId)}`}>Xem tầng này bằng 3D</a>}
+          {selectedLotId && selectedFloorId && <a className="btn btn--outline" href={`/app/parking?lotId=${encodeURIComponent(selectedLotId)}&floorId=${encodeURIComponent(selectedFloorId)}`}>Xem tầng này bằng 3D</a>}
           <p className="muted">
             Xem sức chứa và trạng thái từng vị trí từ dữ liệu hệ thống.
           </p>

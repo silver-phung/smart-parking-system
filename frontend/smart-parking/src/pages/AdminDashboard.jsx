@@ -251,45 +251,10 @@ function AdminDashboardContent() {
           </div>
         </section>
 
-        <section className="admin-dashboard__panel" id="finance">
-          <div className="admin-dashboard__panel-heading">
-            <div>
-              <h2>Tài chính và hóa đơn</h2>
-              <p>Doanh thu, chi phí và xuất hóa đơn.</p>
-            </div>
-          </div>
-          <div className="admin-dashboard__unavailable">
-            <strong>Chưa có dữ liệu tài chính</strong>
-            <p>
-              Backend hiện chưa cung cấp API hóa đơn, doanh thu hoặc chi tiêu.
-              Các số liệu này sẽ không được ước tính từ phiên đỗ.
-            </p>
-            <button type="button" className="btn btn--outline" disabled>
-              Xuất hóa đơn · Chưa có API
-            </button>
-          </div>
-        </section>
-
-        <section className="admin-dashboard__panel" id="trends">
-          <div className="admin-dashboard__panel-heading">
-            <div>
-              <h2>Biến động theo ngày / tháng</h2>
-              <p>Số lượt xe và doanh thu theo thời gian.</p>
-            </div>
-          </div>
-          <div className="admin-dashboard__chart-empty">
-            <span
-              className="admin-dashboard__chart-placeholder"
-              aria-hidden="true"
-            >
-              API BÁO CÁO
-            </span>
-            <strong>Chưa thể tạo biểu đồ lịch sử</strong>
-            <p>
-              API hiện chỉ trả về phiên đang hoạt động, chưa có lịch sử phiên
-              hoặc báo cáo tổng hợp theo ngày/tháng.
-            </p>
-          </div>
+        <section className="admin-dashboard__panel admin-shortcuts"><h2>Công việc thường dùng</h2><p>Đi thẳng tới tác vụ cần xử lý.</p>
+          <a href="/app/parking"><strong>Không gian bãi đỗ 3D →</strong><span>Quan sát từng tầng và trạng thái ô đỗ</span></a>
+          <a href="/app/admin/people?view=assignments"><strong>Phân công nhân viên →</strong><span>Điều phối cổng vào, cổng ra và khu vực</span></a>
+          <a href="/app/admin/parking-settings"><strong>Khu bãi & chính sách →</strong><span>Thiết lập phạm vi và quy tắc vận hành</span></a>
         </section>
       </div>
 

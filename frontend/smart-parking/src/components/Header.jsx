@@ -20,7 +20,7 @@ export function Logo({ small = false }) {
     </span>
   );
 }
-export default function Header() {
+export default function Header({ workspace = false }) {
   const headerRef = useRef(null);
   useEffect(() => {
     const updateHeight = () => {
@@ -51,6 +51,8 @@ export default function Header() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const role = session?.userProfile.role;
+  const roleLabel = { ADMIN: "Quản trị viên", MANAGER: "Quản lý bãi", STAFF: "Nhân viên", USER: "Khách hàng" }[role] || "Khách tham quan";
+  const activePage = (roleNavigation[role] || []).find(([target]) => navIsActive(target, pathname, search))?.[1] || (pathname.startsWith("/parking") ? "Bãi đỗ 3D" : "Khu vực làm việc");
   async function logout() {
     setBusy(true);
     setError("");
@@ -68,7 +70,7 @@ export default function Header() {
     }
   }
   return (
-    <header className="header" ref={headerRef}>
+    <header className={`header ${workspace ? "header--workspace" : ""}`} ref={headerRef}>
       <div className="container header__inner">
         <Link
           className="header__brand"
@@ -78,16 +80,17 @@ export default function Header() {
           <Logo />
 
         </Link>
+        {workspace && <div className="header__context"><small>{roleLabel}</small><strong>{activePage}</strong></div>}
         <div className="header__actions">
           {session ? (
             <>
               <span className="header__identity">
                 {session.userProfile.fullName || session.userProfile.username}
-                <small>{role}</small>
+                <small>{roleLabel}</small>
               </span>
-              <Link className="btn btn--outline" to={dashboardPath(role)}>
+              {!workspace && <Link className="btn btn--outline" to={dashboardPath(role)}>
                 Khu vực của tôi
-              </Link>
+              </Link>}
               <button
                 className="btn btn--outline"
                 onClick={logout}
@@ -128,7 +131,7 @@ export default function Header() {
                 {label}
               </Link>
             ))
-          ) : (
+          ) : workspace ? <Link to="/parking" className="is-active" aria-current="page">Bãi đỗ 3D</Link> : (
             <>
               <Link
                 to="/parking"

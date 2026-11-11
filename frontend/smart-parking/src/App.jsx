@@ -1,5 +1,10 @@
 import { Link, Routes, Route, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import ParkingScene from "./pages/ParkingScene.jsx";
+import ParkingSlotManagement from "./pages/ParkingSlotManagement.jsx";
+import RequireRole from "./components/RequireRole.jsx";
+import { getAuthSession, subscribeAuthSession } from "./services/authSession.js";
+import "./app-shell.css";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
@@ -18,6 +23,9 @@ import ProjectInformation from "./pages/ProjectInformation.jsx";
 
 export default function App() {
   const { pathname, hash } = useLocation();
+  const session = useSyncExternalStore(subscribeAuthSession, getAuthSession, getAuthSession);
+  const workspace = ["/admin", "/manager", "/staff", "/customer", "/parking"].some(p => pathname.startsWith(p));
+  const authPage = pathname === "/login" || pathname === "/register";
   useEffect(() => {
     if (hash)
       document
@@ -27,8 +35,8 @@ export default function App() {
   }, [pathname, hash]);
 
   return (
-    <>
-      <Header />
+    <div className={`app-frame ${workspace ? "app-frame--workspace" : authPage ? "app-frame--auth" : ""}`}>
+      <Header workspace={workspace} />
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -36,7 +44,9 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/thong-tin/:topic" element={<ProjectInformation />} />
           <Route path="/customer" element={<CustomerDashboard />} />
-          <Route path="/parking" element={<CustomerDashboard publicView />} />
+          <Route path="/parking" element={<ParkingScene />} />
+          <Route path="/parking/3d" element={<ParkingScene />} />
+          <Route path="/parking/slots" element={<RequireRole role={["ADMIN", "MANAGER"]}><ParkingSlotManagement role={session?.userProfile.role} /></RequireRole>} />
           <Route path="/customer/sessions" element={<CustomerSessions />} />
           <Route path="/customer/profile" element={<CustomerProfile />} />
           <Route path="/admin" element={<AdminDashboard />} />
@@ -61,10 +71,9 @@ export default function App() {
           />
         </Routes>
       </main>
-      {!pathname.startsWith("/admin") && !pathname.startsWith("/manager") &&
-        !["/manager", "/staff", "/login", "/register"].includes(pathname) && (
+      {!workspace && !authPage && (
           <Footer />
         )}
-    </>
+    </div>
   );
 }

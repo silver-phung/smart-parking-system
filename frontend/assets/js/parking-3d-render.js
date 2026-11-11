@@ -7,11 +7,11 @@
  */
 (function (root) {
   'use strict';
-  var I = root.__P3R_INTERNAL__, C = I.C, LOTS = I.LOTS, AISLE_Z = I.AISLE_Z;
+  var I = root.__P3R_INTERNAL__, C = I.C, AISLE_Z = I.AISLE_Z;
   var T;
 
   var ROLE_LABEL = { guest: 'Khách vãng lai', user: 'Khách hàng (đã đăng nhập)', admin: 'Quản trị viên' };
-  var STATUS_TXT = { OCCUPIED: 'Có xe', EMPTY: 'Trống', MAINTENANCE: 'Bảo trì' };
+  var STATUS_TXT = { OCCUPIED: 'Có xe', EMPTY: 'Trống', RESERVED: 'Giữ chỗ', MAINTENANCE: 'Bảo trì', UNAVAILABLE: 'Tạm ngừng' };
 
   function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -24,6 +24,10 @@
     this.el = typeof opts.container === 'string' ? document.querySelector(opts.container) : opts.container;
     if (!this.el) throw new Error('[ParkingRender] container not found');
     if (!T) { this.el.innerHTML = '<p style="color:#fca5a5;padding:24px">Không tải được three.js (cần mạng để tải CDN).</p>'; return; }
+    this.definitions = opts.definitions || [];
+    if (!this.definitions.length) throw new Error('Bãi chưa có dữ liệu tầng để dựng mô hình.');
+    this._cleanup = [];
+    this.onSlotSelect = opts.onSlotSelect || null;
     this.role = opts.role || 'guest';
     this.mode = 'walk';
     this.lot = null; this.node = null; this.floorIdx = 0; this.selFloor = 0;
@@ -34,12 +38,16 @@
     this.onChange = opts.onChange || null;
     this._build();
     this._init3D();
-    this.setLot(opts.lotId || LOTS[0].id);
+    this.setLot(opts.lotId || this.definitions[0].id);
     this._syncRoleUI();
     this._loop = this._loop.bind(this);
     requestAnimationFrame(this._loop);
   }
   var P = ParkingRender.prototype;
+  P._listen = function (target, type, handler, options) {
+    target.addEventListener(type, handler, options);
+    if (target === root) this._cleanup.push(function () { target.removeEventListener(type, handler, options); });
+  };
 
   /* ------------------------------------------------------------------ */
   /* DOM / HUD                                                           */
@@ -88,7 +96,7 @@
     this.elSearch = q('.p3r-search'); this.elSearchIn = q('.p3r-search-in');
     this.elSearchMsg = q('.p3r-search-msg'); this.elPlateList = q('#p3r-plate-list');
 
-    LOTS.forEach(function (l) { var o = document.createElement('option'); o.value = l.id; o.textContent = l.name; self.elLot.appendChild(o); });
+    this.definitions.forEach(function (l) { var o = document.createElement('option'); o.value = l.id; o.textContent = l.name; self.elLot.appendChild(o); });
     this.elLot.addEventListener('change', function () { self.setLot(self.elLot.value); });
     this.el.querySelectorAll('[data-mode]').forEach(function (b) { b.addEventListener('click', function () { self.setMode(b.getAttribute('data-mode')); }); });
     this.el.querySelectorAll('[data-go]').forEach(function (b) { b.addEventListener('click', function () { self._goTo(b.getAttribute('data-go')); }); });
@@ -109,7 +117,7 @@
   P._syncRoleUI = function () {
     var loggedIn = this.role === 'user' || this.role === 'admin';
     if (this.elMyCar) {
-      this.elMyCar.hidden = !loggedIn;
+      this.elMyCar.hidden = !loggedIn || !this.mySlot;
       if (this.mySlot) {
         this.elMyCar.title = 'Đi tới xe của bạn tại ô ' + this.mySlot.code + ' (' + this.mySlot.plate + ')';
       }
@@ -121,7 +129,7 @@
     this.elFloors.innerHTML = '';
     this.elBFloors.innerHTML = '';
     def.ids.forEach(function (id, k) {
-      var title = k === 0 ? 'Tầng ' + id + ' · Khu gửi xe THÁNG + Lane bypass vãng lai' : 'Tầng ' + id + ' · Khu gửi xe VÃNG LAI';
+      var title = id + ' · ' + def.liveFloors[k].zoneName;
       var b = document.createElement('button');
       b.className = 'p3r-pill'; b.textContent = id; b.setAttribute('data-k', k);
       b.title = title;
@@ -213,7 +221,9 @@
     this.scene.add(this.beacon);
 
     this._bindInput();
-    root.addEventListener('resize', function () { self._resize(); });
+    self._listen(root, 'resize', function () { self._resize(); });
+    this._observer = new ResizeObserver(function () { self._resize(); }); this._observer.observe(this.el);
+    this._cleanup.push(function () { self._observer.disconnect(); });
     this._resize();
   };
 
@@ -254,7 +264,7 @@
       if (self.mode === 'orbit') self.orbit.r = clamp(self.orbit.r * (1 + e.deltaY * 0.0012), 18, 260);
       else { self.camera.fov = clamp(self.camera.fov + e.deltaY * 0.03, 40, 90); self.camera.updateProjectionMatrix(); }
     }, { passive: false });
-    root.addEventListener('keydown', function (e) {
+    self._listen(root, 'keydown', function (e) {
       if (self.mode !== 'walk' || /INPUT|SELECT|TEXTAREA/.test((e.target.tagName || ''))) return;
       var k = e.key;
       if (k === 'ArrowLeft' || k === 'a') self.walk.yaw += 0.12;
@@ -290,6 +300,30 @@
       var hits = this.ray.intersectObjects(this.hotspots.filter(function (h) { return h.visible; }).map(function (h) { return h.userData.hit; }), false);
       if (hits.length) { var hs = this.hotspots[hits[0].object.userData.hotspot]; this._moveTo(hs.userData.nodeId); return; }
     }
+    var floor = this.lot.floors[this.mode === 'orbit' ? this.selFloor : this.floorIdx];
+    if (floor && this.onSlotSelect) {
+      var r = this.canvas.getBoundingClientRect();
+      var x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      var z = -((e.clientY - r.top) / r.height) * 2 + 1;
+      var ray = new T.Raycaster();
+      ray.setFromCamera(new T.Vector2(x, z), this.camera);
+      var plane = new T.Plane(new T.Vector3(0, 1, 0), -this.lot.ys[floor.k]);
+      var hit = ray.ray.intersectPlane(plane, new T.Vector3());
+      if (hit) {
+        var selected = null, best = Infinity;
+        floor.slots.forEach(function (slot) {
+          var dx = Math.abs(hit.x - slot.x), dz = Math.abs(hit.z - slot.zc);
+          if (dx <= 1.13 && dz <= 2.33 && dx + dz < best) { selected = slot; best = dx + dz; }
+        });
+        if (selected) {
+          this.targetSlot = selected;
+          this.beacon.position.set(selected.world.x, this.lot.ys[floor.k] + 0.03, selected.world.z);
+          this.beacon.visible = true;
+          this.onSlotSelect(selected.source);
+          return;
+        }
+      }
+    }
     var g = this._pickGate();
     if (g) g.forced = !g.forced;
   };
@@ -316,7 +350,8 @@
 
   P.setLot = function (id) {
     var self = this;
-    var def = LOTS.filter(function (l) { return l.id === id; })[0] || LOTS[0];
+    var def = this.definitions.find(function (l) { return String(l.id) === String(id); });
+    if (!def) return;
     if (this.lot) {
       this.scene.remove(this.lot.group);
       this.lot.group.traverse(function (o) { if (o.geometry && o.geometry.dispose) o.geometry.dispose(); });
@@ -332,7 +367,6 @@
     this.lot.floors.forEach(function (fl) {
       fl.slots.forEach(function (s) {
         s.floorIdx = fl.k;
-        s.isMine = false;
         if (s.status === 'OCCUPIED' && s.plate) {
           occ.push(s);
           var opt = document.createElement('option');
@@ -342,7 +376,7 @@
         }
       });
     });
-    this.mySlot = occ[2] || occ[0] || null;
+    this.mySlot = occ.find(function (slot) { return slot.isMine; }) || null;
     if (this.mySlot) this.mySlot.isMine = true;
     this.targetSlot = null;
     if (this.beacon) this.beacon.visible = false;
@@ -352,7 +386,7 @@
     var n = this.lot.entryNode;
     this._place(n, this.lot.pois && this.lot.pois.entry ? this.lot.pois.entry.yaw : Math.PI / 2, -0.04);
     this.orbit.target.set(0, this.lot.ys[0], 0);
-    this.orbit.r = def.type === 'underground' ? 128 : 138;
+    this.orbit.r = Math.max(120, I.layout.HX * 2.9);
     this._applyVisibility();
     this._syncFloorPills();
     if (this.mode === 'orbit') this._beginTransition();
@@ -373,7 +407,7 @@
       this.beacon.position.set(slot.world.x, this.lot.ys[k] + 0.03, slot.world.z);
       this.beacon.visible = true;
     }
-    var msg = (titlePrefix || 'Đang đi tới xe') + ' · Ô ' + slot.code + ' (' + slot.plate + ')…';
+    var msg = (titlePrefix || 'Đang đi tới xe') + ' · Ô ' + slot.code + (slot.plate ? ' (' + slot.plate + ')' : '');
     this._fadeTo(msg, function () {
       self._place(nd, yaw, -0.08);
     });
@@ -390,7 +424,7 @@
     this.elSearch.hidden = !show;
     this.elFindBtn.classList.toggle('on', show);
     if (show) {
-      this.elSearchMsg.textContent = 'Gợi ý: Nhập biển số (VD: ' + (this.mySlot ? this.mySlot.plate : '51G-789.22') + ') hoặc chọn từ danh sách.';
+      this.elSearchMsg.textContent = 'Tìm mã ô trong bãi; chỉ tìm được biển số khi tài khoản có quyền xem.';
       this.elSearchMsg.className = 'p3r-search-msg';
       setTimeout(function () { this.elSearchIn.focus(); }.bind(this), 40);
     }
@@ -406,10 +440,10 @@
     var found = null, partial = null;
     this.lot.floors.forEach(function (fl) {
       fl.slots.forEach(function (s) {
-        if (s.status !== 'OCCUPIED' || !s.plate) return;
+        if (!s.code) return;
         var np = normPlate(s.plate), nc = normPlate(s.code);
         if (np === q || nc === q) found = s;
-        else if (!partial && (np.indexOf(q) >= 0 || nc.indexOf(q) >= 0)) partial = s;
+        else if (!partial && ((np && np.indexOf(q) >= 0) || nc.indexOf(q) >= 0)) partial = s;
       });
     });
     var hit = found || partial;
@@ -418,8 +452,9 @@
       this.elSearchMsg.className = 'p3r-search-msg err';
       return null;
     }
-    this.elSearchMsg.textContent = 'Đã tìm thấy xe ' + hit.plate + ' (' + hit.vehicle + ') tại ô ' + hit.code + ' · Tầng ' + this.lot.def.ids[hit.floorIdx];
+    this.elSearchMsg.textContent = 'Ô ' + hit.code + ' · ' + STATUS_TXT[hit.status] + ' · ' + this.lot.def.ids[hit.floorIdx];
     this.elSearchMsg.className = 'p3r-search-msg ok';
+    if (this.onSlotSelect) this.onSlotSelect(hit.source);
     this._focusSlot(hit, '🔍 Tìm thấy xe');
     return hit;
   };
@@ -682,7 +717,7 @@
     var el = this.elWhere;
     if (this.mode !== 'walk') {
       var fl = this.lot.floors[this.selFloor];
-      var t0 = 'Toàn cảnh · cắt tầng ' + fl.id + ' (' + (fl.kind === 'MONTHLY' ? 'Khu xe tháng + Lane bypass vãng lai' : 'Khu xe vãng lai') + ' · ' + fl.slots.length + ' slots)';
+      var t0 = 'Toàn cảnh · cắt tầng ' + fl.id + ' (' + this.lot.def.liveFloors[this.selFloor].zoneName + ' · ' + fl.slots.length + ' slots)';
       if (el._k !== t0) { el.textContent = t0; el._k = t0; }
       return;
     }
@@ -694,7 +729,7 @@
   P.getState = function () {
     return { lot: this.lot && this.lot.def.id, floor: this.lot && this.lot.def.ids[this.mode === 'walk' ? this.floorIdx : this.selFloor], mode: this.mode, role: this.role };
   };
-  P.destroy = function () { this.destroyed = true; this.renderer.dispose(); this.el.innerHTML = ''; };
+  P.destroy = function () { this.destroyed = true; this._cleanup.forEach(function (fn) { fn(); }); this.renderer.dispose(); this.el.innerHTML = ''; };
 
   root.ParkingRender = ParkingRender;
   root.ParkingRender.ROLE_LABEL = ROLE_LABEL;

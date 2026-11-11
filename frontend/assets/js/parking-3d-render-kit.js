@@ -25,18 +25,7 @@
   /* ------------------------------------------------------------------ */
   /* DANH SÁCH BÃI MẪU                                                   */
   /* ------------------------------------------------------------------ */
-  var LOTS = [
-    { id: 'fptq9', name: 'Hầm ngầm FPT Q9 · 2 tầng (64 slot)', type: 'underground', ids: ['B1', 'B2'], seed: 9,
-      counts: [[8, 8, 8, 8], [8, 8, 8, 8]] },
-    { id: 'landmark81', name: 'Vincom Landmark 81 · 3 tầng hầm (82 slot)', type: 'underground', ids: ['B1', 'B2', 'B3'], seed: 81,
-      counts: [[6, 6, 6, 6], [7, 7, 7, 7], [7, 7, 8, 8]] },
-    { id: 'aeon', name: 'Aeon Mall Mega Hub · 4 tầng hầm (112 slot)', type: 'underground', ids: ['B1', 'B2', 'B3', 'B4'], seed: 112,
-      counts: [[6, 6, 6, 6], [7, 7, 7, 8], [7, 7, 7, 8], [8, 8, 7, 7]] },
-    { id: 'saigoncentre', name: 'Saigon Centre · bãi cao tầng 3 tầng (88 slot)', type: 'multistorey', ids: ['T1', 'T2', 'T3'], seed: 27,
-      counts: [[7, 7, 7, 7], [7, 7, 7, 7], [8, 8, 8, 8]] },
-    { id: 'crescent', name: 'Crescent Mall · bãi cao tầng 2 tầng (64 slot)', type: 'multistorey', ids: ['T1', 'T2'], seed: 45,
-      counts: [[8, 8, 8, 8], [8, 8, 8, 8]] }
-  ];
+  var LOTS = []; // Definitions are supplied exclusively by the Core scene API.
 
   var T; // alias THREE
   var M = {};          // materials
