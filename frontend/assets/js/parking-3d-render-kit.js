@@ -2,42 +2,28 @@
  * ==========================================================
  * SmartPark 3D Render (Three.js) - Hầm / Bãi đỗ xe cao tầng
  *
- * Dựng 3D thủ tục (procedural) theo các mẫu tham khảo:
- *   - Hầm ngầm Sketchfab "Underground Parking Lot": cột bê tông có chân sọc vàng-đen,
- *     dầm trần, ống gió/PCCC, đèn tuýp, vạch sơn, mũi tên chỉ hướng.
- *   - Booth check-in / check-out: trụ quẹt thẻ + thanh chắn (barrier) đỏ-trắng.
- *   - CGTrader "Parking Garage": vạch kẻ, lối thoát hiểm, bình chữa cháy, quạt thông gió,
- *     gờ giảm tốc, vạch qua đường cho người đi bộ.
- *   - Cụm thang máy sát tường + tiền sảnh kính trong suốt + bảng treo trần chỉ đường.
- *   - Bãi cao tầng (multi-storey): lan can, lam đứng mặt tiền, cột chu vi, ramp xe lên xuống.
- *
- * Bố cục 1 tầng: 100 slot = 4 hàng (A-D) x 25 slot, 3 lối đi xen giữa.
- * Mã slot: [Tầng]-[Hàng][Số], ví dụ B1-A01, B2-C20, L3-D25.
- * Khu XE THÁNG: slot 01-12 (48 slot) | Khu VÃNG LAI: slot 13-25 (52 slot),
- * ngăn cách bằng barrier ở từng lối đi.
- *
- * DỮ LIỆU: đây là bản DEMO dựng sẵn (xe/biển số sinh giả lập cố định bằng seed),
- * độc lập với viewer nối API (parking-3d-viewer.js).
+ * Đồ hoạ hầm ngầm & model xe nâng cấp theo mẫu CGTrader:
+ *   - Underground Parking Lot Interior: sàn bê tông đánh bóng có khe co giãn,
+ *     tường & cột sơn 2 tông (xám bê tông + dải trắng + chân xanh rêu đậm),
+ *     hệ thống dầm bê tông + ống thông gió tôn mạ kẽm vuông chạy vòng trên trần,
+ *     đèn máng huỳnh quang đôi, chặn lùi bánh xe (wheel-stop), tủ PCCC.
+ *   - Model xe ô tô low-poly hiện đại: thân xe vát khí động học (nắp capo dốc,
+ *     kính chắn gió nghiêng, cột A/B/C, mâm đúc hợp kim, đèn pha LED, đèn hậu, gương chiếu hậu).
  * ==========================================================
  */
 (function (root) {
   'use strict';
 
   /* ------------------------------------------------------------------ */
-  /* HẰNG SỐ CHUNG (mét) - kích thước bố cục chi tiết nằm trong floor.js */
+  /* HẰNG SỐ CHUNG (mét)                                                 */
   /* ------------------------------------------------------------------ */
   var FH = 4.8;          // cao độ giữa 2 tầng
-  var CLEAR = 4.2;       // chiều cao thông thủy (đã nâng trần)
+  var CLEAR = 4.2;       // chiều cao thông thủy
   var SLAB = 0.6;        // dày sàn
   var EYE = 1.65;
 
   /* ------------------------------------------------------------------ */
   /* DANH SÁCH BÃI MẪU                                                   */
-  /*  - ids[0] luôn là TẦNG ĐẦU TIÊN (B1 hoặc T1): có lối vào, check-in   */
-  /*    xe tháng, check-out xe tháng và lối ra. Hầm: B1 là tầng cao nhất; */
-  /*    cao tầng: T1 là tầng trệt, các tầng sau nằm phía trên.            */
-  /*  - counts: số slot của 4 dãy A-D ở từng tầng.                         */
-  /*  - Tầng đầu = chỉ xe THÁNG, các tầng sau = xe VÃNG LAI.               */
   /* ------------------------------------------------------------------ */
   var LOTS = [
     { id: 'fptq9', name: 'Hầm ngầm FPT Q9 · 2 tầng (64 slot)', type: 'underground', ids: ['B1', 'B2'], seed: 9,
@@ -85,29 +71,86 @@
     ctx.fillStyle = base; ctx.fillRect(0, 0, w, h);
     for (var i = 0; i < n; i++) {
       var v = Math.floor(128 + (Math.random() - 0.5) * amp);
-      ctx.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',0.18)';
+      ctx.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',0.14)';
       ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
     }
   }
 
   function initMaterials() {
     if (M.floor) return;
-    var tAsphalt = canvasTex(256, 256, function (c, w, h) {
-      noiseFill(c, w, h, '#5b6068', 120, 9000);
+    // Sàn bê tông mài bóng có khe co giãn (giống mẫu CGTrader Underground Parking Lot Interior)
+    var tAsphalt = canvasTex(512, 512, function (c, w, h) {
+      noiseFill(c, w, h, '#484d54', 90, 14000);
+      // Vệt bóng / mài mòn tự nhiên trên mặt bê tông
+      for (var k = 0; k < 28; k++) {
+        var gx = Math.random() * w, gy = Math.random() * h, gr = 35 + Math.random() * 80;
+        var g = c.createRadialGradient(gx, gy, 2, gx, gy, gr);
+        g.addColorStop(0, k % 2 ? 'rgba(95,103,112,0.18)' : 'rgba(32,35,40,0.22)');
+        g.addColorStop(1, 'rgba(72,77,84,0)');
+        c.fillStyle = g; c.fillRect(0, 0, w, h);
+      }
+      // Khe cắt co giãn bê tông (grid 2x2)
+      c.strokeStyle = 'rgba(24,27,31,0.65)'; c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(0, 1.5); c.lineTo(w, 1.5);
+      c.moveTo(0, h / 2); c.lineTo(w, h / 2);
+      c.moveTo(1.5, 0); c.lineTo(1.5, h);
+      c.moveTo(w / 2, 0); c.lineTo(w / 2, h);
+      c.stroke();
+      c.strokeStyle = 'rgba(120,128,138,0.22)'; c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(0, 4); c.lineTo(w, 4);
+      c.moveTo(4, 0); c.lineTo(4, h);
+      c.stroke();
     }, true);
+
+    // Bê tông cột & dầm
     var tConcrete = canvasTex(256, 256, function (c, w, h) {
-      noiseFill(c, w, h, '#b9bbbd', 90, 7000);
-      c.strokeStyle = 'rgba(70,72,75,0.35)'; c.lineWidth = 2;
+      noiseFill(c, w, h, '#6b7179', 70, 6500);
+      c.strokeStyle = 'rgba(38,42,46,0.42)'; c.lineWidth = 2;
       c.strokeRect(1, 1, w - 2, h - 2);
     }, true);
-    var tWall = canvasTex(256, 256, function (c, w, h) {
-      noiseFill(c, w, h, '#c4c6c8', 70, 6000);
-      c.strokeStyle = 'rgba(60,62,65,0.4)'; c.lineWidth = 2;
-      c.beginPath(); c.moveTo(0, 0); c.lineTo(0, h); c.moveTo(0, h - 1); c.lineTo(w, h - 1); c.stroke();
+
+    // Tường hầm 2 tông màu (trên bê tông xám, giữa kẻ sọc trắng, dưới xanh rêu/xám đá đậm như mẫu CGTrader)
+    var tWall = canvasTex(512, 512, function (c, w, h) {
+      noiseFill(c, w, h, '#6e747c', 65, 9000);
+      // Chân tường sơn xanh rêu đậm (wainscot)
+      c.fillStyle = '#223a35'; c.fillRect(0, Math.floor(h * 0.58), w, Math.ceil(h * 0.42));
+      for (var i = 0; i < 3200; i++) {
+        var v = Math.floor(40 + Math.random() * 30);
+        c.fillStyle = 'rgba(' + v + ',' + (v + 18) + ',' + (v + 14) + ',0.14)';
+        c.fillRect(Math.random() * w, h * 0.58 + Math.random() * h * 0.42, 2, 2);
+      }
+      // Dải sơn trắng phản quang phân tách
+      c.fillStyle = '#dfe5ec'; c.fillRect(0, Math.floor(h * 0.53), w, Math.floor(h * 0.055));
+      c.fillStyle = '#182421'; c.fillRect(0, Math.floor(h * 0.525), w, 3);
+      c.fillRect(0, Math.floor(h * 0.585), w, 3);
+      // Chân đế đen sát sàn
+      c.fillStyle = '#171a1e'; c.fillRect(0, Math.floor(h * 0.93), w, Math.ceil(h * 0.07));
+      // Khe ván khuôn đứng
+      c.strokeStyle = 'rgba(30,34,38,0.38)'; c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(1, 0); c.lineTo(1, h);
+      c.moveTo(w / 2, 0); c.lineTo(w / 2, h);
+      c.moveTo(0, Math.floor(h * 0.26)); c.lineTo(w, Math.floor(h * 0.26));
+      c.stroke();
     }, true);
+
     var tCeil = canvasTex(256, 256, function (c, w, h) {
-      noiseFill(c, w, h, '#a3a6a9', 60, 5000);
+      noiseFill(c, w, h, '#525860', 60, 6000);
+      c.strokeStyle = 'rgba(32,36,40,0.38)'; c.lineWidth = 2;
+      c.strokeRect(1, 1, w - 2, h - 2);
     }, true);
+
+    var tDuct = canvasTex(256, 128, function (c, w, h) {
+      var g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#9aa2ab'); g.addColorStop(0.5, '#b8c0c8'); g.addColorStop(1, '#7f8790');
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(45,50,56,0.55)'; c.lineWidth = 3;
+      c.strokeRect(2, 2, w - 4, h - 4);
+      c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, h); c.stroke();
+    }, true);
+
     var tHazard = canvasTex(128, 128, function (c, w, h) {
       c.fillStyle = '#f6c700'; c.fillRect(0, 0, w, h);
       c.fillStyle = '#16181b';
@@ -119,39 +162,44 @@
       for (var i = 0; i < 8; i++) { c.fillStyle = i % 2 ? '#ffffff' : '#d62828'; c.fillRect(i * 32, 0, 32, h); }
     }, true);
 
-    M.floor = new T.MeshStandardMaterial({ map: tAsphalt, roughness: 0.93, metalness: 0 });
-    M.slab = new T.MeshStandardMaterial({ map: tCeil, roughness: 0.95, side: T.DoubleSide });
-    M.conc = new T.MeshStandardMaterial({ map: tConcrete, roughness: 0.95 });
-    M.wall = new T.MeshStandardMaterial({ map: tWall, roughness: 0.95, side: T.DoubleSide });
-    M.ceil = new T.MeshStandardMaterial({ map: tCeil, roughness: 0.95, side: T.DoubleSide });
-    M.hazard = new T.MeshStandardMaterial({ map: tHazard, roughness: 0.8 });
-    M.plaster = new T.MeshStandardMaterial({ color: 0xe6e8ec, roughness: 0.85 });
-    M.steel = new T.MeshStandardMaterial({ color: 0xb8c0c8, roughness: 0.35, metalness: 0.8 });
-    M.dark = new T.MeshStandardMaterial({ color: 0x20242a, roughness: 0.6, metalness: 0.4 });
-    M.duct = new T.MeshStandardMaterial({ color: 0xa8adb3, roughness: 0.55, metalness: 0.5 });
-    M.pipeRed = new T.MeshStandardMaterial({ color: 0xc62828, roughness: 0.5, metalness: 0.3 });
-    M.pipeBlue = new T.MeshStandardMaterial({ color: 0x1e5bb8, roughness: 0.5, metalness: 0.3 });
-    M.tray = new T.MeshStandardMaterial({ color: 0x6b7078, roughness: 0.5, metalness: 0.6 });
-    M.lamp = new T.MeshBasicMaterial({ color: 0xfff4d6 });
+    M.floor = new T.MeshStandardMaterial({ map: tAsphalt, roughness: 0.52, metalness: 0.08 });
+    M.slab = new T.MeshStandardMaterial({ map: tCeil, roughness: 0.88, side: T.DoubleSide });
+    M.conc = new T.MeshStandardMaterial({ map: tConcrete, roughness: 0.85 });
+    M.beam = new T.MeshStandardMaterial({ map: tConcrete, color: 0x8d949c, roughness: 0.82 });
+    M.wall = new T.MeshStandardMaterial({ map: tWall, roughness: 0.82, side: T.DoubleSide });
+    M.pillarCol = new T.MeshStandardMaterial({ color: 0x223a35, roughness: 0.72 });
+    M.ceil = new T.MeshStandardMaterial({ map: tCeil, roughness: 0.9, side: T.DoubleSide });
+    M.hazard = new T.MeshStandardMaterial({ map: tHazard, roughness: 0.75 });
+    M.plaster = new T.MeshStandardMaterial({ color: 0xdce1e7, roughness: 0.8 });
+    M.steel = new T.MeshStandardMaterial({ color: 0xc2cad2, roughness: 0.28, metalness: 0.82 });
+    M.dark = new T.MeshStandardMaterial({ color: 0x1c2026, roughness: 0.55, metalness: 0.45 });
+    M.duct = new T.MeshStandardMaterial({ map: tDuct, roughness: 0.35, metalness: 0.62 });
+    M.pipeRed = new T.MeshStandardMaterial({ color: 0xc62828, roughness: 0.45, metalness: 0.35 });
+    M.pipeBlue = new T.MeshStandardMaterial({ color: 0x1e5bb8, roughness: 0.45, metalness: 0.35 });
+    M.tray = new T.MeshStandardMaterial({ color: 0x6b7078, roughness: 0.45, metalness: 0.6 });
+    M.lamp = new T.MeshBasicMaterial({ color: 0xf4f9ff });
     M.white = new T.MeshBasicMaterial({ color: 0xf4f4f0 });
     M.yellow = new T.MeshBasicMaterial({ color: 0xf2c200 });
     M.paintWhite = new T.MeshBasicMaterial({ color: 0xe8e8e2, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     M.paintYellow = new T.MeshBasicMaterial({ color: 0xf2c200, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     M.paintBlue = new T.MeshBasicMaterial({ color: 0x4aa3ff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     M.paintGreen = new T.MeshBasicMaterial({ color: 0x2fcf6a, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    M.glass = new T.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0.2, side: T.DoubleSide, depthWrite: false });
-    M.frame = new T.MeshStandardMaterial({ color: 0x8e979f, roughness: 0.4, metalness: 0.8 });
-    M.red = new T.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.5 });
+    M.glass = new T.MeshStandardMaterial({ color: 0xa8dcff, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.25, side: T.DoubleSide, depthWrite: false });
+    M.frame = new T.MeshStandardMaterial({ color: 0x7c858e, roughness: 0.38, metalness: 0.8 });
+    M.red = new T.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.48 });
     M.green = new T.MeshBasicMaterial({ color: 0x19c45a });
     M.exitGreen = new T.MeshBasicMaterial({ color: 0x0fa44a });
-    M.barrier = new T.MeshStandardMaterial({ map: tBarrier, roughness: 0.5 });
+    M.barrier = new T.MeshStandardMaterial({ map: tBarrier, roughness: 0.45 });
     M.cabin = new T.MeshStandardMaterial({ color: 0xfff1cf, emissive: 0xffe9b5, emissiveIntensity: 0.9, roughness: 0.6 });
     M.glow = new T.MeshBasicMaterial({ color: 0xffffff });
     M.sky = new T.MeshBasicMaterial({ color: 0xcfe8ff, side: T.DoubleSide });
-    M.car = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.08 });
-    M.carGlass = new T.MeshStandardMaterial({ color: 0x1b2430, roughness: 0.25, metalness: 0.25 });
-    M.tire = new T.MeshStandardMaterial({ color: 0x15171a, roughness: 0.9 });
-    M.tail = new T.MeshBasicMaterial({ color: 0xff3030 });
+    M.car = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.28, metalness: 0.22 });
+    M.carGlass = new T.MeshStandardMaterial({ color: 0x131c27, roughness: 0.14, metalness: 0.38 });
+    M.carGrille = new T.MeshStandardMaterial({ color: 0x16191e, roughness: 0.6, metalness: 0.3 });
+    M.carRim = new T.MeshStandardMaterial({ color: 0xd8dee6, roughness: 0.25, metalness: 0.82 });
+    M.carHead = new T.MeshBasicMaterial({ color: 0xf4f9ff });
+    M.tire = new T.MeshStandardMaterial({ color: 0x15171a, roughness: 0.88 });
+    M.tail = new T.MeshBasicMaterial({ color: 0xff2828 });
     M.plate = new T.MeshBasicMaterial({ color: 0xfafafa });
     M.cone = new T.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.6 });
     M.ground = new T.MeshStandardMaterial({ color: 0x2c3138, roughness: 1 });
@@ -183,7 +231,7 @@
   }
   function floorRect(parent, x0, x1, z0, z1, y, withSlab) {
     var w = x1 - x0, d = z1 - z0;
-    var f = texPlane(w, d, M.floor, w / 4, d / 4);
+    var f = texPlane(w, d, M.floor, w / 5, d / 5);
     f.rotation.x = -Math.PI / 2;
     f.position.set((x0 + x1) / 2, y + 0.002, (z0 + z1) / 2);
     parent.add(f);
@@ -192,7 +240,8 @@
   function wallSeg(parent, ax, az, bx, bz, y0, y1, mat) {
     var dx = bx - ax, dz = bz - az, len = Math.sqrt(dx * dx + dz * dz), h = y1 - y0;
     if (len < 0.01 || h < 0.01) return null;
-    var m = texPlane(len, h, mat || M.wall, len / 3, h / 3);
+    var vRep = (y0 <= 0.05 && y1 >= CLEAR - 0.2) ? 1 : h / 3;
+    var m = texPlane(len, h, mat || M.wall, len / 4, vRep);
     m.position.set((ax + bx) / 2, (y0 + y1) / 2, (az + bz) / 2);
     m.rotation.y = Math.atan2(-dz, dx);
     parent.add(m);
@@ -245,7 +294,7 @@
       c.fillStyle = fg; c.textAlign = 'center'; c.textBaseline = 'middle';
       var n = lines.length, lh = (h - 20) / n;
       lines.forEach(function (ln, i) {
-        var size = Math.floor(lh * (n > 1 && i > 0 ? 0.55 : 0.68));
+        var size = Math.floor(lh * (n > 1 && i > 0 ? 0.54 : 0.66));
         c.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
         c.fillText(ln, w / 2, 10 + lh * (i + 0.5));
       });
@@ -261,7 +310,7 @@
   /** Bảng treo trần 2 mặt. axis 'x': pháp tuyến ±x; 'z': pháp tuyến ±z. */
   function hangSign(parent, x, z, w, h, texPos, texNeg, axis, drop) {
     var g = new T.Group();
-    var yc = CLEAR - (drop == null ? 0.55 : drop) - h / 2;
+    var yc = CLEAR - (drop == null ? 0.62 : drop) - h / 2;
     var thick = 0.06;
     box(g, axis === 'x' ? thick : w, h, axis === 'x' ? w : thick, M.dark, 0, yc, 0);
     [-0.35, 0.35].forEach(function (k) {
@@ -305,33 +354,155 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* XE Ô TÔ (InstancedMesh)                                             */
+  /* XE Ô TÔ 3D LOW-POLY HIỆN ĐẠI (theo mẫu CGTrader Parking Lot)         */
   /* ------------------------------------------------------------------ */
-  var CAR_COLORS = [0xe8e8ea, 0x1d1f23, 0x9aa1ab, 0xc0392b, 0x2d5fa8, 0x2f7d5b, 0xd4b13a, 0x6b4f3a, 0x3b3f46, 0xf2f2f2];
+  var CAR_COLORS = [
+    0xf2f4f7, // trắng ngọc trai
+    0x1b1e24, // đen bóng
+    0x8e96a0, // bạc kim loại
+    0xc8232c, // đỏ thể thao
+    0x1d56a5, // xanh dương đậm
+    0x276b4c, // xanh lục bảo
+    0xd99b16, // vàng cát / cam vàng
+    0x46515e, // xám titan
+    0x6d3b2e, // nâu đồng
+    0x2c82c9  // xanh dương sáng
+  ];
+
+  function profileGeo(pts, width, bevel) {
+    var sh = new T.Shape();
+    sh.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) sh.lineTo(pts[i][0], pts[i][1]);
+    sh.closePath();
+    var b = bevel == null ? 0.06 : bevel;
+    var g = new T.ExtrudeGeometry(sh, {
+      depth: width - b * 2,
+      bevelEnabled: b > 0,
+      bevelThickness: b,
+      bevelSize: b * 0.7,
+      bevelSegments: 2,
+      curveSegments: 4
+    });
+    // Shape plane (X=z_car, Y=y_car), extrude along Z -> rotate so extrude is along X
+    g.rotateY(Math.PI / 2);
+    g.computeBoundingBox();
+    var cx = (g.boundingBox.min.x + g.boundingBox.max.x) / 2;
+    g.translate(-cx, 0, 0);
+    g.computeVertexNormals();
+    return g;
+  }
+
   function buildCars(parent, slots, y) {
     var occ = slots.filter(function (s) { return s.status === 'OCCUPIED'; });
     if (!occ.length) return;
-    var bodyG = getGeo('carBody', function () { var g = new T.BoxGeometry(1.8, 0.62, 4.4); g.translate(0, 0.62, 0); return g; });
-    var cabG = getGeo('carCab', function () { var g = new T.BoxGeometry(1.58, 0.55, 2.35); g.translate(0, 1.2, -0.25); return g; });
-    var wheelG = getGeo('carWheel', function () { var g = new T.CylinderGeometry(0.34, 0.34, 0.24, 14); g.rotateZ(Math.PI / 2); return g; });
-    var tailG = getGeo('carTail', function () { return new T.BoxGeometry(0.42, 0.14, 0.05); });
-    var plateG = getGeo('carPlate', function () { return new T.BoxGeometry(0.5, 0.12, 0.03); });
-    var bodies = [], cabs = [], wheels = [], tails = [], plates = [];
-    occ.forEach(function (s) {
-      var ry = s.face > 0 ? Math.PI : 0;
-      var sin = Math.sin(ry), cos = Math.cos(ry);
-      function toW(lx, lz) { return { x: s.x + lx * cos + lz * sin, z: s.z - lx * sin + lz * cos }; }
-      bodies.push({ x: s.x, y: y, z: s.z, ry: ry, color: s.carColor });
-      cabs.push({ x: s.x, y: y, z: s.z, ry: ry, color: 0x1b2430 });
-      [[-0.88, 1.35], [0.88, 1.35], [-0.88, -1.35], [0.88, -1.35]].forEach(function (wp) {
-        var p = toW(wp[0], wp[1]); wheels.push({ x: p.x, y: y + 0.34, z: p.z, ry: ry });
-      });
-      [-0.6, 0.6].forEach(function (tx) { var p = toW(tx, -2.2); tails.push({ x: p.x, y: y + 0.85, z: p.z, ry: ry }); });
-      var pp = toW(0, -2.21); plates.push({ x: pp.x, y: y + 0.6, z: pp.z, ry: ry });
+
+    // Thân dưới + mui xe + cốp vát khí động học (mũi xe tại +z = +2.22, đuôi xe tại -z = -2.22)
+    var bodyG = getGeo('carBodyV2', function () {
+      return profileGeo([
+        [-2.20, 0.28],
+        [-2.14, 0.22],
+        [ 2.12, 0.22],
+        [ 2.24, 0.30],
+        [ 2.22, 0.68],
+        [ 2.02, 0.78],
+        [ 0.98, 0.88],
+        [-1.65, 0.90],
+        [-2.16, 0.88],
+        [-2.22, 0.66]
+      ], 1.84, 0.07);
     });
+
+    // Khung mui + cột A/B/C đồng màu sơn xe
+    var roofG = getGeo('carRoofV2', function () {
+      return profileGeo([
+        [-1.62, 0.86],
+        [ 0.92, 0.86],
+        [ 0.32, 1.42],
+        [-1.08, 1.42]
+      ], 1.54, 0.04);
+    });
+
+    // Khối kính cabin màu đen xanh (nhô nhẹ ra 2 bên và trước/sau để tạo kính chắn gió + cửa sổ bên)
+    var cabG = getGeo('carCabV2', function () {
+      return profileGeo([
+        [-1.66, 0.88],
+        [ 0.96, 0.88],
+        [ 0.35, 1.38],
+        [-1.12, 1.38]
+      ], 1.58, 0.02);
+    });
+
+    // Cột B chia cửa trước / cửa sau
+    var bPillarG = getGeo('carBPillarV2', function () {
+      var g = new T.BoxGeometry(1.60, 0.48, 0.10);
+      g.translate(0, 1.13, -0.28);
+      return g;
+    });
+
+    var wheelG = getGeo('carWheelV2', function () {
+      var g = new T.CylinderGeometry(0.35, 0.35, 0.24, 18);
+      g.rotateZ(Math.PI / 2);
+      return g;
+    });
+    var rimG = getGeo('carRimV2', function () {
+      var g = new T.CylinderGeometry(0.22, 0.22, 0.255, 12);
+      g.rotateZ(Math.PI / 2);
+      return g;
+    });
+    var grilleG = getGeo('carGrilleV2', function () { return new T.BoxGeometry(0.96, 0.22, 0.05); });
+    var headG = getGeo('carHeadV2', function () { return new T.BoxGeometry(0.34, 0.12, 0.06); });
+    var tailG = getGeo('carTailV2', function () { return new T.BoxGeometry(0.46, 0.13, 0.05); });
+    var plateG = getGeo('carPlateV2', function () { return new T.BoxGeometry(0.48, 0.12, 0.03); });
+    var mirrorG = getGeo('carMirrorV2', function () { return new T.BoxGeometry(0.18, 0.11, 0.14); });
+
+    var bodies = [], roofs = [], cabs = [], bPillars = [], wheels = [], rims = [], grilles = [], heads = [], tails = [], plates = [], mirrors = [];
+    occ.forEach(function (s, idx) {
+      // Mũi xe hướng ra lối đi: face > 0 là lối đi ở +z (ry = 0), face < 0 là lối đi ở -z (ry = PI)
+      var ry = s.face > 0 ? 0 : Math.PI;
+      var sin = Math.sin(ry), cos = Math.cos(ry);
+      // Cỡ xe biến thiên nhẹ (Sedan / SUV / Crossover)
+      var isSuv = (idx + s.idx) % 3 === 0;
+      var sy = isSuv ? 1.09 : 1.0;
+      function toW(lx, lz) { return { x: s.x + lx * cos + lz * sin, z: s.z - lx * sin + lz * cos }; }
+
+      bodies.push({ x: s.x, y: y, z: s.z, ry: ry, sy: sy, color: s.carColor });
+      roofs.push({ x: s.x, y: y, z: s.z, ry: ry, sy: sy, color: s.carColor });
+      cabs.push({ x: s.x, y: y, z: s.z, ry: ry, sy: sy, color: 0x131c27 });
+      bPillars.push({ x: s.x, y: y, z: s.z, ry: ry, sy: sy, color: s.carColor });
+
+      [[-0.86, 1.34], [0.86, 1.34], [-0.86, -1.34], [0.86, -1.34]].forEach(function (wp) {
+        var p = toW(wp[0], wp[1]);
+        wheels.push({ x: p.x, y: y + 0.35, z: p.z, ry: ry });
+        rims.push({ x: p.x, y: y + 0.35, z: p.z, ry: ry });
+      });
+      [-0.88, 0.88].forEach(function (mx) {
+        var pm = toW(mx, 0.62);
+        mirrors.push({ x: pm.x, y: y + 0.94 * sy, z: pm.z, ry: ry, color: s.carColor });
+      });
+      var pg = toW(0, 2.23);
+      grilles.push({ x: pg.x, y: y + 0.48 * sy, z: pg.z, ry: ry });
+      [-0.64, 0.64].forEach(function (hx) {
+        var ph = toW(hx, 2.21);
+        heads.push({ x: ph.x, y: y + 0.62 * sy, z: ph.z, ry: ry });
+      });
+      [-0.62, 0.62].forEach(function (tx) {
+        var pt = toW(tx, -2.21);
+        tails.push({ x: pt.x, y: y + 0.72 * sy, z: pt.z, ry: ry });
+      });
+      var ppRear = toW(0, -2.22), ppFront = toW(0, 2.24);
+      plates.push({ x: ppRear.x, y: y + 0.48 * sy, z: ppRear.z, ry: ry });
+      plates.push({ x: ppFront.x, y: y + 0.32 * sy, z: ppFront.z, ry: ry });
+    });
+
     inst(parent, bodyG, M.car, bodies);
+    inst(parent, roofG, M.car, roofs);
     inst(parent, cabG, M.carGlass, cabs);
+    inst(parent, bPillarG, M.car, bPillars);
+    inst(parent, mirrorG, M.car, mirrors);
     inst(parent, wheelG, M.tire, wheels);
+    inst(parent, rimG, M.carRim, rims);
+    inst(parent, grilleG, M.carGrille, grilles);
+    inst(parent, headG, M.carHead, heads);
     inst(parent, tailG, M.tail, tails);
     inst(parent, plateG, M.plate, plates);
   }

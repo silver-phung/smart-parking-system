@@ -123,11 +123,11 @@
     this.scene.background = new T.Color(0x0a0f17);
     this.camera = new T.PerspectiveCamera(68, 1, 0.1, 700);
     this.camera.rotation.order = 'YXZ';
-    this.scene.add(new T.AmbientLight(0xffffff, 0.62));
-    this.scene.add(new T.HemisphereLight(0xe6eeff, 0x4a4f57, 0.75));
-    this.torch = new T.PointLight(0xfff0d6, 0.55, 42, 1.6);
+    this.scene.add(new T.AmbientLight(0xdce6f2, 0.56));
+    this.scene.add(new T.HemisphereLight(0xeef4ff, 0x2a313a, 0.72));
+    this.torch = new T.PointLight(0xfff6e5, 0.68, 45, 1.5);
     this.scene.add(this.torch);
-    this.sun = new T.DirectionalLight(0xffffff, 0.0); this.sun.position.set(40, 90, 30); this.scene.add(this.sun);
+    this.sun = new T.DirectionalLight(0xffffff, 0.28); this.sun.position.set(35, 85, 28); this.scene.add(this.sun);
     this.ray = new T.Raycaster(); this.mouse = new T.Vector2();
     this.dummy = new T.Object3D();
     this.dummy.rotation.order = 'YXZ';
@@ -283,10 +283,10 @@
         fl.ceil.visible = false;
       }
     });
-    this.sun.intensity = this.mode === 'orbit' ? 0.75 : 0;
-    this.torch.intensity = this.mode === 'walk' ? 0.55 : 0;
-    this.scene.fog = this.mode === 'walk' ? new T.Fog(0x0a0f17, 58, 195) : null;
-    this.scene.background.set(this.mode === 'walk' ? 0x0a0f17 : 0x1a2433);
+    this.sun.intensity = this.mode === 'orbit' ? 0.78 : 0.28;
+    this.torch.intensity = this.mode === 'walk' ? 0.68 : 0;
+    this.scene.fog = this.mode === 'walk' ? new T.Fog(0x10151c, 55, 185) : null;
+    this.scene.background.set(this.mode === 'walk' ? 0x10151c : 0x161f2c);
   };
   P.setMode = function (m) {
     if (m === this.mode) return;
@@ -414,8 +414,8 @@
       g.redM.color.setHex(g.open ? 0x4a1010 : 0xff2a2a);
     });
     this.lot.cores.forEach(function (c) {
-      var d = Math.hypot(cp.x - c.pos.x, cp.z - c.pos.z) < 6.0 && Math.abs(cp.y - c.pos.y) < 4 && walk;
-      c.open += ((d ? 1 : 0) - c.open) * 0.09;
+      var d = Math.hypot(cp.x - c.pos.x, cp.z - c.pos.z) < 3.8 && Math.abs(cp.y - c.pos.y) < 4 && walk;
+      c.open += ((d ? 1 : 0) - c.open) * 0.10;
       if (c.slide) {
         c.slide.forEach(function (s) { s.mesh.position.x = s.base + s.dir * s.dist * c.open; });
       }
@@ -471,10 +471,11 @@
     }
   };
 
-  /* Nút Lên / Xuống chỉ hiện khi đứng trong khu vực phòng thang máy */
+  /* Nút Lên / Xuống CHỈ hiện khi người dùng đã đi VÀO BÊN TRONG cánh cửa phòng thang máy */
   P._nearCore = function () {
     if (this.mode !== 'walk' || this.lifting || this.tween) return null;
-    var cp = this.walk.pos, best = null, bd = 5.4, self = this;
+    if (!this.node || this.node.type !== 'core') return null;
+    var cp = this.walk.pos, best = null, bd = 2.0, self = this;
     this.lot.cores.forEach(function (c) {
       if (c.floorIdx !== self.floorIdx) return;
       var d = Math.hypot(cp.x - c.pos.x, cp.z - c.pos.z);
