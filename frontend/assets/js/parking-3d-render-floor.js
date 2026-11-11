@@ -35,12 +35,15 @@
   var XR = XE + ECL;                                             // gờ đỏ ngăn cách (x = +13.2)
   var XY = XR + 2.1, XB = XR + 4.2, XG = XR + 6.3;               // làn vàng (15.3), cọc tiêu (17.4), làn xanh lá (19.5)
 
-  // Dốc chữ U gập đôi (tiết kiệm diện tích theo hình 14)
-  var RL = 12.5;                                                 // chiều dài đoạn dốc nghiêng (12.5m thay vì 24m)
+  // Dốc chữ U gập đôi (tiết kiệm diện tích theo hình 14):
+  //   - Làn TRÁI (TRONG, sát tường ngăn giữa z = -14.8): hướng TỪ TRÊN XUỐNG (ZD1 = -17.2 -> ZD2 = -12.4)
+  //   - Làn PHẢI (NGOÀI, sát tường bao ngoài):           hướng TỪ DƯỚI LÊN   (ZU2 = -8.6  -> ZU1 = -21.0)
+  var RL = 12.5;                                                 // chiều dài đoạn dốc nghiêng (12.5m)
   var Z_RAMP_C = -14.8;                                          // tâm vòng cung chữ U
   var R_OUT = 8.2, R_DIV = 4.3, R_IN = 0.6;                      // bán kính ngoài, vạch phân làn giữa, trụ tâm
-  var ZD1 = -21.0, ZU1 = -17.2;                                  // nhánh Nam: làn xuống (-21.0) & làn lên (-17.2)
-  var ZD2 = -8.6,  ZU2 = -12.4;                                  // nhánh Bắc: làn xuống vào B2 (-8.6) & làn từ B2 lên (-12.4)
+  var ZD1 = -17.2, ZU1 = -21.0;                                  // nhánh Nam: Trong (-17.2) từ trên xuống, Ngoài (-21.0) từ dưới lên
+  var ZD2 = -12.4, ZU2 = -8.6;                                   // nhánh Bắc: Trong (-12.4) từ trên xuống, Ngoài (-8.6) từ dưới lên
+  var Z_ENTRY = -18.2;                                           // làn xe vào từ dốc mặt đất ở phía Tây B1
   var XT = HX + RL + R_OUT;                                      // mép Đông ngoài cùng của vòng cung chữ U
   var ZEG = 16.5, ZEY = 20.5;                                    // làn ra mặt đất xanh lá / vàng
 
@@ -361,7 +364,7 @@
     /* ---- tường bao sảnh (mở cửa tại các đầu dốc) ---- */
     wallLine(ctx, 'x', -HZ, -HX, HX, [], true);
     wallLine(ctx, 'x',  HZ, -HX, HX, [], true);
-    wallLine(ctx, 'z', -HX, -HZ, HZ, monthly ? [{ c: ZD1, w: 5.0, h: 3.8 }] : [], true);
+    wallLine(ctx, 'z', -HX, -HZ, HZ, monthly ? [{ c: Z_ENTRY, w: 5.2, h: 3.8 }] : [], true);
 
     var eGaps = [];
     // Cửa nhánh Nam (dốc xuống từ tầng k sang k+1)
@@ -475,11 +478,11 @@
       lines.push({ x: XY - 1.5, y: 0.012, z: 17.5, sx: 0.14, sy: 1, sz: 6.0, color: 0xf2c200 });
       lines.push({ x: XG + 1.5, y: 0.012, z: 0.5,  sx: 0.14, sy: 1, sz: 34.0, color: 0x2fcf6a });
 
-      // Mũi tên XANH DƯƠNG: làn bypass xe vãng lai đi thẳng xuống dốc B2
-      for (var ax = -HX + 3; ax <= HX - 2; ax += 6.5) arrowC(g, ax, 0, ZD1, ROT_E, '#2d8cff', 1.25, 2.5);
+      // Mũi tên XANH DƯƠNG: làn bypass xe vãng lai đi thẳng vào làn TRONG (ZD1 = -17.2) để xuống dốc B2
+      for (var ax = -HX + 3; ax <= HX - 3; ax += 6.5) arrowC(g, ax, 0, ZD1, ROT_E, '#2d8cff', 1.2, 2.4);
       // Mũi tên VÀNG: nhánh rẽ phải vào Check-in xe tháng
-      arrowC(g, BX - 2.2, 0, ZD1 + 1.1, ROT_E, '#f2c200', 1.0, 2.0);
-      arrowC(g, BX, 0, -16.8, ROT_N, '#f2c200', 1.1, 2.2);
+      arrowC(g, BX - 2.2, 0, ZD1 + 0.8, ROT_E, '#f2c200', 1.0, 2.0);
+      arrowC(g, BX, 0, -16.2, ROT_N, '#f2c200', 1.1, 2.2);
       arrowC(g, BX, 0, -10.2, ROT_N, '#f2c200', 1.1, 2.2);
       floorText(g, BX, -9.8, ROT_N, 3.0, 1.3, ['XE THÁNG'], '#0b5cad', '#ffffff');
       floorText(g, -3, ZD1, ROT_E, 4.4, 1.5, ['LÀN VÃNG LAI ➔ ' + (def.ids[1] || 'B2')], '#145a32', '#ffffff');
@@ -491,7 +494,7 @@
       arrowC(g, XY + 1.5, 0, ZEY, ROT_E, '#f2c200', 1.15, 2.3);
       arrowC(g, HX - 1.8, 0, ZEY, ROT_E, '#f2c200', 1.15, 2.3);
 
-      // Mũi tên XANH LÁ: xe vãng lai từ dốc B2 (ZU1 = -17.2) đi thẳng làn phải (XG) ra dốc mặt đất
+      // Mũi tên XANH LÁ: xe vãng lai từ làn NGOÀI dốc B2 (ZU1 = -21.0) đi thẳng làn phải (XG) ra dốc mặt đất
       arrowC(g, HX - 1.8, 0, ZU1, ROT_W, '#2fcf6a', 1.15, 2.3);
       for (var gz = -13; gz <= 13; gz += 6.5) arrowC(g, XG, 0, gz, ROT_N, '#2fcf6a', 1.15, 2.3);
       arrowC(g, XG + 1.2, 0, ZEG, ROT_E, '#2fcf6a', 1.15, 2.3);
@@ -506,17 +509,15 @@
       [-2, 9].forEach(function (z) { U.floorArrow(g, XEC, 0, z, ROT_N); });
     } else {
       /* ================================================================== */
-      /*  PHÂN LUỒNG CÁC TẦNG VÃNG LAI (B2, B3, B4) - MẠCH LẠC 1 CHIỀU       */
+      /*  PHÂN LUỒNG CÁC TẦNG VÃNG LAI (B2, B3, B4):                        */
+      /*   - Làn TRÁI / TRONG (ZD2 = -12.4): từ Trên Xuống vào B2           */
+      /*   - Làn PHẢI / NGOÀI (ZU2 = -8.6):  từ Dưới Lên B1 (có Booth B2)   */
       /* ================================================================== */
-      // Xe từ dốc chữ U tầng trên đi vào tại nhánh Bắc (ZD2 = -8.6, hướng Tây -x):
-      //   - Đi thẳng vào Lối đi 1 (z = -7.0) hoặc rẽ lên Lối đi 2, 3 qua trục Tây/Đông
-      //   - Nếu còn tầng dưới (k < n - 1): rẽ trái theo làn Đông (XG) xuống nhánh Nam (ZD1 = -21.0) để xuống tầng tiếp theo!
-      // Khi xe ra: gom về làn ra phía Nam (ZU2 = -12.4, hướng Đông +x) -> qua Booth Check-out (ở B2) -> lên dốc chữ U!
+      // Gờ đỏ phân cách giữa làn Phải/Ngoài đi lên (ZU2 = -8.6) và làn Trái/Trong đi xuống (ZD2 = -12.4)
+      b3(g, 8.2, 0.24, 0.36, M.kerbRed, HX - 4.1, 0.12, -10.5);
 
-      // Gờ phân cách giữa làn vào (ZD2 = -8.6) và làn ra Check-out (ZU2 = -12.4) ở cửa dốc phía Đông
-      b3(g, 8.5, 0.24, 0.36, M.kerbRed, HX - 4.25, 0.12, -10.5);
-
-      // Tại B2 (k === 1): đặt Booth CHECK-OUT Vãng lai nằm ngang ngay trước cửa dốc lên B1 (đúng vị trí hình 14)
+      // Tại B2 (k === 1): đặt Booth CHECK-OUT Vãng lai ở làn BÊN PHẢI / NGOÀI (ZU2 = -8.6),
+      //   side = 1 để cabin booth & máy quẹt thẻ nằm gọn ở lề phải (z = -6.35), thanh chắn vươn qua làn phải!
       if (k === 1) {
         buildGate(g, fl, {
           kind: 'checkout-v', x: HX - 4.2, z: ZU2, dir: [1, 0], side: 1,
@@ -525,23 +526,20 @@
         });
       }
 
-      // Mũi tên XANH DƯƠNG: luồng xe vào từ dốc chữ U (ZD2 = -8.6)
+      // Mũi tên XANH DƯƠNG: luồng xe từ Trên Xuống theo làn TRÁI / TRONG (ZD2 = -12.4, hướng Tây -x vào B2)
       arrowC(g, HX - 2.2, 0, ZD2, ROT_W, '#2d8cff', 1.15, 2.3);
-      arrowC(g, XEC,      0, ZD2 + 1.0, ROT_W, '#2d8cff', 1.15, 2.3);
+      arrowC(g, XEC,      0, ZD2, ROT_W, '#2d8cff', 1.15, 2.3);
+      arrowC(g, -4.0,     0, -15.5, ROT_W, '#2d8cff', 1.1, 2.2);
       if (k < n - 1) {
-        // Nhánh rẽ xuống tầng tiếp theo (k + 1) ở làn ZD1 = -21.0
-        arrowC(g, XG, 0, -16.5, ROT_S, '#2d8cff', 1.1, 2.2);
+        // Nhánh rẽ xuống tầng tiếp theo (k + 1) ở làn TRONG nhánh Nam (ZD1 = -17.2)
+        arrowC(g, XG, 0, -15.2, ROT_S, '#2d8cff', 1.1, 2.2);
         arrowC(g, HX - 2.5, 0, ZD1, ROT_E, '#2d8cff', 1.15, 2.3);
         floorText(g, HX - 6.5, ZD1, ROT_E, 4.0, 1.4, ['XUỐNG ' + def.ids[k + 1] + ' ➔'], '#0b5cad', '#ffffff');
-      }
-      if (k < n - 1) {
-        // Xe từ tầng dưới (k + 1) đi lên tại ZU1 = -17.2 nhập vào làn ra ZU2 = -12.4
+        // Xe từ tầng dưới (k + 1) đi lên tại làn NGOÀI nhánh Nam (ZU1 = -21.0)
         arrowC(g, HX - 2.2, 0, ZU1, ROT_W, '#2fcf6a', 1.1, 2.2);
       }
 
-      // Mũi tên XANH LÁ: luồng xe ra về phía Booth Check-out / dốc lên (ZU2 = -12.4)
-      arrowC(g, BX, 0, -16.0, ROT_S, '#2fcf6a', 1.1, 2.2);
-      arrowC(g, -4, 0, -17.2, ROT_E, '#2fcf6a', 1.1, 2.2);
+      // Mũi tên XANH LÁ: luồng xe đi từ Dưới Lên theo làn PHẢI / NGOÀI (ZU2 = -8.6, hướng Đông +x lên B1)
       arrowC(g, XEC - 2.5, 0, ZU2, ROT_E, '#2fcf6a', 1.15, 2.3);
       arrowC(g, HX - 1.5,  0, ZU2, ROT_E, '#2fcf6a', 1.15, 2.3);
 
@@ -683,26 +681,31 @@
       hang(HX - 2.5, (ZEG + ZEY) / 2, 3.2, 0.88, null, S(['LỐI RA MẶT ĐẤT ➔', '2 làn phân cách cọc tiêu'], GREEN, 540, 155), 'x', 0.35);
     } else {
       // Các tầng vãng lai (B2, B3, B4):
-      // Ngay cửa vào từ dốc chữ U (nhánh Bắc ZD2 = -8.6): hiển thị số chỗ trống tầng hiện tại & hướng xuống tầng tiếp theo
-      hang(HX - 4.0, ZD2, 3.4, 0.96,
-        S(['TẦNG ' + ids[k] + ' · VÃNG LAI', availLine(k)], avail(k), 580, 170),
-        null, 'x', 0.35);
+      // Ngay cửa vào từ dốc chữ U (làn Trái/Trong ZD2 = -12.4): mặt hướng dốc báo số chỗ trống, mặt hướng B2 chỉ dẫn làn lên/xuống
+      hang(HX - 2.5, -10.5, 3.4, 0.88,
+        S(['TẦNG ' + ids[k] + ' · VÃNG LAI', availLine(k)], avail(k), 580, 165),
+        S(['◀ TRÁI: XUỐNG ' + ids[k], 'PHẢI: LÊN ' + ids[k - 1] + ' ▶'], AMB, 600, 165),
+        'x', 0.55);
       if (k < n - 1) {
         hang(XG, -14.8, 3.3, 0.92,
           S(['XUỐNG ' + ids[k + 1] + ' ▼', ids[k + 1] + ': ' + availLine(k + 1)], avail(k + 1), 580, 165),
           null, 'z', 0.35);
       }
-      // Bảng chỉ dẫn lối ra lên mặt đất trong các lối đi B2+
+      // Bảng chỉ dẫn lối ra lên mặt đất trong các lối đi B2+ (không treo chắn trước bảng Booth Check-out)
       hang(0.0, AZ[1], 2.9, 0.78, null, S(['LỐI RA (LÊN ' + ids[0] + ') ➔', k === 1 ? 'Qua Booth Check-out B2' : 'Lên dốc ' + ids[k - 1]], RED, 520, 145), 'x', 0.42);
-      hang(XEC - 2.0, ZU2, 3.1, 0.85, null, S([k === 1 ? 'CHECK-OUT VÃNG LAI ➔' : 'LÊN TẦNG ' + ids[k - 1] + ' ➔', 'Làn lên ' + ids[k - 1]], RED, 540, 150), 'x', 0.38);
+      if (k > 1) {
+        hang(XEC - 2.0, ZU2, 3.1, 0.85, null, S(['LÊN TẦNG ' + ids[k - 1] + ' ➔', 'Đi làn phải (ngoài)'], RED, 540, 150), 'x', 0.38);
+      }
     }
   }
 
   /* ================================================================== */
-  /*  DỐC CHỮ U GẬP ĐÔI (U-TURN SWITCHBACK RAMP - THEO HÌNH 14)           */
+  /*  DỐC CHỮ U GẬP ĐÔI (U-TURN SWITCHBACK RAMP - THEO HÌNH 14):          */
+  /*   - Dốc bên TRÁI (TRONG): hướng TỪ TRÊN XUỐNG (B1 -> B2)            */
+  /*   - Dốc bên PHẢI (NGOÀI): hướng TỪ DƯỚI LÊN   (B2 -> B1)            */
   /* ================================================================== */
   function addRamp(lot, j) {
-    var fl = lot.floors[j], yBase = fl.y;
+    var fl = lot.floors[j];
     var yTop = 0;                                         // cao độ sàn tầng j (tương đối = 0)
     var yMid = (lot.ys[j + 1] - lot.ys[j]) / 2;           // cao độ chiếu nghỉ chữ U (-FH/2 với hầm)
     var yBot = lot.ys[j + 1] - lot.ys[j];                 // cao độ sàn tầng j+1 (-FH với hầm)
@@ -710,25 +713,25 @@
     var slope = Math.atan2(yMid, RL);                     // góc nghiêng nửa tầng
 
     // 1. Nhánh Nam (z = -19.1, rộng 7.6m): nối tầng j (yTop tại x=HX) với chiếu nghỉ chữ U (yMid tại x=HX+RL)
-    //    - Làn Nam (ZD1 = -21.0): Làn xe XUỐNG tầng j+1 (mũi tên xanh dương, đi hướng +x)
-    //    - Làn Bắc (ZU1 = -17.2): Làn xe LÊN tầng j (mũi tên xanh lá, đi hướng -x)
+    //    - Làn TRONG / TRÁI (ZD1 = -17.2, local z = +1.9): TỪ TRÊN XUỐNG tầng j+1 (mũi tên xanh dương, hướng +x)
+    //    - Làn NGOÀI / PHẢI (ZU1 = -21.0, local z = -1.9): TỪ DƯỚI LÊN tầng j   (mũi tên xanh lá, hướng -x)
     var rSouth = new T.Group();
     rSouth.position.set(HX + RL / 2, (yTop + yMid) / 2, -19.1);
     rSouth.rotation.z = slope;
     U.box(rSouth, Lh, 0.45, 7.6, M.slab, 0, -0.23, 0);
     var topS = U.texPlane(Lh, 7.6, M.floor, Lh / 4, 2); topS.rotation.x = -Math.PI / 2; topS.position.y = 0.004; rSouth.add(topS);
-    U.box(rSouth, Lh, 0.14, 0.24, M.paintYellow, 0, 0.07, 0);            // gờ phân làn giữa (không còn vạch trắng lỗi!)
+    U.box(rSouth, Lh, 0.14, 0.24, M.paintYellow, 0, 0.07, 0);
     U.box(rSouth, Lh, 0.18, 0.28, M.hazard, 0, 0.09,  3.66);
     U.box(rSouth, Lh, 0.18, 0.28, M.hazard, 0, 0.09, -3.66);
     [-3.2, 3.2].forEach(function (lx) {
-      arrowC(rSouth, lx, 0, -1.9, ROT_E, '#2d8cff', 1.15, 2.2);          // làn xuống B2
-      arrowC(rSouth, lx, 0,  1.9, ROT_W, '#2fcf6a', 1.15, 2.2);          // làn lên B1
+      arrowC(rSouth, lx, 0,  1.9, ROT_E, '#2d8cff', 1.15, 2.2);          // làn Trong (Trái): từ Trên Xuống
+      arrowC(rSouth, lx, 0, -1.9, ROT_W, '#2fcf6a', 1.15, 2.2);          // làn Ngoài (Phải): từ Dưới Lên
     });
     fl.group.add(rSouth);
 
-    // 2. Nhánh Bắc (z = -10.5, rộng 7.6m): nối chiếu nghỉ chữ U (yMid tại x=HX+RL) về lại tầng j+1 (yBot tại x=HX)
-    //    - Làn Bắc (ZD2 = -8.6):  Làn xe XUỐNG vào tầng j+1 (mũi tên xanh dương, đi hướng -x)
-    //    - Làn Nam (ZU2 = -12.4): Làn xe từ tầng j+1 LÊN chiếu nghỉ (mũi tên xanh lá, đi hướng +x)
+    // 2. Nhánh Bắc (z = -10.5, rộng 7.6m): nối chiếu nghỉ chữ U (yMid tại x=HX+RL) với tầng j+1 (yBot tại x=HX)
+    //    - Làn TRONG / TRÁI (ZD2 = -12.4, local z = -1.9): TỪ TRÊN XUỐNG vào tầng j+1 (mũi tên xanh dương, hướng -x)
+    //    - Làn NGOÀI / PHẢI (ZU2 =  -8.6, local z = +1.9): TỪ DƯỚI LÊN từ tầng j+1    (mũi tên xanh lá, hướng +x)
     var rNorth = new T.Group();
     rNorth.position.set(HX + RL / 2, (yMid + yBot) / 2, -10.5);
     rNorth.rotation.z = -slope;
@@ -738,15 +741,14 @@
     U.box(rNorth, Lh, 0.18, 0.28, M.hazard, 0, 0.09,  3.66);
     U.box(rNorth, Lh, 0.18, 0.28, M.hazard, 0, 0.09, -3.66);
     [-3.2, 3.2].forEach(function (lx) {
-      arrowC(rNorth, lx, 0,  1.9, ROT_W, '#2d8cff', 1.15, 2.2);          // làn xuống vào B2
-      arrowC(rNorth, lx, 0, -1.9, ROT_E, '#2fcf6a', 1.15, 2.2);          // làn từ B2 đi lên
+      arrowC(rNorth, lx, 0, -1.9, ROT_W, '#2d8cff', 1.15, 2.2);          // làn Trong (Trái): từ Trên Xuống B2
+      arrowC(rNorth, lx, 0,  1.9, ROT_E, '#2fcf6a', 1.15, 2.2);          // làn Ngoài (Phải): từ Dưới Lên B1
     });
     fl.group.add(rNorth);
 
     // 3. Chiếu nghỉ vòng cung chữ U 180° (bán nguyệt tâm tại x = HX + RL, z = Z_RAMP_C = -14.8, cao độ yMid)
     var uTurn = new T.Group();
     uTurn.position.set(HX + RL, yMid, Z_RAMP_C);
-    // Mặt sàn bán nguyệt
     var semiSh = new T.Shape();
     semiSh.absarc(0, 0, R_OUT, -Math.PI / 2, Math.PI / 2, false);
     semiSh.lineTo(0, -R_OUT);
@@ -762,9 +764,11 @@
     divRing.rotateX(-Math.PI / 2);
     var mDiv = new T.Mesh(divRing, M.paintYellow); mDiv.position.y = 0.02; uTurn.add(mDiv);
 
-    // Mũi tên dẫn hướng trên vòng cung chữ U
-    arrowC(uTurn, (R_DIV + R_OUT) / 2, 0.01, 0, ROT_N, '#2d8cff', 1.1, 2.1);   // vòng ngoài: đi xuống
-    arrowC(uTurn, (R_IN  + R_DIV) / 2, 0.01, 0, ROT_S, '#2fcf6a', 1.0, 1.9);   // vòng trong: đi lên
+    // Mũi tên dẫn hướng trên vòng cung chữ U:
+    //   - Vòng TRONG (bán kính nhỏ): từ Trên Xuống (nối ZD1 = -17.2 sang ZD2 = -12.4, hướng +z = ROT_N)
+    //   - Vòng NGOÀI (bán kính lớn): từ Dưới Lên   (nối ZU2 = -8.6  sang ZU1 = -21.0, hướng -z = ROT_S)
+    arrowC(uTurn, (R_IN  + R_DIV) / 2, 0.01, 0, ROT_N, '#2d8cff', 1.0, 1.9);   // vòng Trong: từ Trên Xuống
+    arrowC(uTurn, (R_DIV + R_OUT) / 2, 0.01, 0, ROT_S, '#2fcf6a', 1.1, 2.1);   // vòng Ngoài: từ Dưới Lên
 
     // Tường chắn cong bao quanh chiếu nghỉ chữ U (lan can dưới 1.4m luôn hiện; phần tường trên + trần gắn vào ceil để cắt khi xem Toàn cảnh)
     var wallArc = new T.CylinderGeometry(R_OUT, R_OUT, 1.4, 28, 1, true, 0, Math.PI);
@@ -810,8 +814,8 @@
     var RL_PORTAL = 20.0;
     if (under) {
       // Hào vào (đơn) phía Tây và hào ra (2 làn vàng/xanh lá) phía Đông, từ mặt đất xuống B1
-      var gy = y0 + FH, zE0 = -23.0, zE1 = -19.0;
-      var rg = new T.Group(); rg.position.set(-HX - RL_PORTAL / 2, y0 + FH / 2, ZD1); rg.rotation.z = -Math.atan2(FH, RL_PORTAL);
+      var gy = y0 + FH, zE0 = Z_ENTRY - 2.1, zE1 = Z_ENTRY + 2.1;
+      var rg = new T.Group(); rg.position.set(-HX - RL_PORTAL / 2, y0 + FH / 2, Z_ENTRY); rg.rotation.z = -Math.atan2(FH, RL_PORTAL);
       var Lr = Math.sqrt(RL_PORTAL * RL_PORTAL + FH * FH);
       U.box(rg, Lr, 0.5, 4.2, M.slab, 0, -0.25, 0);
       var t1 = U.texPlane(Lr, 4.2, M.floor, Lr / 4, 1); t1.rotation.x = -Math.PI / 2; t1.position.y = 0.004; rg.add(t1);
@@ -844,12 +848,12 @@
       });
       var gg = new T.ShapeGeometry(sh); gg.rotateX(-Math.PI / 2);
       var gm = new T.Mesh(gg, M.ground); gm.position.y = gy - 0.03; ceil0.add(gm);
-      [[-HX - RL_PORTAL - 12, ZD1], [HX + RL_PORTAL + 12, 18.5]].forEach(function (r) {
+      [[-HX - RL_PORTAL - 12, Z_ENTRY], [HX + RL_PORTAL + 12, 18.5]].forEach(function (r) {
         var rd = new T.Mesh(new T.PlaneGeometry(24, 8.2), M.road); rd.rotation.x = -Math.PI / 2; rd.position.set(r[0], gy - 0.02, r[1]); ceil0.add(rd);
         var sky = new T.Mesh(new T.PlaneGeometry(12, 7), M.sky); sky.rotation.y = Math.PI / 2; sky.position.set(r[0] + (r[0] < 0 ? -12 : 12), gy + 2.5, r[1]); ceil0.add(sky);
       });
     } else {
-      [[-HX - 8, ZD1, 4.2], [HX + 8, 18.5, 8.0]].forEach(function (r) {
+      [[-HX - 8, Z_ENTRY, 4.2], [HX + 8, 18.5, 8.0]].forEach(function (r) {
         U.box(g0, 16, 0.1, r[2], M.road, r[0], -0.05, r[1]);
       });
       var bol2 = [];
@@ -973,24 +977,23 @@
       });
 
       if (mon) {
-        // Nhánh rẽ phải từ làn vào (ZD1) qua Booth Check-in vào khu xe tháng
-        path(k, [[BX, ZD1], [BX, -16.8], [BX, -11.0], [BX, AZ[0]]]);
-        // Làn bypass vãng lai phía Nam đi thẳng tới dốc xuống B2
-        path(k, [[-HX, ZD1], [BX, ZD1], [-2.0, ZD1], [XEC, ZD1], [XG, ZD1], [HX, ZD1]]);
-        // Làn ra xe tháng (mũi tên vàng XY) và làn ra xe vãng lai (mũi tên xanh lá XG)
+        // Nhánh rẽ phải từ làn vào qua Booth Check-in vào khu xe tháng
+        path(k, [[BX, ZD1], [BX, -11.0], [BX, AZ[0]]]);
+        // Làn bypass vãng lai phía Nam đi thẳng vào làn TRONG (ZD1 = -17.2) xuống dốc B2
+        path(k, [[-HX, Z_ENTRY], [BX, ZD1], [-2.0, ZD1], [XEC, ZD1], [XG, ZD1], [HX, ZD1]]);
+        // Làn ra xe tháng (mũi tên vàng XY) và làn ra xe vãng lai (mũi tên xanh lá XG nối từ làn NGOÀI ZU1 = -21.0)
         path(k, [[XY, AZ[2]], [XY, ZEY], [HX, ZEY]]);
         path(k, [[HX, ZU1], [XG, ZU1], [XG, -7.0], [XG, 4.0], [XG, ZEG], [HX, ZEG]]);
       } else {
         // Tầng vãng lai (B2, B3, B4):
-        // 1. Cửa vào từ dốc chữ U (ZD2 = -8.6) đi thẳng vào Lối đi 1 (z = -7.0) và trục Đông (XG)
-        path(k, [[HX, ZD2], [XG, ZD2], [XEC, AZ[0]]]);
-        // 2. Trục Đông (XG) nối các lối đi và dẫn xuống nhánh Nam (ZD1) nếu còn tầng dưới, hoặc vào làn ra Check-out (ZU2)
-        path(k, [[XG, AZ[2]], [XG, AZ[1]], [XG, ZD2], [XG, ZU2]]);
-        // 3. Làn ra Check-out (ZU2 = -12.4): từ BX / XEC đi qua Booth Check-out ra dốc chữ U lên tầng trên
-        path(k, [[BX, AZ[0]], [BX, -16.5], [-2.0, -16.5], [XEC, ZU2], [XG, ZU2], [HX, ZU2]]);
+        // 1. Cửa vào từ làn TRÁI / TRONG của dốc chữ U (ZD2 = -12.4, từ Trên Xuống)
+        path(k, [[HX, ZD2], [XG, ZD2], [XEC, ZD2], [-2.0, -15.5], [BX, -15.5], [BX, AZ[0]]]);
+        // 2. Trục Đông (XG) & trục gom Đông (XEC) dẫn xe từ các lối đi ra làn PHẢI / NGOÀI (ZU2 = -8.6, từ Dưới Lên) qua Booth Check-out B2
+        path(k, [[XG, AZ[2]], [XG, AZ[1]], [XG, ZU2]]);
+        path(k, [[XEC, AZ[0]], [XEC, ZU2], [XG, ZU2], [HX, ZU2]]);
         if (k < n - 1) {
-          path(k, [[XG, ZU2], [XG, ZU1], [XG, ZD1], [HX, ZD1]]);
-          path(k, [[HX, ZU1], [XG, ZU1]]);
+          path(k, [[XG, ZD2], [XG, ZD1], [HX, ZD1]]);
+          path(k, [[HX, ZU1], [XG, ZU1], [XG, ZD2]]);
         }
       }
     });
@@ -998,29 +1001,29 @@
     // Hào vào / ra mặt đất ở tầng đầu
     var RL_PORTAL = 20.0;
     var gy = lot.ys[0] + (under ? FH : 0);
-    path(0, under ? [[-HX - RL_PORTAL, ZD1, gy], [-HX - RL_PORTAL / 2, ZD1, lot.ys[0] + FH / 2], [-HX, ZD1, lot.ys[0]]] : [[-HX - 12, ZD1], [-HX, ZD1]]);
+    path(0, under ? [[-HX - RL_PORTAL, Z_ENTRY, gy], [-HX - RL_PORTAL / 2, Z_ENTRY, lot.ys[0] + FH / 2], [-HX, Z_ENTRY, lot.ys[0]]] : [[-HX - 12, Z_ENTRY], [-HX, Z_ENTRY]]);
     path(0, under ? [[HX, ZEG, lot.ys[0]], [HX + RL_PORTAL / 2, ZEG, lot.ys[0] + FH / 2], [HX + RL_PORTAL, ZEG, gy]] : [[HX, ZEG], [HX + 14, ZEG]]);
     path(0, under ? [[HX, ZEY, lot.ys[0]], [HX + RL_PORTAL, ZEY, gy]] : [[HX, ZEY], [HX + 14, ZEY]]);
 
     // Đồ thị điểm di chuyển trên dốc chữ U liên tầng (nối tầng j với tầng j+1)
     for (var j = 0; j < n - 1; j++) {
       var yTop = lot.ys[j], yMid = (lot.ys[j] + lot.ys[j + 1]) / 2, yBot = lot.ys[j + 1];
-      // Làn xuống (vòng ngoài): (HX, ZD1, yTop) -> chiếu nghỉ chữ U -> (HX, ZD2, yBot)
+      // Làn TRÁI / TRONG (từ Trên Xuống): (HX, ZD1, yTop) -> vòng trong chữ U -> (HX, ZD2, yBot)
       path(0, [
         [HX, ZD1, yTop],
         [HX + RL * 0.6, ZD1, yTop + (yMid - yTop) * 0.6],
-        [HX + RL + 5.5, ZD1 + 2.0, yMid],
-        [HX + RL + 5.5, ZD2 - 2.0, yMid],
+        [HX + RL + 2.4, ZD1 + 1.0, yMid],
+        [HX + RL + 2.4, ZD2 - 1.0, yMid],
         [HX + RL * 0.6, ZD2, yMid + (yBot - yMid) * 0.4],
         [HX, ZD2, yBot]
       ], function (c) { return c[2] > yMid - 0.1 ? j : j + 1; });
 
-      // Làn lên (vòng trong): (HX, ZU2, yBot) -> chiếu nghỉ chữ U -> (HX, ZU1, yTop)
+      // Làn PHẢI / NGOÀI (từ Dưới Lên): (HX, ZU2, yBot) -> vòng ngoài chữ U -> (HX, ZU1, yTop)
       path(0, [
         [HX, ZU2, yBot],
         [HX + RL * 0.6, ZU2, yBot + (yMid - yBot) * 0.6],
-        [HX + RL + 2.4, ZU2 - 1.0, yMid],
-        [HX + RL + 2.4, ZU1 + 1.0, yMid],
+        [HX + RL + 5.8, ZU2 - 2.0, yMid],
+        [HX + RL + 5.8, ZU1 + 2.0, yMid],
         [HX + RL * 0.6, ZU1, yMid + (yTop - yMid) * 0.4],
         [HX, ZU1, yTop]
       ], function (c) { return c[2] < yMid + 0.1 ? j + 1 : j; });
@@ -1037,10 +1040,10 @@
       return b;
     }
     lot.pois = {
-      entry:    { node: nearest(0, -HX, ZD1),       yaw: -Math.PI / 2 },
-      checkin:  { node: nearest(0, BX, -16.8),      yaw: Math.PI },
+      entry:    { node: nearest(0, -HX, Z_ENTRY),   yaw: -Math.PI / 2 },
+      checkin:  { node: nearest(0, BX, ZD1),        yaw: Math.PI },
       checkout: { node: nearest(0, XEC, AZ[2]),     yaw: -Math.PI / 2 },
-      ramp:     { node: nearest(0, XG - 4.0, ZD1),  yaw: -Math.PI / 2 }
+      ramp:     { node: nearest(1, XEC, ZU2),       yaw: -Math.PI / 2 }
     };
     lot.entryNode = lot.pois.entry.node;
   }
