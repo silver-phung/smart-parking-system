@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>smart-parking-system-development</UserSecretsId>
+    <FrontendRoot>$(MSBuildProjectDirectory)/../../../frontend/smart-parking/</FrontendRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,5 +32,27 @@
     <ProjectReference Include="..\SmartParking.Application\SmartParking.Application.csproj" />
     <ProjectReference Include="..\SmartParking.Infrastructure\SmartParking.Infrastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <UpToDateCheckInput Include="$(FrontendRoot)src/**/*;$(FrontendRoot)public/**/*;$(FrontendRoot)index.html;$(FrontendRoot)package.json;$(FrontendRoot)package-lock.json;$(FrontendRoot)vite.config.*" Set="Frontend" />
+    <UpToDateCheckOutput Include="$(MSBuildProjectDirectory)/wwwroot/app/index.html" Set="Frontend" />
+  </ItemGroup>
+
+  <Target Name="RestoreFrontendDependencies"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="$(FrontendRoot)package.json;$(FrontendRoot)package-lock.json"
+          Outputs="$(FrontendRoot)node_modules/.package-lock.json">
+    <Exec WorkingDirectory="$(FrontendRoot)" Command="npm ci --include=dev --no-audit --no-fund" />
+  </Target>
+
+  <Target Name="BuildFrontend" BeforeTargets="PrepareForBuild"
+          DependsOnTargets="RestoreFrontendDependencies"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec WorkingDirectory="$(FrontendRoot)" Command="npm run build" />
+    <ItemGroup>
+      <Content Remove="wwwroot/app/**/*" />
+      <Content Include="wwwroot/app/**/*" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
 </Project>

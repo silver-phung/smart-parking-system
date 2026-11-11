@@ -136,6 +136,8 @@ dotnet run --project .\backend\src\SmartParking.Api --launch-profile http
 
 Mở <http://localhost:5295/app/>. `/health` chỉ kiểm tra tiến trình API, không xác nhận đã kết nối được database. Database cần có schema/migration Accounts và các vai trò của nhóm.
 
+Trong Visual Studio, chọn **SmartParking.Api → Set as Startup Project**, chọn profile **http** hoặc **https**, rồi bấm **Ctrl+F5**. Quá trình build tự cài dependencies frontend khi cần, build React và mở `/app/` cùng API. Máy cần Node.js/npm trong PATH. Sau khi sửa frontend, chạy lại để tạo bundle mới. Swagger có tại `/swagger`.
+
 Customer có thể đăng ký tại `/app/register` bằng email và mật khẩu, nhập OTP 6 chữ số để xác minh, sau đó đăng nhập bằng email hoặc tên đăng nhập. Tài khoản nội bộ và phân công bãi do Admin quản lý.
 
 Development mặc định dùng `Email:Provider=Mock`. Để gửi OTP thật bằng Gmail, cấu hình qua User Secrets hoặc biến môi trường: `Email:Provider=Smtp`, `Email:UserName` và `Email:SenderEmail` là địa chỉ Gmail gửi, `Email:Password` là App Password của tài khoản Gmail. Không đặt App Password trong source hoặc commit. Ví dụ:
