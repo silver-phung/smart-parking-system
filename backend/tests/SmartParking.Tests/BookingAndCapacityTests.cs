@@ -59,6 +59,7 @@ public class BookingAndCapacityTests
             Username = "user1",
             Email = "user1@test.com",
             FullName = "User One",
+            PhoneNumber = "0900000010",
             PasswordHash = "dummy",
             RoleId = 4,
             IsActive = true,
@@ -139,6 +140,104 @@ public class BookingAndCapacityTests
     #region Phase 3 & 4: Booking Creation & Capacity Validation
 
     [Fact]
+    public async Task ExpireNoShowBookings_ExpiresPendingBookingsAfterThirtyMinutesOnly()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        SeedLotWithSlots(context, 1, "Bãi Đỗ Xe Quận 1", slotCount: 3, activeSlotsCount: 3);
+
+        context.Vehicles.AddRange(
+            new Vehicle { Id = 101, UserId = 10, PlateNumber = "51A-10101", IsActive = true },
+            new Vehicle { Id = 102, UserId = 10, PlateNumber = "51A-10102", IsActive = true },
+            new Vehicle { Id = 103, UserId = 10, PlateNumber = "51A-10103", IsActive = true });
+        var now = DateTime.UtcNow;
+        context.Bookings.AddRange(
+            new Booking
+            {
+                Id = 201,
+                LotId = 1,
+                UserId = 10,
+                VehicleId = 101,
+                PlateNumber = "51A-10101",
+                StartTime = now.AddMinutes(-31),
+                Status = BookingStatuses.Pending
+            },
+            new Booking
+            {
+                Id = 202,
+                LotId = 1,
+                UserId = 10,
+                VehicleId = 102,
+                PlateNumber = "51A-10102",
+                StartTime = now.AddMinutes(-29),
+                Status = BookingStatuses.Pending
+            },
+            new Booking
+            {
+                Id = 203,
+                LotId = 1,
+                UserId = 10,
+                VehicleId = 103,
+                PlateNumber = "51A-10103",
+                StartTime = now.AddMinutes(-40),
+                Status = BookingStatuses.CheckedIn
+            });
+        await context.SaveChangesAsync();
+
+        var expiredCount = await bookingService.ExpireNoShowBookingsAsync();
+
+        Assert.Equal(1, expiredCount);
+        Assert.Equal(BookingStatuses.Expired, (await context.Bookings.FindAsync(201L))!.Status);
+        Assert.Equal(BookingStatuses.Pending, (await context.Bookings.FindAsync(202L))!.Status);
+        Assert.Equal(BookingStatuses.CheckedIn, (await context.Bookings.FindAsync(203L))!.Status);
+        Assert.Contains(
+            context.AuditLogs,
+            audit => audit.TargetId == "201" && audit.Action == "EXPIRE_BOOKING_NO_SHOW");
+        Assert.Equal(0, await bookingService.ExpireNoShowBookingsAsync());
+    }
+
+    [Fact]
+    public async Task ConfirmBookingParked_ExpiredBookingAfterThirtyMinuteGracePeriod_IsRejectedAndExpired()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+        SeedLotWithSlots(context, 1, "Bãi Đỗ Xe Quận 1", slotCount: 2, activeSlotsCount: 2);
+        context.Vehicles.Add(new Vehicle
+        {
+            Id = 101,
+            UserId = 10,
+            PlateNumber = "51A-10101",
+            IsActive = true
+        });
+        context.Bookings.Add(new Booking
+        {
+            Id = 201,
+            LotId = 1,
+            UserId = 10,
+            VehicleId = 101,
+            PlateNumber = "51A-10101",
+            StartTime = DateTime.UtcNow.AddMinutes(-31),
+            Status = BookingStatuses.Pending
+        });
+        await context.SaveChangesAsync();
+
+        var (success, message, _) = await sessionService.ConfirmBookingParkedAsync(
+            201,
+            new ConfirmBookingParkedRequestDto
+            {
+                PlateNumber = "51A-10101",
+                SlotId = 101,
+                CheckInImageUrl = "https://example.test/check-in.jpg"
+            },
+            1,
+            Roles.Admin,
+            "127.0.0.1");
+
+        Assert.False(success);
+        Assert.Contains("hết hạn", message);
+        Assert.Equal(BookingStatuses.Expired, (await context.Bookings.FindAsync(201L))!.Status);
+        Assert.Equal(0, await bookingService.ExpireNoShowBookingsAsync());
+    }
+
+    [Fact]
     public async Task CreateBooking_ValidRequest_ReservesCapacityWithoutPreassigningSlot()
     {
         var (bookingService, _, _, context) = await CreateServicesAsync();
@@ -183,8 +282,46 @@ public class BookingAndCapacityTests
         Assert.NotNull(capacity);
         Assert.Equal(10, capacity.TotalCapacity);
         Assert.Equal(1, capacity.ActiveReservationsCount);
+        Assert.Equal(1, capacity.PendingBookingsCount);
         Assert.Equal(0, capacity.ActiveSessionsCount);
         Assert.Equal(9, capacity.AvailableForBooking);
+
+        var publicCapacity = await bookingService.GetLotCapacityAsync(1);
+        Assert.NotNull(publicCapacity);
+        Assert.Equal(1, publicCapacity.PendingBookingsCount);
+        Assert.Equal(9, publicCapacity.AvailableForBooking);
+    }
+
+    [Fact]
+    public async Task CreateBooking_EndTimeWithNonZeroMinutes_IsAccepted()
+    {
+        var (bookingService, _, _, context) = await CreateServicesAsync();
+        SeedLotWithSlots(context, 1, "Bãi Đỗ Xe Quận 1", slotCount: 2, activeSlotsCount: 2);
+        var startTime = DateTime.UtcNow.Date.AddDays(1).AddHours(10).AddMinutes(17);
+        context.Vehicles.Add(new Vehicle
+        {
+            Id = 100,
+            UserId = 10,
+            PlateNumber = "51A-10000",
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var result = await bookingService.CreateBookingAsync(
+            new CreateBookingRequestDto
+            {
+                LotId = 1,
+                VehicleId = 100,
+                StartTime = startTime,
+                EndTime = startTime.AddMinutes(90)
+            },
+            10,
+            Roles.User,
+            "127.0.0.1");
+
+        Assert.True(result.Success);
+        Assert.Equal(201, result.StatusCode);
+        Assert.Equal(startTime.AddMinutes(90), result.Data!.EndTime);
     }
 
     [Fact]
@@ -423,7 +560,7 @@ public class BookingAndCapacityTests
     #region Phase 4 & 6: Check-In Integration & No Double-Counting
 
     [Fact]
-    public async Task CheckIn_ReservedVehicle_ConvertsHoldToAdmittedSessionWithoutDoubleCounting()
+    public async Task CheckIn_ReservedVehicle_IsRejectedAtGateAndConfirmedAtActualSlot()
     {
         var (bookingService, sessionService, _, context) = await CreateServicesAsync();
         // Lot capacity = 2
@@ -446,24 +583,41 @@ public class BookingAndCapacityTests
         Assert.Equal(1, capBefore.ActiveReservationsCount);
         Assert.Equal(1, capBefore.AvailableForBooking);
 
-        // Step 2: Vehicle arrives and checks in via Staff/Camera OCR
-        var checkInReq = new CheckInRequestDto
-        {
-            LotId = 11,
-            PlateNumber = "51a-11223", // lower case test
-            CheckInImageUrl = "https://cdn.example.com/checkin/img1.jpg"
-        };
+        var (gateSuccess, gateMessage, _) = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 11, PlateNumber = "51a-11223" },
+            1,
+            Roles.Admin,
+            "127.0.0.1");
+        Assert.False(gateSuccess);
+        Assert.Contains("không check-in tại cổng", gateMessage);
+        Assert.Equal(BookingStatuses.Pending, (await context.Bookings.FindAsync(bookRes.Data!.Id))!.Status);
 
-        var (checkInSuccess, checkInMessage, sessionDto) = await sessionService.CheckInAsync(checkInReq, 1, Roles.Admin, "127.0.0.1");
-        Assert.True(checkInSuccess, checkInMessage);
+        var (parkedSuccess, parkedMessage, sessionDto) = await sessionService.ConfirmBookingParkedAsync(
+            bookRes.Data.Id,
+            new ConfirmBookingParkedRequestDto
+            {
+                PlateNumber = "51a11223",
+                SlotId = 1101,
+                CheckInImageUrl = "https://cdn.example.com/checkin/img1.jpg"
+            },
+            1,
+            Roles.Admin,
+            "127.0.0.1");
+        Assert.True(parkedSuccess, parkedMessage);
         Assert.NotNull(sessionDto);
         Assert.Equal(bookRes.Data!.Id, sessionDto.BookingId);
+        Assert.Equal("51A-11223", sessionDto.PlateNumber);
+        Assert.Equal(1101, sessionDto.CurrentSlotId);
+        Assert.Equal("S-11-01", sessionDto.SlotCode);
+        Assert.Equal("https://cdn.example.com/checkin/img1.jpg", sessionDto.CheckInImageUrl);
 
-        // Booking status is atomically converted to CHECKED_IN
+        // Booking, session and actual slot transition together.
         var bookingAfter = await context.Bookings.FindAsync(bookRes.Data!.Id);
         Assert.NotNull(bookingAfter);
         Assert.Equal(BookingStatuses.CheckedIn, bookingAfter.Status);
         Assert.NotNull(bookingAfter.CheckedInAt);
+        Assert.Equal(bookingAfter.CheckedInAt, sessionDto.CheckInTime);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, (await context.ParkingSlots.FindAsync(1101L))!.PhysicalStatus);
 
         // INVARIANT VERIFICATION:
         // Total = 2, Admitted = 1, Reserved = 0, Available = 1!
@@ -474,6 +628,161 @@ public class BookingAndCapacityTests
         Assert.Equal(1, capAfter.ActiveSessionsCount);
         Assert.Equal(0, capAfter.ActiveReservationsCount);
         Assert.Equal(1, capAfter.AvailableForBooking);
+    }
+
+    [Fact]
+    public async Task ConfirmBookingParked_RequiresMatchingPlateAndPhoto()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+        SeedLotWithSlots(context, 114, "Bãi Booking Đầy", slotCount: 1, activeSlotsCount: 1);
+        context.Vehicles.Add(new Vehicle
+        {
+            Id = 1141,
+            UserId = 10,
+            PlateNumber = "51A-BOOKED-PHOTO",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var booking = await bookingService.CreateBookingAsync(
+            new CreateBookingRequestDto { LotId = 114, VehicleId = 1141 },
+            10,
+            Roles.User,
+            "127.0.0.1");
+        Assert.True(booking.Success);
+        var bookingId = booking.Data!.Id;
+        Assert.Equal(0, (await bookingService.GetLotCapacityAsync(114))!.AvailableForWalkIn);
+
+        var (missingPhotoSuccess, missingPhotoMessage, _) =
+            await sessionService.ConfirmBookingParkedAsync(
+                bookingId,
+                new ConfirmBookingParkedRequestDto
+                {
+                    PlateNumber = "51A-BOOKED-PHOTO",
+                    SlotId = 11401,
+                    CheckInImageUrl = ""
+                },
+                1,
+                Roles.Admin,
+                "127.0.0.1");
+        Assert.False(missingPhotoSuccess);
+        Assert.Contains("Ảnh biển số xe", missingPhotoMessage);
+
+        var (mismatchSuccess, mismatchMessage, mismatchSession) =
+            await sessionService.ConfirmBookingParkedAsync(
+                bookingId,
+                new ConfirmBookingParkedRequestDto
+                {
+                    PlateNumber = "51A-WRONG-PLATE",
+                    SlotId = 11401,
+                    CheckInImageUrl = "https://cdn.example.com/plates/wrong.jpg"
+                },
+                1,
+                Roles.Admin,
+                "127.0.0.1");
+        Assert.False(mismatchSuccess);
+        Assert.Null(mismatchSession);
+        Assert.Contains("không khớp", mismatchMessage);
+        Assert.Equal(BookingStatuses.Pending, (await context.Bookings.FindAsync(bookingId))!.Status);
+
+        const string imageUrl = "/api/v1/images/content/0123456789abcdef0123456789abcdef";
+        context.StoredImages.Add(new StoredImage
+        {
+            UserId = 2,
+            PublicId = "0123456789abcdef0123456789abcdef",
+            Url = imageUrl,
+            Format = "png",
+            Content = [1],
+            Bytes = 1
+        });
+        await context.SaveChangesAsync();
+        var foreignImageResult = await sessionService.ConfirmBookingParkedAsync(
+            bookingId,
+            new ConfirmBookingParkedRequestDto { PlateNumber = "51A-BOOKED-PHOTO", SlotId = 11401, CheckInImageUrl = imageUrl },
+            1, Roles.Admin, "127.0.0.1");
+        Assert.False(foreignImageResult.Success);
+        Assert.Equal(BookingStatuses.Pending, (await context.Bookings.FindAsync(bookingId))!.Status);
+        context.StoredImages.Single(i => i.Url == imageUrl).UserId = 1;
+        await context.SaveChangesAsync();
+
+        var (success, message, session) = await sessionService.ConfirmBookingParkedAsync(
+            bookingId,
+            new ConfirmBookingParkedRequestDto
+            {
+                PlateNumber = "51A-BOOKED-PHOTO",
+                SlotId = 11401,
+                CheckInImageUrl = imageUrl
+            },
+            1,
+            Roles.Admin,
+            "127.0.0.1");
+        Assert.True(success, message);
+        Assert.Equal(bookingId, session!.BookingId);
+        Assert.Equal(11401, session.CurrentSlotId);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, (await context.ParkingSlots.FindAsync(11401L))!.PhysicalStatus);
+        Assert.Equal(imageUrl, session.CheckInImageUrl);
+        Assert.Equal(BookingStatuses.CheckedIn, (await context.Bookings.FindAsync(bookingId))!.Status);
+        Assert.Equal(0, (await bookingService.GetLotCapacityAsync(114))!.AvailableForBooking);
+
+        context.Vehicles.Add(new Vehicle
+        {
+            Id = 1142,
+            UserId = 20,
+            PlateNumber = "51A-OTHER",
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+        var anotherBooking = await bookingService.CreateBookingAsync(
+            new CreateBookingRequestDto { LotId = 114, VehicleId = 1142 },
+            20, Roles.User, "127.0.0.1");
+        Assert.False(anotherBooking.Success);
+        Assert.Equal(409, anotherBooking.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConfirmBookingParked_RejectsSlotAlreadyUsedByAnotherBooking()
+    {
+        var (bookingService, sessionService, _, context) = await CreateServicesAsync();
+        SeedLotWithSlots(context, 115, "Bãi Hai Ô", slotCount: 2, activeSlotsCount: 2);
+        context.Vehicles.AddRange(
+            new Vehicle { Id = 1151, UserId = 10, PlateNumber = "51A-11511", IsActive = true },
+            new Vehicle { Id = 1152, UserId = 20, PlateNumber = "51A-11522", IsActive = true });
+        await context.SaveChangesAsync();
+
+        var first = await bookingService.CreateBookingAsync(
+            new CreateBookingRequestDto { LotId = 115, VehicleId = 1151 },
+            10, Roles.User, "127.0.0.1");
+        var second = await bookingService.CreateBookingAsync(
+            new CreateBookingRequestDto { LotId = 115, VehicleId = 1152 },
+            20, Roles.User, "127.0.0.1");
+        Assert.True(first.Success, first.Message);
+        Assert.True(second.Success, second.Message);
+
+        var firstResult = await sessionService.ConfirmBookingParkedAsync(
+            first.Data!.Id,
+            new ConfirmBookingParkedRequestDto
+            {
+                PlateNumber = "51A-11511",
+                SlotId = 11501,
+                CheckInImageUrl = "https://cdn.example.com/plates/first.jpg"
+            }, 1, Roles.Admin, "127.0.0.1");
+        Assert.True(firstResult.Success, firstResult.Message);
+
+        var secondResult = await sessionService.ConfirmBookingParkedAsync(
+            second.Data!.Id,
+            new ConfirmBookingParkedRequestDto
+            {
+                PlateNumber = "51A-11522",
+                SlotId = 11501,
+                CheckInImageUrl = "https://cdn.example.com/plates/second.jpg"
+            }, 1, Roles.Admin, "127.0.0.1");
+        Assert.False(secondResult.Success);
+        Assert.Contains("đang được xe", secondResult.Message);
+        Assert.Equal(BookingStatuses.Pending, (await context.Bookings.FindAsync(second.Data.Id))!.Status);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, (await context.ParkingSlots.FindAsync(11501L))!.PhysicalStatus);
+        Assert.Single(context.ParkingSessions.Where(s => s.CurrentSlotId == 11501));
     }
 
     [Fact]
@@ -673,6 +982,9 @@ public class BookingAndCapacityTests
         var staffView = await bookingService.GetBookingsAsync(new BookingFilterDto(), 3, Roles.Staff);
         Assert.Equal(1, staffView.TotalCount);
         Assert.Equal(17, staffView.Items[0].LotId);
+        Assert.Equal("User One", staffView.Items[0].FullName);
+        Assert.Equal("user1@test.com", staffView.Items[0].Email);
+        Assert.Equal("0900000010", staffView.Items[0].PhoneNumber);
 
         // Staff trying to filter for Lot 18 (unauthorized): returns 0
         var staffViewUnauth = await bookingService.GetBookingsAsync(new BookingFilterDto { LotId = 18 }, 3, Roles.Staff);
@@ -1120,11 +1432,30 @@ public class BookingAndCapacityTests
         Assert.False(walkInRes.Success);
         Assert.Contains("hết chỗ", walkInRes.Message);
 
-        // Reserved vehicle arrives: MUST succeed atomically by consuming its existing hold
-        var reservedCheckIn = await sessionService.CheckInAsync(new CheckInRequestDto { LotId = 108, PlateNumber = "51A-RES-ONLY" }, 1, Roles.Admin, "127.0.0.1");
+        // Reserved vehicle skips the gate and is confirmed directly at its actual slot.
+        var reservedGate = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 108, PlateNumber = "51A-RES-ONLY" },
+            1,
+            Roles.Admin,
+            "127.0.0.1");
+        Assert.False(reservedGate.Success);
+
+        var reservedCheckIn = await sessionService.ConfirmBookingParkedAsync(
+            bookRes.Data!.Id,
+            new ConfirmBookingParkedRequestDto
+            {
+                PlateNumber = "51A-RES-ONLY",
+                SlotId = 10801,
+                CheckInImageUrl = "https://cdn.example.com/plates/51A-RES-ONLY.jpg"
+            },
+            1,
+            Roles.Admin,
+            "127.0.0.1");
         Assert.True(reservedCheckIn.Success, reservedCheckIn.Message);
         Assert.NotNull(reservedCheckIn.Data);
-        Assert.Equal(bookRes.Data!.Id, reservedCheckIn.Data.BookingId);
+        Assert.Equal(bookRes.Data.Id, reservedCheckIn.Data.BookingId);
+        Assert.Equal(10801, reservedCheckIn.Data.CurrentSlotId);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, (await context.ParkingSlots.FindAsync(10801L))!.PhysicalStatus);
 
         // Booking status is CHECKED_IN
         var bookingAfter = await context.Bookings.FindAsync(bookRes.Data!.Id);
@@ -1187,6 +1518,7 @@ public class BookingAndCapacityTests
         Assert.Equal("Bãi Ẩn Chẩn Đoán", publicCap.LotName);
         Assert.Equal(3, publicCap.TotalCapacity);
         Assert.Equal(2, publicCap.AvailableForBooking); // 3 - max(0, 1) = 2
+        Assert.Equal(0, publicCap.PendingBookingsCount);
 
         // System.Text.Json serialization MUST omit the null fields (WhenWritingNull)
         var jsonOptions = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
@@ -1198,6 +1530,7 @@ public class BookingAndCapacityTests
         Assert.DoesNotContain("physicalEmptySlotsCount", json);
         Assert.DoesNotContain("discrepancyNotes", json);
         Assert.Contains("availableForBooking", json);
+        Assert.Contains("pendingBookingsCount", json);
         Assert.Contains("totalCapacity", json);
     }
 
@@ -1357,7 +1690,7 @@ public class BookingAndCapacityTests
             LotId = lot4.Id,
             PlateNumber = "51A-LOT4-01",
             StartTime = DateTime.UtcNow.AddMinutes(10),
-            EndTime = DateTime.UtcNow.AddHours(2)
+            EndTime = DateTime.UtcNow.Date.AddDays(1).AddHours(12)
         };
         var (bSuccess, bCode, bMsg, _) = await bookingService.CreateBookingAsync(bookingReq, userId: 10, userRole: Roles.User, ipAddress: "127.0.0.1");
         Assert.False(bSuccess);
@@ -1532,4 +1865,3 @@ public class BookingAndCapacityTests
 
     #endregion
 }
-

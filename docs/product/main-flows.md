@@ -273,7 +273,7 @@ sequenceDiagram
 | Bước | Bàn giao | Dữ liệu đọc/ghi | Guard và điểm kiểm chứng |
 |---|---|---|---|
 | 1 | Khách → Camera và cổng vào: Đưa xe vào cổng | Xe thật và thời điểm vào | Không cần Customer ID |
-| 2 | Camera và cổng vào → Ảnh và AI: Chụp ảnh và nhận diện | Ảnh Cloudinary/OCR/Gemini | Giữ kết quả gốc, lỗi và confidence |
+| 2 | Camera và cổng vào → Ảnh và AI: Chụp ảnh và nhận diện | Ảnh PostgreSQL/OCR/Gemini | Giữ kết quả gốc, lỗi và confidence |
 | 3 | Ảnh và AI → API nghiệp vụ: Gửi nhận dạng tạm và EventId | Recognition request cần bổ sung | Không chờ Staff cổng xác nhận ở luồng chuẩn |
 | 4 | API nghiệp vụ → Dữ liệu bền: Kiểm tra sức chứa/chống trùng, cấp vé/thẻ và ghi phiên | recognition, ticket, session ACTIVE, booking nếu có, audit | Idempotency theo event/vé; biển số chưa chính thức |
 | 5 | API nghiệp vụ → Staff điều phối: Bàn giao ảnh/OCR và xe chờ xác minh | Phiên `WAITING_VERIFICATION` và vé cần bổ sung | Ô chưa OCCUPIED do check-in |

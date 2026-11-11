@@ -75,11 +75,12 @@ stateDiagram-v2
 
 | Chuyển | Guard hiện có | Ghi dữ liệu | Khoảng trống |
 |---|---|---|---|
-| Tạo ACTIVE | Đúng quyền bãi; bãi hoạt động; biển số request chưa có ACTIVE/PAID; còn sức chứa hoặc booking được nhận | vehicles nếu cần; parking_sessions; booking CHECKED_IN nếu có; audit_logs | Core hiện yêu cầu biển số như dữ liệu chính thức; chưa có nhận dạng tạm/vé/EventId và chưa hỗ trợ đầy đủ luồng cổng tự động |
+| Tạo ACTIVE xe vãng lai | Đúng quyền GATE; bãi hoạt động; biển số request chưa có ACTIVE/PAID; còn sức chứa; biển số không có booking PENDING | vehicles nếu cần; parking_sessions; audit_logs | Check-in cổng không tiếp nhận booking |
+| Tạo ACTIVE cho booking đã đỗ | Đúng quyền SLOT_VERIFIER; booking PENDING hợp lệ; biển số khớp; ảnh đã lưu; ô cùng bãi/không có phiên khác | parking_sessions gắn booking và ô; booking CHECKED_IN; ô OCCUPIED; dispatch OCCUPIED; audit_logs | Booking giữ sức chứa, không giữ một ô cụ thể từ trước |
 | ACTIVE/PAID → COMPLETED | Phiên tồn tại/chưa kết thúc; người gọi có quyền vận hành bãi | Giờ ra/status/ảnh; hủy dispatch PENDING/ASSIGNED; trả ô OCCUPIED về EMPTY; audit | Chưa kiểm tra đủ phí, vé và xác nhận xe theo hợp đồng đầy đủ |
 | Gửi check-out lần nữa | COMPLETED/CANCELLED | Không tạo lần hoàn tất mới; hiện trả lỗi | Cần kiểm tra retry đồng thời trên DB thật |
 
-Check-in có thể nhận SlotId và lưu `CurrentSlotId`, nhưng không tự đổi slot thành OCCUPIED. Vì vậy không render xe chỉ dựa vào `CurrentSlotId != null`.
+Check-in cổng chỉ dành cho xe vãng lai và không tự đổi slot thành OCCUPIED. Xác nhận booking tại ô tạo phiên ngay với `CurrentSlotId` và đổi ô sang OCCUPIED trong cùng giao dịch.
 
 **Hướng đích đã chốt:** camera/AI tại cổng tạo recognition result và session ACTIVE `WAITING_VERIFICATION` mà không chờ Staff cổng xác nhận. Kết quả OCR chưa được ghi đè như biển số chính thức; chống lặp dùng EventId/vé/thẻ. Staff điều phối tại slot xác nhận/sửa biển số và actual slot, rồi mới áp kiểm tra unique xe chính thức và chuyển physical sang OCCUPIED.
 
@@ -119,8 +120,8 @@ Create hiện tạo ASSIGNED trực tiếp; PENDING là miền được hỗ tr�
 | Thao tác | Guard và ghi chéo bảng |
 |---|---|
 | Phân ô | Phiên chưa kết thúc, cùng bãi, ô hoạt động/EMPTY, chưa có dispatch ASSIGNED xung đột; ghi dispatch và session.CurrentSlotId, không ghi OCCUPIED |
-| Xác nhận đúng | Chỉ ASSIGNED; ô chưa OCCUPIED/MAINTENANCE/UNAVAILABLE; dispatch OCCUPIED, actual_slot_id = assigned_slot_id, confirmed_at; slot OCCUPIED |
-| Báo sai ô | Chỉ ASSIGNED; actual slot hợp lệ cùng bãi và không xung đột; dispatch WRONG_SLOT, actual slot OCCUPIED, ô được phân về EMPTY; session chuyển tham chiếu actual slot |
+| Xác nhận đúng | Chỉ ASSIGNED; ô chưa OCCUPIED/MAINTENANCE/UNAVAILABLE; dispatch OCCUPIED, actual_slot_id = assigned_slot_id, confirmed_at; slot OCCUPIED; audit ghi trạng thái vật lý trước/sau xác minh |
+| Báo sai ô | Chỉ ASSIGNED; actual slot hợp lệ cùng bãi và không xung đột; dispatch WRONG_SLOT, actual slot OCCUPIED, ô được phân cũ giữ trạng thái vật lý chờ đối soát; session chuyển tham chiếu actual slot |
 | Đổi ô | Chỉ PENDING/ASSIGNED; ô mới hợp lệ; cập nhật assignment và session, lưu audit |
 | Hủy | Chỉ PENDING/ASSIGNED; bỏ liên kết phân nếu phù hợp; không làm trống ô đang OCCUPIED |
 
@@ -131,11 +132,12 @@ Create hiện tạo ASSIGNED trực tiếp; PENDING là miền được hỗ tr�
 ```mermaid
 stateDiagram-v2
   [*] --> PENDING: CreateBookingAsync
-  PENDING --> CHECKED_IN: CheckInAsync nhận theo bãi và biển số
+  PENDING --> CHECKED_IN: Staff xác nhận booking tại ô, tạo session ACTIVE
   PENDING --> CANCELLED: CancelBookingAsync
+  PENDING --> EXPIRED: Không check-in trong 30 phút sau giờ bắt đầu
 ```
 
-`EXPIRED` có trong dữ liệu nhưng chưa thấy lịch xử lý tự hết hạn. Booking có start/end; chưa có hold expiry hoặc payment state. Check-in hiện tìm PENDING theo bãi/biển số, chưa chứng minh kiểm tra đầy đủ khung giờ. Mọi PENDING hiện được trừ sức chứa, không theo giao khoảng thời gian.
+Booking PENDING tự chuyển EXPIRED khi quá 30 phút từ giờ bắt đầu mà chưa được xác nhận; tác vụ nền quét mỗi phút và xác nhận tại ô cũng kiểm tra hạn chót. Hết hạn được ghi vào audit log và giải phóng phần sức chứa giữ chỗ. Booking có start/end; chưa có payment state. Xác nhận yêu cầu booking ID, bãi, biển số khớp, ảnh và ô thực tế. Mọi PENDING hiện được trừ sức chứa, không theo giao khoảng thời gian.
 
 Hướng đích cần phân biệt giữ tạm có hạn, đã xác nhận đủ điều kiện, đã nhận xe, hủy/hết hạn và kết quả tiền. Đây là thiết kế bổ sung Sprint 4; tên mã đích chỉ được sử dụng sau khi sửa DTO/migration. Hủy/hết hạn không thay slot OCCUPIED và không xóa khoản thu.
 

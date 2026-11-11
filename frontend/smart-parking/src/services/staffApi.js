@@ -131,6 +131,23 @@ export const staffApi = {
         { signal },
       ),
     ),
+  pendingBookings: async (lotId, signal) => {
+    const loadPage = (pageNumber) =>
+      data(
+        `/v1/bookings?${query({ lotId, status: "PENDING", pageNumber, pageSize: 100 })}`,
+        { signal },
+      );
+    const firstPage = readPage(await loadPage(1));
+    const items = [...firstPage.items];
+    for (let pageNumber = 2; pageNumber <= firstPage.totalPages; pageNumber += 1) {
+      items.push(...readPage(await loadPage(pageNumber)).items);
+    }
+
+    return {
+      ...firstPage,
+      items: [...new Map(items.map((booking) => [String(booking.id), booking])).values()],
+    };
+  },
   dispatchPage: async (lotId, page = 1, status = "", signal) =>
     readPage(
       await data(
@@ -222,7 +239,8 @@ export const staffApi = {
     const body = new FormData();
     body.append("file", file);
     const image = await data("/v1/images", { method: "POST", body });
-    if (!image?.url || !/^https?:\/\//i.test(image.url))
+    if (!image?.url || !(/^https?:\/\//i.test(image.url) ||
+      /^\/api\/v1\/images\/content\/[a-f0-9]{32}$/.test(image.url)))
       throw new Error(
         "Chưa lưu được ảnh xe. Hãy thử lại hoặc bỏ ảnh để nhập tay.",
       );
@@ -232,6 +250,18 @@ export const staffApi = {
     post(`/v1/staff/detections/${id}/confirm`, {
       plateNumber: validatePlate(plateNumber),
       note,
+    }),
+  checkIn: (lotId, plateNumber, imageUrl) =>
+    post("/v1/parking-sessions/check-in", {
+      lotId: Number(lotId),
+      plateNumber: validatePlate(plateNumber),
+      ...(imageUrl ? { checkInImageUrl: imageUrl } : {}),
+    }),
+  confirmBookingParked: (bookingId, plateNumber, slotId, imageUrl) =>
+    post(`/v1/parking-sessions/bookings/${bookingId}/confirm-parked`, {
+      plateNumber: validatePlate(plateNumber),
+      slotId: Number(slotId),
+      checkInImageUrl: imageUrl,
     }),
   async checkOut(sessionId, lotId, plateNumber, imageUrl, ticketCode) {
     const fresh = await staffApi.session(sessionId);
@@ -252,7 +282,7 @@ export const staffApi = {
       ...(imageUrl ? { checkOutImageUrl: imageUrl } : {}),
     });
   },
-  async slotAction({ mode, session, slotId, notes, dispatch }) {
+  async slotAction({ mode, session, slotId, notes, dispatch, observedPlate }) {
     const [freshSession, slot, sessions] = await Promise.all([
       staffApi.session(session.id),
       staffApi.slot(slotId),
@@ -267,6 +297,11 @@ export const staffApi = {
         "Ô hoặc phiên xe đã thay đổi, đang được xe khác sử dụng hoặc không còn khả dụng. Hãy làm mới và chọn lại.",
       );
     }
+    if (
+      mode !== "assign" &&
+      !platesMatch(validatePlate(observedPlate), freshSession.plateNumber)
+    )
+      throw new Error("Biển số thực tế không khớp với phiên xe vào cổng.");
     if (mode === "assign") {
       return dispatch
         ? post(`/v1/parking-dispatches/${dispatch.id}/assign`, {

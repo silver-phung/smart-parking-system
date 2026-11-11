@@ -13,7 +13,7 @@ const expired = () =>
     { status: 401 },
   );
 async function send(path, options, accessToken) {
-  const { skipAuth, ...requestOptions } = options;
+  const { skipAuth, responseType, ...requestOptions } = options;
   const multipart =
     typeof FormData !== "undefined" && requestOptions.body instanceof FormData;
   try {
@@ -115,5 +115,6 @@ export async function apiRequest(path, options = {}) {
       throw expired();
     }
   }
+  if (options.responseType === "blob" && response.ok) return response.blob();
   return read(response);
 }

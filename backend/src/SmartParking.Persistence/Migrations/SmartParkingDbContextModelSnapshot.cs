@@ -1109,6 +1109,9 @@ namespace SmartParking.Persistence.Migrations
 
                     b.Property<string>("ContentSha256")
                         .HasColumnType("text");
+                    b.Property<byte[]>("Content")
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1122,7 +1125,7 @@ namespace SmartParking.Persistence.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("format");
 
-                    b.Property<int>("Height")
+                    b.Property<int?>("Height")
                         .HasColumnType("integer")
                         .HasColumnName("height");
 
@@ -1142,7 +1145,7 @@ namespace SmartParking.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("user_id");
 
-                    b.Property<int>("Width")
+                    b.Property<int?>("Width")
                         .HasColumnType("integer")
                         .HasColumnName("width");
 

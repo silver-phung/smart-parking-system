@@ -155,7 +155,7 @@ export function StaffSessions({ lot, revision, onOpen }) {
             <>
               <SessionInfo session={detail.data} />
               <div className="staff-inline-actions">
-                {detail.data.status === "ACTIVE" && (
+                {detail.data.status === "ACTIVE" && !detail.data.bookingId && (
                   <button
                     className="staff-button staff-button--secondary"
                     onClick={() => onOpen("verify", detail.data.id)}

@@ -44,6 +44,20 @@ public class CheckInRequestDto
     public string? CheckInImageUrl { get; set; }
 }
 
+public class ConfirmBookingParkedRequestDto
+{
+    [Required(ErrorMessage = "Biển số xe không được để trống.")]
+    [StringLength(20, MinimumLength = 3, ErrorMessage = "Biển số xe phải từ 3 đến 20 ký tự.")]
+    public string PlateNumber { get; set; } = string.Empty;
+
+    [Range(1, long.MaxValue, ErrorMessage = "ID ô đỗ không hợp lệ.")]
+    public long SlotId { get; set; }
+
+    [Required(ErrorMessage = "Ảnh biển số xe là bắt buộc.")]
+    [MaxLength(500, ErrorMessage = "URL hình ảnh không được vượt quá 500 ký tự.")]
+    public string CheckInImageUrl { get; set; } = string.Empty;
+}
+
 public class CheckOutRequestDto
 {
     [MaxLength(40)]

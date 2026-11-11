@@ -58,7 +58,7 @@ ERD lược bớt hai liên kết actor cấp/thu hồi phân công để dễ �
 | `refresh_tokens` | `RefreshToken` | Hash refresh token, người dùng, thời hạn, thu hồi và thiết bị/IP. |
 | `roles` | `Role` | Bốn mã ADMIN, MANAGER, STAFF, USER; Guest không phải một dòng role. |
 | `staff_lot_assignments` | `StaffLotAssignment` | Phân công người dùng vào bãi, người cấp/thu hồi và lịch sử; chưa có loại nhiệm vụ Staff. |
-| `stored_images` | `StoredImage` | Metadata ảnh Cloudinary và người tải; chưa có FK phiên/bãi/quyền chia sẻ ảnh theo bãi. |
+| `stored_images` | `StoredImage` | Nội dung ảnh mới (bytea), metadata và người tải; ảnh Cloudinary cũ giữ URL. Liên kết phiên qua URL, không có FK phiên/bãi. |
 | `user_tokens` | `UserToken` | Cấu trúc token EMAIL_VERIFICATION/PASSWORD_RESET còn tồn tại; không chứng minh endpoint xác minh/đổi mật khẩu còn có. |
 | `users` | `User` | Tài khoản, một role, trạng thái xác minh/duyệt/khóa và hồ sơ. |
 | `vehicles` | `Vehicle` | Biển số unique và chủ tài khoản có thể null cho vãng lai; hãng/model/màu và cờ hoạt động. |
@@ -418,7 +418,7 @@ Phân công người dùng vào bãi, người cấp/thu hồi và lịch sử; 
 
 ### `stored_images`
 
-Metadata ảnh Cloudinary và người tải; chưa có FK phiên/bãi/quyền chia sẻ ảnh theo bãi.
+Nội dung ảnh mới (bytea), metadata và người tải; ảnh Cloudinary cũ giữ URL. Quyền xem ảnh database theo người tải, Admin, chủ xe hoặc staff/manager tại bãi của phiên liên kết qua URL.
 
 | Cột | Kiểu PostgreSQL | NULL | Khóa | Default khai báo | Thuộc tính C# |
 |---|---|---|---|---|---|

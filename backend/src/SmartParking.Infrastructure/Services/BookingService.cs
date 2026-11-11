@@ -177,8 +177,6 @@ public class BookingService : IBookingService
                 }
 
                 var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-                var username = user?.Username ?? "user";
-
                 var booking = new Booking
                 {
                     LotId = lot.Id,
@@ -226,7 +224,7 @@ public class BookingService : IBookingService
                 _logger.LogInformation("User {UserId} reserved capacity at lot {LotId} for vehicle {PlateNumber}. Booking ID: {BookingId}",
                     userId, lot.Id, normalizedPlate, booking.Id);
 
-                var dto = MapToDto(booking, lot.Name, lot.Address, username);
+                var dto = MapToDto(booking, lot.Name, lot.Address, user);
                 return (true, 201, "Đặt chỗ giữ sức chứa thành công.", dto);
             }
             catch (DbUpdateException ex)
@@ -287,7 +285,7 @@ public class BookingService : IBookingService
             .Take(pageSize)
             .ToListAsync(ct);
 
-        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User.Username)).ToList();
+        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User)).ToList();
         return PagedResult<BookingDto>.Create(dtos, totalCount, page, pageSize);
     }
 
@@ -454,7 +452,7 @@ public class BookingService : IBookingService
                 _logger.LogInformation("Booking {BookingId} for vehicle {PlateNumber} cancelled by user {UserId} ({UserRole})",
                     lockedBooking.Id, lockedBooking.PlateNumber, currentUserId, currentUserRole);
 
-                var dto = MapToDto(lockedBooking, lockedBooking.Lot.Name, lockedBooking.Lot.Address, lockedBooking.User.Username);
+                var dto = MapToDto(lockedBooking, lockedBooking.Lot.Name, lockedBooking.Lot.Address, lockedBooking.User);
                 return (true, 200, "Hủy lượt đặt chỗ thành công. Sức chứa giữ chỗ đã được giải phóng.", dto);
             }
             catch (Exception ex)
@@ -544,7 +542,7 @@ public class BookingService : IBookingService
             .Take(pageSize)
             .ToListAsync(ct);
 
-        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User.Username)).ToList();
+        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User)).ToList();
         return PagedResult<BookingDto>.Create(dtos, totalCount, page, pageSize);
     }
 
@@ -582,6 +580,7 @@ public class BookingService : IBookingService
             TotalCapacity = calc.TotalCapacity,
             AvailableForWalkIn = availableCapacity,
             AvailableForBooking = availableCapacity,
+            PendingBookingsCount = calc.PendingBookingsCount,
             IsFull = !lot.IsActive || availableCapacity <= 0,
             PhysicalSlotsCount = physicalSlotsCount,
             ConfiguredCapacity = lot.TotalCapacity,
@@ -614,7 +613,7 @@ public class BookingService : IBookingService
         return string.IsNullOrEmpty(constraintName) || innerMsg.Contains(constraintName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static BookingDto MapToDto(Booking b, string lotName, string? lotAddress, string username)
+    private static BookingDto MapToDto(Booking b, string lotName, string? lotAddress, User? user)
     {
         return new BookingDto
         {
@@ -624,7 +623,10 @@ public class BookingService : IBookingService
             LotName = lotName,
             LotAddress = lotAddress,
             UserId = b.UserId,
-            Username = username,
+            Username = user?.Username ?? "user",
+            FullName = user?.FullName,
+            Email = user?.Email,
+            PhoneNumber = user?.PhoneNumber,
             VehicleId = b.VehicleId,
             PlateNumber = b.PlateNumber,
             StartTime = b.StartTime,
@@ -651,6 +653,9 @@ public class BookingService : IBookingService
             LotAddress = b.Lot?.Address,
             UserId = b.UserId,
             Username = b.User?.Username ?? string.Empty,
+            FullName = b.User?.FullName,
+            Email = b.User?.Email,
+            PhoneNumber = b.User?.PhoneNumber,
             VehicleId = b.VehicleId,
             PlateNumber = b.PlateNumber,
             StartTime = b.StartTime,

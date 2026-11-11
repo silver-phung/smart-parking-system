@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
+import StaffBookings from "../components/staff/StaffBookings.jsx";
 import { StaffExit } from "../components/staff/StaffExit.jsx";
 import {
   StaffDispatches,
@@ -18,6 +19,7 @@ import { staffApi } from "../services/staffApi.js";
 import "../staff.css";
 
 const views = [
+  { id: "bookings", name: "Xe đặt qua web", description: "Xác nhận xe đã đặt và vị trí thực tế" },
   { id: "entry", name: "Xe vào", description: "Tiếp nhận xe vào khu bình thường" },
   { id: "exit", name: "Xe ra", description: "Đối chiếu tại cổng ra" },
   { id: "tickets", name: "Tra vé", description: "Tra cứu và báo mất vé" },
@@ -37,11 +39,13 @@ const views = [
 function StaffContent() {
   const [params, setParams] = useSearchParams();
   const selectedView = params.get("view") || "entry";
-  const view = views.find((item) => item.id === selectedView) || views[0];
+  const view = views.find((item) => item.id === selectedView) || views.find(item => item.id === "entry");
   const [selectedLotId, setSelectedLotId] = useState("");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
   const tabRefs = useRef({});
+  const [newBookingsCount, setNewBookingsCount] = useState(0);
+  const [confirmedSession, setConfirmedSession] = useState(null);
   const loadLots = useCallback(async (signal) => {
     const result = await staffApi.assignedLots(signal);
     if (!Array.isArray(result))
@@ -185,6 +189,10 @@ function StaffContent() {
             </article>
           </div>
           <StaffError error={capacity.error} />
+          {newBookingsCount > 0 && view.id !== "bookings" && <Notice kind="success">Có {newBookingsCount} đặt chỗ mới. <button className="staff-text-button" disabled={busy} onClick={() => open("bookings")}>Xem xe đặt qua web</button></Notice>}
+          <section hidden={view.id !== "bookings"} aria-label="Xe đặt qua web">
+            <StaffBookings key={lotId} lotId={lotId} lotIsActive={lot.isActive} revision={revision} onChanged={refresh} onBusyChange={setBusy} onNewBookingsChange={setNewBookingsCount} onConfirmed={session => { setConfirmedSession(session); open("exit", session.id); }} />
+          </section>
           <div
             className="staff-tabs"
             role="tablist"
@@ -234,13 +242,14 @@ function StaffContent() {
                 : "Đang kiểm tra dữ liệu bãi"}
             </span>
           </div>
-          <section
+          {view.id !== "bookings" && <section
             className="staff-view"
             role="tabpanel"
             id={`staff-panel-${view.id}`}
             aria-labelledby={`staff-tab-${view.id}`}
             key={`${lotId}-${view.id}`}
           >
+            {view.id === "exit" && confirmedSession?.id === Number(params.get("sessionId")) && <Notice kind="success">Đã xác nhận xe {confirmedSession.plateNumber} đỗ tại ô {confirmedSession.slotCode}. Phiên #{confirmedSession.id} đang hoạt động.</Notice>}
             {view.id === "entry" && (
               <TicketEntry {...props} />
             )}
@@ -263,7 +272,7 @@ function StaffContent() {
             {view.id === "dispatches" && (
               <StaffDispatches {...props} onOpen={open} />
             )}
-          </section>
+          </section>}
           <p className="staff-permission-note">
             Thao tác được kiểm tra theo nhiệm vụ và bãi được phân công. Nếu bị
             từ chối quyền, liên hệ quản lý để kiểm tra phân công.

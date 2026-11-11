@@ -172,7 +172,7 @@ user_tokens.token_type; cấu trúc còn dù endpoint đăng ký/xác minh/reset
 | FuelType event/Gemini | gasoline, electric, unknown theo mô tả DTO/AI | Chưa có CHECK/core field; string payload không phải ràng buộc DB |
 | VehicleType viewer | car, ev, moto được mô tả | Đang trộn loại xe/nhiên liệu; sản phẩm hiện phạm vi ô tô |
 | IoT simulator EventType | CarParked/CheckIn, CarDeparted/CheckOut, Fault | Khác ParkingEventType; không đồng nhất hai endpoint |
-| Ảnh Cloudinary | JPEG/PNG/WebP; mặc định 10 MiB theo cấu hình | FastAPI không tự dùng giới hạn này; cần kiểm tra từng dịch vụ |
+| Ảnh PostgreSQL | JPEG/PNG/WebP; mặc định 10 MiB theo cấu hình | URL nội bộ yêu cầu xác thực; FastAPI không tự dùng giới hạn này |
 | Thời gian | ISO 8601 UTC/offset; lưu timestamptz, hiển thị Asia/Saigon UTC+7 | Không trộn giờ trình duyệt làm căn cứ phí |
 | Tiền core | decimal/numeric(12,2) TotalFee; VND theo nghiệp vụ | Chưa có pricing/payment; không tự áp số lẻ hay làm tròn không được duyệt |
 
@@ -195,6 +195,8 @@ Kết quả AI/OCR ở cổng cần được lưu là nhận dạng tạm gồm 
 `audit_logs.old_values/new_values` là text JSON sinh theo từng hành động, không có một schema payload chung đã được ràng buộc DB. Khi mở rộng cần version và loại action; không ghi password, raw token, OTP hay secret. Mã action lấy từ service, không sao chép mã ledger của AITasker.
 
 API core thường dùng `{message,data}`; data phân trang dùng items và thông tin trang/tổng theo PagedResult. Tên query `page` và `pageNumber` khác nhau giữa nhóm DTO; theo [04 Endpoints](endpoints.md), không chuẩn hóa chỉ ở frontend khi server chưa hỗ trợ.
+
+`GET /api/v1/parking-lots/{id}/capacity` là endpoint công khai trả `totalCapacity`, `availableForBooking`, `availableForWalkIn` và `pendingBookingsCount`. `availableForBooking` đã trừ phiên xe đang chiếm sức chứa và booking PENDING; `pendingBookingsCount` chỉ cho biết số chỗ giữ, không tiết lộ người đặt hay biển số. Booking không gán trước một ô vật lý cụ thể, nên chỉ số slot trên sơ đồ là trạng thái vật lý và chỉ đổi khi xe được xác nhận tại ô.
 
 ## 6 Các miền đề xuất chưa triển khai
 
@@ -308,6 +310,16 @@ Danh mục lấy từ type thực tế của tham số controller, gồm body v�
 | `plateNumber` | `String` | Không | Required; StringLength 3..20 |
 | `slotId` | `Int64?` | Có | — |
 | `checkInImageUrl` | `String` | Có | MaxLength 500 |
+
+[Nguồn DTO](https://github.com/silver-phung/smart-parking-system/blob/4bed0c8a929fe050d644aa4e07c0a1caa77d8d0e/backend/src/SmartParking.Application/DTOs/Sessions/ParkingSessionDtos.cs).
+
+### ConfirmBookingParkedRequestDto
+
+| Trường JSON/query | Kiểu .NET | Nullable | DataAnnotation |
+|---|---|---|---|
+| `plateNumber` | `String` | Không | Required; StringLength 3..20; phải khớp booking |
+| `slotId` | `Int64` | Không | Range 1..9223372036854775807; ô đang hoạt động cùng bãi và chưa có phiên xe |
+| `checkInImageUrl` | `String` | Không | Required; MaxLength 500; URL HTTP/HTTPS của ảnh đã tải lên |
 
 [Nguồn DTO](https://github.com/silver-phung/smart-parking-system/blob/4bed0c8a929fe050d644aa4e07c0a1caa77d8d0e/backend/src/SmartParking.Application/DTOs/Sessions/ParkingSessionDtos.cs).
 

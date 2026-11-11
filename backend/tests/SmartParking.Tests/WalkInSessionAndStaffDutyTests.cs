@@ -195,9 +195,13 @@ public class WalkInSessionAndStaffDutyTests
         Assert.True(verifyRes.Success);
         Assert.Equal(20201, verifyRes.Data!.CurrentSlotId);
 
-        // Fix 4 Invariant: Sensor state remains unchanged (EMPTY) under business verification (staff association != IoT sensor update)
+        // A staff verification confirms that the vehicle is physically present in the selected slot.
         var slot = await context.ParkingSlots.FindAsync(20201L);
-        Assert.Equal(SlotPhysicalStatuses.Empty, slot!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, slot!.PhysicalStatus);
+        var verifyAudit = context.AuditLogs.FirstOrDefault(a => a.Action == "VERIFY_SESSION_SLOT");
+        Assert.NotNull(verifyAudit);
+        Assert.Contains("\"SensorStatusBeforeVerification\":\"EMPTY\"", verifyAudit.NewValues);
+        Assert.Contains("\"PhysicalStatusAfterVerification\":\"OCCUPIED\"", verifyAudit.NewValues);
 
         // 3. SLOT_VERIFIER attempts check-out -> rejected
         var checkOutRes = await sessionService.CheckOutAsync(
@@ -327,7 +331,7 @@ public class WalkInSessionAndStaffDutyTests
     }
 
     [Fact]
-    public async Task ReportSessionWrongSlot_MovesToActualSlot_PreservesPreviousPhysicalState()
+    public async Task ReportSessionWrongSlot_MovesToActualSlot_AndMarksActualSlotOccupied()
     {
         var (sessionService, _, context) = await CreateServicesAsync();
         SeedLot(context, 207, "Bãi Wrong Slot Correction");
@@ -360,9 +364,9 @@ public class WalkInSessionAndStaffDutyTests
         slot1 = await context.ParkingSlots.FindAsync(20701L);
         Assert.Equal(SlotPhysicalStatuses.Occupied, slot1!.PhysicalStatus);
 
-        // New slot physical status remains what IoT reported (does not force OCCUPIED)
+        // Staff confirms the vehicle is physically present in the actual slot.
         var slot2 = await context.ParkingSlots.FindAsync(20702L);
-        Assert.Equal(SlotPhysicalStatuses.Empty, slot2!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, slot2!.PhysicalStatus);
     }
 
     [Fact]
@@ -855,7 +859,7 @@ public class WalkInSessionAndStaffDutyTests
         Assert.False(verifyMaint.Success);
         Assert.Contains("bảo trì hoặc không khả dụng", verifyMaint.Message);
 
-        // Verify to normal slot -> succeeds and sensor state remains EMPTY
+        // Verify to normal slot -> succeeds and marks the occupied position.
         var normalSlot = slots[0];
         var verifyNormal = await sessionService.VerifySessionSlotAsync(
             sessionId,
@@ -863,7 +867,7 @@ public class WalkInSessionAndStaffDutyTests
             actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
         Assert.True(verifyNormal.Success);
         var reloadedSlot = await context.ParkingSlots.FindAsync(normalSlot.Id);
-        Assert.Equal(SlotPhysicalStatuses.Empty, reloadedSlot!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, reloadedSlot!.PhysicalStatus);
     }
 
     [Fact]

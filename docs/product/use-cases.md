@@ -587,7 +587,7 @@ Bộ này có **42 use case SP-UC-001…SP-UC-042**; đây là mã bổ sung c�
 - **Phân kỳ:** Sprint 3.
 - **Hiện trạng:** MỘT PHẦN: upload/metadata/delete có, liên kết và quyền bãi chưa đủ.
 - **API:** SP-API-015 `POST /api/v1/images`; SP-API-016 `GET /api/v1/images/{id:long}`; SP-API-017 `DELETE /api/v1/images/{id:long}`. Tra quyền/DTO ở [04 Endpoints](../api/endpoints.md).
-- **Dữ liệu:** stored_images, Cloudinary; session-image links đề xuất.
+- **Dữ liệu:** stored_images trong PostgreSQL; ảnh Cloudinary cũ vẫn được giữ; session-image links qua URL.
 - **Tiền điều kiện:** Dịch vụ ảnh cấu hình, file hợp lệ và quyền người gửi.
 - **Nguồn yêu cầu:** Sprint 3; NFR-PRV-01.
 - **Quy tắc:** BR-IMG-02,BR-IMG-03; xem [03](business-rules.md).
@@ -595,7 +595,7 @@ Bộ này có **42 use case SP-UC-001…SP-UC-042**; đây là mã bổ sung c�
 **Luồng chính**
 
 1. Chụp hoặc chọn file.
-2. Upload Cloudinary, lưu metadata DB.
+2. Lưu nội dung ảnh và metadata vào database.
 3. Gắn ảnh vào đúng phiên/bãi khi bổ sung hợp đồng.
 4. Xem lại trong quyền cần vận hành.
 
@@ -737,10 +737,10 @@ Bộ này có **42 use case SP-UC-001…SP-UC-042**; đây là mã bổ sung c�
 
 ## SP-UC-032 Nhận xe đã đặt trước
 
-- **Tác nhân:** Staff cổng và Customer.
+- **Tác nhân:** Staff xác minh ô và Customer.
 - **Phân kỳ:** Sprint 4.
-- **Hiện trạng:** MỘT PHẦN: check-in nhận PENDING theo bãi/biển số, thiếu khung giờ/tiền/mã vé đầy đủ.
-- **API:** SP-API-047 `POST /api/v1/parking-sessions/check-in`; SP-API-011 `GET /api/v1/bookings/{id:long}`. Tra quyền/DTO ở [04 Endpoints](../api/endpoints.md).
+- **Hiện trạng:** Staff xem booking PENDING, đối chiếu biển số tại ô, chụp ảnh, chọn ô thực tế và tạo phiên; không qua check-in cổng.
+- **API:** `POST /api/v1/parking-sessions/bookings/{bookingId}/confirm-parked`; SP-API-011 `GET /api/v1/bookings/{id:long}`. Tra quyền/DTO ở [04 Endpoints](../api/endpoints.md).
 - **Dữ liệu:** bookings, vehicles, parking_sessions, audit_logs.
 - **Tiền điều kiện:** Đúng xe/bãi/khung giờ và điều kiện tiền theo chính sách.
 - **Nguồn yêu cầu:** FR-BOOK-07; FR-SES-02.
@@ -748,14 +748,13 @@ Bộ này có **42 use case SP-UC-001…SP-UC-042**; đây là mã bổ sung c�
 
 **Luồng chính**
 
-1. Đối chiếu mã đặt/xe và hiệu lực.
-2. Chuyển đúng booking sang đã nhận một lần.
-3. Tạo phiên liên kết, không tính đôi sức chứa.
-4. Chuyển xe sang điều phối thực tế.
+1. Staff nhận thông báo booking mới và tìm biển số trong danh sách chờ.
+2. Khi xe đã vào bãi, đối chiếu biển số với booking và chụp ảnh tại ô.
+3. Chọn ô xe đang đỗ; backend tạo phiên, liên kết booking, lưu ảnh và chuyển ô sang OCCUPIED nguyên tử.
 
 **Ngoại lệ:** Đến sớm/trễ/không hợp lệ xử lý theo DEC-08; không dùng lại booking tạo phiên thứ hai.
 
-**Hậu điều kiện và điểm nghiệm thu:** Xe chỉ thành Có xe sau xác nhận ô; booking và phiên có liên kết duy nhất.
+**Hậu điều kiện và điểm nghiệm thu:** Không tạo session ở cổng cho booking; chỉ sau khi Staff xác nhận xe/ô thì booking thành CHECKED_IN, session ACTIVE liên kết booking và ô thành OCCUPIED.
 
 ## SP-UC-033 Đăng ký quyền gửi cố định
 
