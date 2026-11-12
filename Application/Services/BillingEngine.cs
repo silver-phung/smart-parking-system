@@ -9,7 +9,7 @@ namespace Application.Services
 {
     public class BillingEngine : IBillingEngine
     {
-        public decimal CalculateFee(ParkingSession session)
+        public decimal CalculateFee(ParkingSessionBilling session)
         {
             // Từ chối phục vụ nếu là xe lớn hơn 9 chỗ
             if (session.VehicleType == VehicleType.Over9)

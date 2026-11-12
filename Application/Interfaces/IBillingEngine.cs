@@ -6,7 +6,7 @@ namespace Application.Interfaces
 {
     public interface IBillingEngine
     {
-        decimal CalculateFee(ParkingSession session);
+        decimal CalculateFee(ParkingSessionBilling session);
         decimal CalculateMonthlyFee(VehicleType vehicleType, ParkingZone zone);
     }
 }
