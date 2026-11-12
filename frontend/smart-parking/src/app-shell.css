@@ -135,5 +135,14 @@
 .header__account-list dt { font-size: 11px; color: #738299; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
 .header__account-list dd { margin: 0; font-size: 13px; font-weight: 600; color: #162b46; word-break: break-word; }
 .header__account-loading { margin: 0; font-size: 12px; color: #6e7d94; }
-.header__account-modal-foot { display: flex; justify-content: flex-end; padding-top: 6px; }
+.header__account-form { display: flex; flex-direction: column; gap: 14px; }
+.header__account-fields { display: flex; flex-direction: column; gap: 12px; }
+.header__account-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: #3d4f68; }
+.header__account-field input { width: 100%; height: 40px; padding: 8px 12px; border: 1px solid #d6dfed; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 500; color: #162b46; background: #fff; box-sizing: border-box; }
+.header__account-field input:focus { outline: none; border-color: #2468dc; box-shadow: 0 0 0 3px rgba(36, 104, 220, 0.14); }
+.header__account-alert { margin: 0; padding: 10px 12px; border-radius: 9px; font-size: 12.5px; font-weight: 600; }
+.header__account-alert--error { background: #fff2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.header__account-alert--success { background: #effdf5; border: 1px solid #bbf7d0; color: #15803d; }
+.header__account-staff-note { margin: 0; padding: 10px 12px; border-radius: 9px; background: #f3f6fb; border: 1px solid #dfe7f3; color: #4a5b73; font-size: 12px; line-height: 1.45; }
+.header__account-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding-top: 6px; }
 @media (max-width: 520px) { .header__account-list { grid-template-columns: 1fr; } }

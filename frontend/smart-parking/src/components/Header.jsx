@@ -13,6 +13,7 @@ import {
   clearAuthSession,
   getAuthSession,
   subscribeAuthSession,
+  updateAuthProfile,
 } from "../services/authSession.js";
 export function Logo({ small = false }) {
   return (
@@ -56,9 +57,18 @@ export default function Header({ workspace = false }) {
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [accountDetails, setAccountDetails] = useState(null);
   const [accountLoading, setAccountLoading] = useState(false);
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const [accountNotice, setAccountNotice] = useState("");
+  const [accountForm, setAccountForm] = useState({
+    fullName: "",
+    email: "",
+    phoneNumber: "",
+  });
   const profileRef = useRef(null);
   const role = session?.userProfile.role;
   const userId = session?.userProfile.id;
+  const canEditProfile = role === "ADMIN" || role === "MANAGER" || role === "USER";
   const displayName = session?.userProfile?.fullName || session?.userProfile?.username || "Tài khoản";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "U";
 
@@ -88,9 +98,24 @@ export default function Header({ workspace = false }) {
     if (!accountModalOpen || !session) return undefined;
     const controller = new AbortController();
     setAccountLoading(true);
+    setAccountError("");
+    setAccountNotice("");
+    setAccountForm({
+      fullName: session.userProfile?.fullName || "",
+      email: session.userProfile?.email || "",
+      phoneNumber: session.userProfile?.phoneNumber || session.userProfile?.phone || "",
+    });
     apiRequest("/v1/users/me", { signal: controller.signal })
-      .then((data) => {
-        if (!controller.signal.aborted && data) setAccountDetails(data);
+      .then((res) => {
+        const data = res?.data || res;
+        if (!controller.signal.aborted && data) {
+          setAccountDetails(data);
+          setAccountForm({
+            fullName: data.fullName || "",
+            email: data.email || "",
+            phoneNumber: data.phoneNumber || data.phone || "",
+          });
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -105,6 +130,48 @@ export default function Header({ workspace = false }) {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [accountModalOpen, session]);
+
+  async function saveAccountProfile(event) {
+    event.preventDefault();
+    if (!canEditProfile) return;
+    const trimmedName = accountForm.fullName.trim();
+    if (!trimmedName) {
+      setAccountError("Họ và tên không được để trống.");
+      return;
+    }
+    setAccountSaving(true);
+    setAccountError("");
+    setAccountNotice("");
+    try {
+      const res = await apiRequest("/v1/users/me", {
+        method: "PUT",
+        body: JSON.stringify({
+          fullName: trimmedName,
+          email: accountForm.email.trim() || undefined,
+          phoneNumber: accountForm.phoneNumber.trim() || null,
+        }),
+      });
+      const updated = res?.data || res;
+      if (updated) {
+        setAccountDetails(updated);
+        setAccountForm({
+          fullName: updated.fullName || "",
+          email: updated.email || "",
+          phoneNumber: updated.phoneNumber || updated.phone || "",
+        });
+        updateAuthProfile({
+          ...session.userProfile,
+          ...updated,
+          phone: updated.phoneNumber || updated.phone || "",
+        });
+      }
+      setAccountNotice(res?.message || "Đã cập nhật thông tin cá nhân thành công.");
+    } catch (e) {
+      setAccountError(e.message || "Không thể cập nhật thông tin cá nhân.");
+    } finally {
+      setAccountSaving(false);
+    }
+  }
   // Staff chỉ thấy menu thuộc loại phân công của mình (trực cổng hoặc trực khu vực).
   const [staffDuties, setStaffDuties] = useState(null);
   useEffect(() => {
@@ -257,7 +324,7 @@ export default function Header({ workspace = false }) {
           className="header__account-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label="Thông tin tài khoản"
+          aria-label="Thông tin cá nhân"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setAccountModalOpen(false);
           }}
@@ -269,7 +336,7 @@ export default function Header({ workspace = false }) {
                   {avatarInitial}
                 </span>
                 <div>
-                  <h3>Thông tin tài khoản</h3>
+                  <h3>Thông tin cá nhân</h3>
                   <span className="header__profile-role">{roleLabel}</span>
                 </div>
               </div>
@@ -282,46 +349,144 @@ export default function Header({ workspace = false }) {
                 ✕
               </button>
             </div>
-            <dl className="header__account-list">
-              <div>
-                <dt>Họ và tên</dt>
-                <dd>{accountDetails?.fullName || session.userProfile.fullName || "Chưa cập nhật"}</dd>
-              </div>
-              <div>
-                <dt>Tên đăng nhập</dt>
-                <dd>{accountDetails?.username || session.userProfile.username || "—"}</dd>
-              </div>
-              <div>
-                <dt>Chức vụ</dt>
-                <dd>{roleLabel}</dd>
-              </div>
-              <div>
-                <dt>Email</dt>
-                <dd>{accountDetails?.email || session.userProfile.email || "Chưa cập nhật"}</dd>
-              </div>
-              <div>
-                <dt>Số điện thoại</dt>
-                <dd>{accountDetails?.phone || session.userProfile.phone || "Chưa cập nhật"}</dd>
-              </div>
-              <div>
-                <dt>Trạng thái</dt>
-                <dd>
-                  {(accountDetails?.status || session.userProfile.status || "ACTIVE") === "ACTIVE"
-                    ? "Đang hoạt động"
-                    : accountDetails?.status || session.userProfile.status}
-                </dd>
-              </div>
-            </dl>
-            {accountLoading && <p className="header__account-loading">Đang đồng bộ thông tin tài khoản…</p>}
-            <div className="header__account-modal-foot">
-              <button
-                type="button"
-                className="btn btn--outline"
-                onClick={() => setAccountModalOpen(false)}
-              >
-                Đóng
-              </button>
-            </div>
+            {canEditProfile ? (
+              <form className="header__account-form" onSubmit={saveAccountProfile}>
+                <dl className="header__account-list">
+                  <div>
+                    <dt>Tên đăng nhập</dt>
+                    <dd>{accountDetails?.username || session.userProfile.username || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>Chức vụ</dt>
+                    <dd>{roleLabel}</dd>
+                  </div>
+                </dl>
+                <div className="header__account-fields">
+                  <label className="header__account-field">
+                    <span>Họ và tên</span>
+                    <input
+                      type="text"
+                      value={accountForm.fullName}
+                      onChange={(e) =>
+                        setAccountForm((prev) => ({ ...prev, fullName: e.target.value }))
+                      }
+                      placeholder="Nhập họ và tên"
+                      required
+                    />
+                  </label>
+                  <label className="header__account-field">
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      value={accountForm.email}
+                      onChange={(e) =>
+                        setAccountForm((prev) => ({ ...prev, email: e.target.value }))
+                      }
+                      placeholder="Nhập địa chỉ email"
+                    />
+                  </label>
+                  <label className="header__account-field">
+                    <span>Số điện thoại</span>
+                    <input
+                      type="tel"
+                      value={accountForm.phoneNumber}
+                      onChange={(e) =>
+                        setAccountForm((prev) => ({ ...prev, phoneNumber: e.target.value }))
+                      }
+                      placeholder="Nhập số điện thoại"
+                    />
+                  </label>
+                </div>
+                {accountLoading && (
+                  <p className="header__account-loading">Đang đồng bộ thông tin tài khoản…</p>
+                )}
+                {accountError && (
+                  <p className="header__account-alert header__account-alert--error" role="alert">
+                    {accountError}
+                  </p>
+                )}
+                {accountNotice && (
+                  <p className="header__account-alert header__account-alert--success" role="status">
+                    {accountNotice}
+                  </p>
+                )}
+                <div className="header__account-modal-foot">
+                  <button
+                    type="button"
+                    className="btn btn--outline"
+                    onClick={() => setAccountModalOpen(false)}
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn--primary"
+                    disabled={accountSaving}
+                  >
+                    {accountSaving ? "Đang lưu…" : "Lưu thay đổi"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <dl className="header__account-list">
+                  <div>
+                    <dt>Họ và tên</dt>
+                    <dd>{accountDetails?.fullName || session.userProfile.fullName || "Chưa cập nhật"}</dd>
+                  </div>
+                  <div>
+                    <dt>Tên đăng nhập</dt>
+                    <dd>{accountDetails?.username || session.userProfile.username || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>Chức vụ</dt>
+                    <dd>{roleLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{accountDetails?.email || session.userProfile.email || "Chưa cập nhật"}</dd>
+                  </div>
+                  <div>
+                    <dt>Số điện thoại</dt>
+                    <dd>
+                      {accountDetails?.phoneNumber ||
+                        accountDetails?.phone ||
+                        session.userProfile.phoneNumber ||
+                        session.userProfile.phone ||
+                        "Chưa cập nhật"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Trạng thái</dt>
+                    <dd>
+                      {(accountDetails?.approvalStatus ||
+                        accountDetails?.status ||
+                        session.userProfile.status ||
+                        "ACTIVE") === "ACTIVE"
+                        ? "Đang hoạt động"
+                        : accountDetails?.approvalStatus ||
+                          accountDetails?.status ||
+                          session.userProfile.status}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="header__account-staff-note">
+                  Tài khoản Nhân viên chỉ xem thông tin cá nhân. Liên hệ Quản trị viên hoặc Quản lý nếu cần thay đổi.
+                </p>
+                {accountLoading && (
+                  <p className="header__account-loading">Đang đồng bộ thông tin tài khoản…</p>
+                )}
+                <div className="header__account-modal-foot">
+                  <button
+                    type="button"
+                    className="btn btn--outline"
+                    onClick={() => setAccountModalOpen(false)}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
