@@ -217,15 +217,9 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
         var actor = await GetAssignmentActorAsync(actorId, ct);
         if (actor == null)
             return PagedResult<StaffLotAssignmentDto>.Create([], 0, filter.Page, filter.PageSize);
-        var query = _context.StaffLotAssignments
+
+        var baseQuery = _context.StaffLotAssignments
             .AsNoTracking()
-            .Include(a => a.User)
-                .ThenInclude(u => u.Role)
-            .Include(a => a.Lot)
-            .Include(a => a.Floor)
-            .Include(a => a.Zone)
-            .Include(a => a.AssignedByUser)
-            .Include(a => a.RevokedByUser)
             .Where(a => a.User.Role.Code == Roles.Staff);
 
         if (actor.Role.Code != Roles.Admin)
@@ -238,7 +232,7 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
                     .Select(a => a.LotId)
                     .ToListAsync(ct);
 
-                query = query.Where(a => managedLotIds.Contains(a.LotId));
+                baseQuery = baseQuery.Where(a => managedLotIds.Contains(a.LotId));
             }
             else
             {
@@ -248,29 +242,72 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
 
         if (filter.LotId.HasValue)
         {
-            query = query.Where(a => a.LotId == filter.LotId.Value);
+            baseQuery = baseQuery.Where(a => a.LotId == filter.LotId.Value);
         }
 
         if (filter.UserId.HasValue)
         {
-            query = query.Where(a => a.UserId == filter.UserId.Value);
+            baseQuery = baseQuery.Where(a => a.UserId == filter.UserId.Value);
         }
 
         if (filter.IsActive.HasValue)
         {
-            query = query.Where(a => a.IsActive == filter.IsActive.Value);
+            baseQuery = baseQuery.Where(a => a.IsActive == filter.IsActive.Value);
         }
 
-        var totalCount = await query.CountAsync(ct);
+        var totalCount = await baseQuery.CountAsync(ct);
 
-        var items = await query
-            .OrderByDescending(a => a.CreatedAt)
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .Select(a => MapToDto(a, a.User, a.Lot, a.AssignedByUser.Username, a.RevokedByUser != null ? a.RevokedByUser.Username : null))
-            .ToListAsync(ct);
+        try
+        {
+            var items = await baseQuery
+                .Include(a => a.User)
+                    .ThenInclude(u => u.Role)
+                .Include(a => a.Lot)
+                .Include(a => a.Floor)
+                .Include(a => a.Zone)
+                .Include(a => a.AssignedByUser)
+                .Include(a => a.RevokedByUser)
+                .OrderByDescending(a => a.CreatedAt)
+                .Skip((filter.Page - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .Select(a => MapToDto(a, a.User, a.Lot, a.AssignedByUser.Username, a.RevokedByUser != null ? a.RevokedByUser.Username : null))
+                .ToListAsync(ct);
 
-        return PagedResult<StaffLotAssignmentDto>.Create(items, totalCount, filter.Page, filter.PageSize);
+            return PagedResult<StaffLotAssignmentDto>.Create(items, totalCount, filter.Page, filter.PageSize);
+        }
+        catch (Exception ex) when (IsMissingFloorOrZoneColumn(ex))
+        {
+            var fallbackItems = await baseQuery
+                .OrderByDescending(a => a.CreatedAt)
+                .Skip((filter.Page - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .Select(a => new StaffLotAssignmentDto
+                {
+                    Id = a.Id,
+                    UserId = a.UserId,
+                    Username = a.User.Username,
+                    UserFullName = a.User.FullName,
+                    UserEmail = a.User.Email,
+                    UserRole = a.User.Role != null ? a.User.Role.Code : string.Empty,
+                    LotId = a.LotId,
+                    LotName = a.Lot.Name,
+                    AssignedBy = a.AssignedBy,
+                    AssignedByUsername = a.AssignedByUser.Username,
+                    AssignedAt = a.AssignedAt,
+                    IsActive = a.IsActive,
+                    Duty = a.Duty,
+                    RevokedBy = a.RevokedBy,
+                    RevokedByUsername = a.RevokedByUser != null ? a.RevokedByUser.Username : null,
+                    RevokedAt = a.RevokedAt,
+                    RevocationReason = a.RevocationReason,
+                    Notes = a.Notes,
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt
+                })
+                .ToListAsync(ct);
+
+            return PagedResult<StaffLotAssignmentDto>.Create(fallbackItems, totalCount, filter.Page, filter.PageSize);
+        }
     }
 
     public async Task<StaffLotAssignmentDto?> GetAssignmentByIdAsync(
@@ -279,49 +316,88 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
         string actorRole,
         CancellationToken ct = default)
     {
-        var assignment = await _context.StaffLotAssignments
-            .AsNoTracking()
-            .Include(a => a.User)
-                .ThenInclude(u => u.Role)
-            .Include(a => a.Lot)
-            .Include(a => a.Floor)
-            .Include(a => a.Zone)
-            .Include(a => a.AssignedByUser)
-            .Include(a => a.RevokedByUser)
-            .FirstOrDefaultAsync(a => a.Id == id, ct);
-
-        if (assignment == null)
-        {
-            return null;
-        }
-
         var actor = await GetAssignmentActorAsync(actorId, ct);
-        if (actor == null || assignment.User.Role.Code != Roles.Staff) return null;
-        if (actor.Role.Code != Roles.Admin)
-        {
-            if (actor.Role.Code == Roles.Manager)
-            {
-                var isManaged = await _context.StaffLotAssignments
-                    .AnyAsync(a => a.UserId == actorId && a.LotId == assignment.LotId && a.IsActive, ct);
+        if (actor == null) return null;
 
-                if (!isManaged)
+        try
+        {
+            var assignment = await _context.StaffLotAssignments
+                .AsNoTracking()
+                .Include(a => a.User)
+                    .ThenInclude(u => u.Role)
+                .Include(a => a.Lot)
+                .Include(a => a.Floor)
+                .Include(a => a.Zone)
+                .Include(a => a.AssignedByUser)
+                .Include(a => a.RevokedByUser)
+                .FirstOrDefaultAsync(a => a.Id == id, ct);
+
+            if (assignment == null || assignment.User.Role.Code != Roles.Staff)
+            {
+                return null;
+            }
+
+            if (actor.Role.Code != Roles.Admin)
+            {
+                if (actor.Role.Code == Roles.Manager)
+                {
+                    var isManaged = await _context.StaffLotAssignments
+                        .AnyAsync(a => a.UserId == actorId && a.LotId == assignment.LotId && a.IsActive, ct);
+
+                    if (!isManaged) return null;
+                }
+                else
                 {
                     return null;
                 }
             }
-            else
-            {
-                return null;
-            }
-        }
 
-        return MapToDto(
-            assignment,
-            assignment.User,
-            assignment.Lot,
-            assignment.AssignedByUser.Username,
-            assignment.RevokedByUser?.Username
-        );
+            return MapToDto(
+                assignment,
+                assignment.User,
+                assignment.Lot,
+                assignment.AssignedByUser.Username,
+                assignment.RevokedByUser?.Username
+            );
+        }
+        catch (Exception ex) when (IsMissingFloorOrZoneColumn(ex))
+        {
+            var dto = await _context.StaffLotAssignments
+                .AsNoTracking()
+                .Where(a => a.Id == id && a.User.Role.Code == Roles.Staff)
+                .Select(a => new StaffLotAssignmentDto
+                {
+                    Id = a.Id,
+                    UserId = a.UserId,
+                    Username = a.User.Username,
+                    UserFullName = a.User.FullName,
+                    UserEmail = a.User.Email,
+                    UserRole = a.User.Role != null ? a.User.Role.Code : string.Empty,
+                    LotId = a.LotId,
+                    LotName = a.Lot.Name,
+                    AssignedBy = a.AssignedBy,
+                    AssignedByUsername = a.AssignedByUser.Username,
+                    AssignedAt = a.AssignedAt,
+                    IsActive = a.IsActive,
+                    Duty = a.Duty,
+                    RevokedBy = a.RevokedBy,
+                    RevokedByUsername = a.RevokedByUser != null ? a.RevokedByUser.Username : null,
+                    RevokedAt = a.RevokedAt,
+                    RevocationReason = a.RevocationReason,
+                    Notes = a.Notes,
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (dto == null) return null;
+            if (actor.Role.Code != Roles.Admin)
+            {
+                if (actor.Role.Code != Roles.Manager || !await _context.StaffLotAssignments.AnyAsync(a => a.UserId == actorId && a.LotId == dto.LotId && a.IsActive, ct))
+                    return null;
+            }
+            return dto;
+        }
     }
 
     public async Task<List<AssignedLotSummaryDto>> GetMyAssignedLotsAsync(
@@ -443,6 +519,18 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
             CreatedAt = a.CreatedAt,
             UpdatedAt = a.UpdatedAt
         };
+    }
+
+    private static bool IsMissingFloorOrZoneColumn(Exception ex)
+    {
+        if (ex is Npgsql.PostgresException pgEx && pgEx.SqlState == "42703")
+            return true;
+        if (ex.InnerException is Npgsql.PostgresException innerPg && innerPg.SqlState == "42703")
+            return true;
+        var msg = ex.InnerException?.Message ?? ex.Message;
+        return msg.Contains("floor_id", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("zone_id", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("42703", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPostgresUniqueViolation(DbUpdateException ex, string constraintName)

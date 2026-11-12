@@ -72,8 +72,8 @@ export default function ParkingSlotManagement({ role }) {
   const action = useMutation();
   const lots = useResource(role === "MANAGER" ? "/v1/staff-assignments/my-lots" : "/v1/parking-lots?pageNumber=1&pageSize=100", 0, { allPages: "pageNumber" });
   const availableLots = itemsOf(lots.data).map(l => role === "MANAGER" ? { id: l.lotId, name: l.lotName } : l);
-  const lot = availableLots.find(l => String(l.id) === lotId) || availableLots[0];
-  const floors = useResource(lot ? `/v1/parking-lots/${lot.id}/floors?isActiveOnly=false` : null, floorRevision);
+  const lot = availableLots.find(l => String(l.id) === lotId) || availableLots.find(l => (l.totalFloors || l.physicalSlotsCount) > 0) || availableLots[0];
+  const floors = useResource(lot ? `/v1/parking-lots/${lot.id}/floors?all=1` : null, floorRevision);
   const floorList = itemsOf(floors.data);
   const floor = floorList.find(f => String(f.id) === floorId) || floorList[0];
   const refresh = () => setRevision(r => r + 1);

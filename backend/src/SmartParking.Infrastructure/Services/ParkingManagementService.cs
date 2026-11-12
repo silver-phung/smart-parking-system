@@ -444,9 +444,9 @@ public class ParkingManagementService : IParkingManagementService
             .AsNoTracking()
             .AsQueryable();
 
-        if (isActiveOnly.HasValue)
+        if (isActiveOnly == true)
         {
-            query = query.Where(f => f.IsActive == isActiveOnly.Value);
+            query = query.Where(f => f.IsActive);
         }
 
         var floors = await query.OrderBy(f => f.FloorNumber).ToListAsync(ct);

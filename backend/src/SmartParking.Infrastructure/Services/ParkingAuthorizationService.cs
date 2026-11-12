@@ -19,12 +19,25 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
         if (role == Roles.Admin) return true;
         if (role == Roles.Manager) return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive, ct);
         if (role != Roles.Staff) return false;
-        return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
-            (a.Duty == duty || a.Duty == StaffDuties.Both ||
-                ((duty == StaffDuties.GateIn || duty == StaffDuties.GateOut) && a.Duty == StaffDuties.Gate)) &&
-            (a.FloorId == null || (floorId != null ? a.FloorId == floorId : zoneId == null ||
-                _context.ParkingFloors.Any(f => f.Id == a.FloorId && f.LotId == lotId && f.ZoneId == zoneId))) &&
-            (a.ZoneId == null || (zoneId != null && a.ZoneId == zoneId)), ct);
+        try
+        {
+            return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
+                (a.Duty == duty || a.Duty == StaffDuties.Both ||
+                    ((duty == StaffDuties.GateIn || duty == StaffDuties.GateOut) && a.Duty == StaffDuties.Gate)) &&
+                (a.FloorId == null || (floorId != null ? a.FloorId == floorId : zoneId == null ||
+                    _context.ParkingFloors.Any(f => f.Id == a.FloorId && f.LotId == lotId && f.ZoneId == zoneId))) &&
+                (a.ZoneId == null || (zoneId != null && a.ZoneId == zoneId)), ct);
+        }
+        catch (Exception ex) when (
+            (ex is Npgsql.PostgresException pg && pg.SqlState == "42703") ||
+            (ex.InnerException is Npgsql.PostgresException innerPg && innerPg.SqlState == "42703") ||
+            ex.Message.Contains("floor_id", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("zone_id", StringComparison.OrdinalIgnoreCase))
+        {
+            return await _context.StaffLotAssignments.AnyAsync(a => a.UserId == userId && a.LotId == lotId && a.IsActive &&
+                (a.Duty == duty || a.Duty == StaffDuties.Both ||
+                    ((duty == StaffDuties.GateIn || duty == StaffDuties.GateOut) && a.Duty == StaffDuties.Gate)), ct);
+        }
     }
 
     private async Task<string?> ResolveEffectiveRoleAsync(long userId, CancellationToken ct)
