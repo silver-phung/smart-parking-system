@@ -272,6 +272,7 @@
   /* ---------- nhãn mã slot trên sàn (atlas) ---------- */
   function labelAtlas(fl) {
     var n = fl.slots.length, cols = 10, rows = Math.ceil(n / cols), cw = 128, ch = 64;
+    if (!n) return;
     var tex = U.canvasTex(cols * cw, rows * ch, function (c) {
       c.clearRect(0, 0, cols * cw, rows * ch);
       c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = 'bold 34px Arial, sans-serif';
@@ -633,7 +634,7 @@
   /*  HỆ THỐNG BIỂN BÁO / BẢNG SỐ SLOT TRỐNG                              */
   /* ================================================================== */
   function addSigns(lot, fl) {
-    var k = fl.k, n = lot.n, ids = lot.def.ids, free = lot.free;
+    var k = fl.k, n = lot.n, def = lot.def, ids = def.ids, free = lot.free;
     var BLUE = '#0b5cad', GREEN = '#0b8a43', AMB = '#c46a00', RED = '#b83227', DARK = '#0f172a';
     function S(lines, bg, w, h, fg) { return U.signTex(lines, bg, fg || '#ffffff', w || 512, h || 160); }
     function avail(i) { return free[i] > 5 ? GREEN : (free[i] > 0 ? AMB : RED); }
