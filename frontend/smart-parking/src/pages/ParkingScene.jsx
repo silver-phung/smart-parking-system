@@ -5,6 +5,7 @@ import { apiRequest } from "../services/api.js";
 import { getAuthSession, subscribeAuthSession } from "../services/authSession.js";
 import { Feedback, itemsOf, useResource, useMutation, write } from "../components/WorkspaceUI.jsx";
 import { sceneStatuses, sceneToDefinition } from "../services/parkingScene.js";
+import { canUseStaffView } from "../services/staffDuty.js";
 import "../parking-scene.css";
 
 function useScene(lotId, revision, identity) {
@@ -43,8 +44,12 @@ export default function ParkingScene() {
   const action = useMutation();
   const assigned = role === "STAFF" || role === "MANAGER";
   const lots = useResource(assigned ? "/v1/staff-assignments/my-lots" : "/v1/parking-lots?pageNumber=1&pageSize=100", role || "GUEST", { allPages: "pageNumber" });
-  const choices = itemsOf(lots.data).map(l => ({ id: l.lotId ?? l.id, name: l.lotName ?? l.name }));
+  const rawLots = itemsOf(lots.data);
+  const choices = rawLots.map(l => ({ id: l.lotId ?? l.id, name: l.lotName ?? l.name, duty: l.duty }));
   const lot = choices.find(l => String(l.id) === lotChoice) || choices[0];
+  const staffDuty = lot?.duty;
+  const canGate = role === "STAFF" && canUseStaffView(staffDuty, "entry");
+  const canArea = role === "STAFF" && canUseStaffView(staffDuty, "verify");
   const state = useScene(lot?.id, revision, `${session?.userProfile.id || "guest"}:${role || ""}`);
   const scene = state.data?.id === lot?.id ? state.data : null;
   const definition = useMemo(() => sceneToDefinition(scene), [JSON.stringify(scene?.floors), scene?.id, scene?.name]);
@@ -80,16 +85,57 @@ export default function ParkingScene() {
           {slot && <div className="parking-slot-detail"><span className={`slot-status slot-status--${slot.status.toLowerCase()}`}>{sceneStatuses[slot.status] || slot.status}</span><dl><div><dt>Tầng</dt><dd>{floor.name}</dd></div><div><dt>Khu vực</dt><dd>{floor.zoneName}</dd></div>{slot.plate && <div><dt>Biển số</dt><dd>{slot.plate}</dd></div>}<div><dt>Tiếp nhận</dt><dd>{slot.isAvailable ? "Có thể sử dụng" : "Chưa khả dụng"}</dd></div></dl>
             {slot.isProtected && <p className="parking-protection">Ô đang gắn với xe hoặc điều phối. Thao tác chỉnh sửa được khóa.</p>}
             {scene.canManage && <><Link className="btn btn--outline" to={`/parking/slots?${context}`}>Quản lý ô tại tầng</Link>{!slot.isProtected && <div className="parking-status-edit"><label>Đổi trạng thái<select aria-label="Đổi trạng thái ô" value={nextStatus} disabled={action.busy || Boolean(state.error)} onChange={e => setNextStatus(e.target.value)}><option value="">Chọn trạng thái mới</option>{Object.entries(sceneStatuses).filter(([k]) => k !== "UNAVAILABLE" && k !== slot.status).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>{nextStatus && <form onSubmit={e => { e.preventDefault(); action.run(() => write(`/v1/parking-slots/${slot.id}/status`, { physicalStatus: nextStatus, reason: reason.trim() || null }, "PATCH"), () => { setNextStatus(""); refresh(); }); }}><label>Ghi chú<input value={reason} maxLength={255} disabled={action.busy} onChange={e => setReason(e.target.value)} /></label><button className="btn btn--primary" disabled={action.busy || Boolean(state.error)}>Xác nhận đổi trạng thái</button></form>}</div>}</>}
-            {role === "STAFF" && floor.canVerify && <Link className="btn btn--outline" to={`/staff?view=verify&${context}${slot.sessionId ? `&sessionId=${slot.sessionId}` : ""}`}>Mở xác minh khu vực</Link>}
-            {role === "STAFF" && scene.canExit && slot.sessionId && <Link className="btn btn--outline" to={`/staff?view=exit&${context}&sessionId=${slot.sessionId}`}>Đối chiếu xe ra</Link>}
-            {role === "USER" && scene.isActive && <Link className="btn btn--primary" to={`/customer?${context}`}>Đặt chỗ tại bãi này</Link>}
+            {role === "STAFF" && canArea && floor.canVerify && <div style={{ display: "grid", gap: "6px" }}>
+              <Link className="btn btn--outline" to={`/staff?view=verify&${context}${slot.sessionId ? `&sessionId=${slot.sessionId}` : ""}`}>🔍 Xác minh ô này</Link>
+              {slot.status === "OCCUPIED" && <Link className="btn btn--outline" to={`/staff?view=dispatches&${context}${slot.sessionId ? `&sessionId=${slot.sessionId}` : ""}`}>📋 Báo điều phối / sai ô</Link>}
+            </div>}
+            {role === "STAFF" && canGate && scene.canExit && slot.sessionId && <Link className="btn btn--outline" to={`/staff?view=exit&${context}&sessionId=${slot.sessionId}`}>🚪 Đối chiếu xe ra</Link>}
+            {role === "USER" && <div style={{ display: "grid", gap: "6px" }}>
+              {slot.isMine ? <Link className="btn btn--primary" to="/customer/sessions">🚗 Xem phiên gửi xe của tôi</Link>
+                : slot.status === "EMPTY" && scene.isActive ? <Link className="btn btn--primary" to={`/customer?${context}`}>🅿 Đặt chỗ tại bãi này</Link> : null}
+            </div>}
             {!session && <Link className="btn btn--outline" to="/login">Đăng nhập để đặt chỗ</Link>}
           </div>}
           <label className="parking-slot-search">Tìm ô / biển số<input type="search" value={search} placeholder="Nhập mã ô hoặc biển số" onChange={e => setSearch(e.target.value)} /></label>
           <select aria-label="Lọc trạng thái ô" value={filter} onChange={e => setFilter(e.target.value)}><option value="">Tất cả trạng thái</option>{Object.entries(sceneStatuses).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           <div className="parking-slot-list">{rows.map(s => <button key={s.id} className={`parking-slot-row ${selectedId === s.id ? "is-selected" : ""}`} onClick={() => focus(s)}><span><strong>{s.code}</strong>{s.plate && <small>{s.plate}{s.isMine ? " · Xe của tôi" : ""}</small>}</span><span className={`slot-status slot-status--${s.status.toLowerCase()}`}>{sceneStatuses[s.status] || s.status}</span></button>)}{!rows.length && <p className="workspace-empty">{floor.slots.length ? "Không tìm thấy ô phù hợp." : "Tầng chưa có ô đỗ."}</p>}</div>
         </aside></div>
-      <div className="parking-quick-actions"><div><strong>Vận hành tại {scene.name}</strong><span>{scene.capacity.availableCapacity} chỗ có thể nhận thêm · {scene.capacity.pendingBookingsCount} booking đang giữ sức chứa</span></div><div>{role === "STAFF" && scene.canEnter && <Link className="btn btn--outline" to={`/staff?view=entry&${context}`}>Tiếp nhận xe</Link>}{role === "STAFF" && scene.canVerify && <Link className="btn btn--outline" to={`/staff?view=bookings&${context}`}>Xe đặt qua web</Link>}{scene.canManage && <Link className="btn btn--outline" to={`/parking/slots?${context}`}>Thêm / sửa ô đỗ</Link>}{role === "USER" && <Link className="btn btn--primary" to={`/customer?${context}`}>Đặt chỗ</Link>}</div></div>
+      <div className="parking-quick-actions">
+        <div>
+          <strong>Vận hành tại {scene.name}</strong>
+          <span>{scene.capacity.availableCapacity} chỗ có thể nhận thêm · {scene.capacity.pendingBookingsCount} booking đang giữ sức chứa</span>
+        </div>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          {role === "ADMIN" && <>
+            <Link className="btn btn--outline" to={`/parking/slots?${context}`}>Quản lý ô đỗ</Link>
+            <Link className="btn btn--outline" to="/admin/parking-settings">Khu & chính sách</Link>
+            <Link className="btn btn--outline" to="/admin/people?view=assignments">Phân công ca trực</Link>
+          </>}
+          {role === "MANAGER" && <>
+            <Link className="btn btn--outline" to={`/parking/slots?${context}`}>Quản lý ô đỗ</Link>
+            <Link className="btn btn--outline" to={`/manager?view=sessions&lotId=${lot?.id}`}>Xe đang gửi</Link>
+            <Link className="btn btn--outline" to="/manager/assignments">Phân công nhân viên</Link>
+          </>}
+          {role === "STAFF" && canGate && <>
+            <Link className="btn btn--primary" to={`/staff?view=entry&${context}`}>Tiếp nhận xe vào</Link>
+            <Link className="btn btn--outline" to={`/staff?view=exit&${context}`}>Đối chiếu xe ra</Link>
+            <Link className="btn btn--outline" to={`/staff?view=tickets&${context}`}>Tra cứu vé</Link>
+          </>}
+          {role === "STAFF" && canArea && <>
+            <Link className="btn btn--primary" to={`/staff?view=verify&${context}`}>Xác minh ô thực tế</Link>
+            <Link className="btn btn--outline" to={`/staff?view=bookings&${context}`}>Xe đặt qua web</Link>
+            <Link className="btn btn--outline" to={`/staff?view=dispatches&${context}`}>Điều phối bãi</Link>
+          </>}
+          {role === "USER" && <>
+            <Link className="btn btn--primary" to={`/customer?${context}`}>Đặt chỗ đỗ xe</Link>
+            <Link className="btn btn--outline" to="/customer/sessions">Phiên xe của tôi</Link>
+          </>}
+          {!session && <>
+            <Link className="btn btn--primary" to="/login">Đăng nhập</Link>
+            <Link className="btn btn--outline" to="/register">Đăng ký tài khoản</Link>
+          </>}
+        </div>
+      </div>
     </>}
   </section>;
 }

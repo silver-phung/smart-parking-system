@@ -106,7 +106,7 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
 
         if (!StaffDuties.IsAssignable(duty))
         {
-            return (false, "Phân công không hợp lệ. Chọn trực cổng vào, trực cổng ra hoặc quản lý khu vực.", null);
+            return (false, "Phân công không hợp lệ. Chọn trực cổng hoặc trực khu vực.", null);
         }
 
         var targetLot = await _context.ParkingLots
@@ -339,7 +339,10 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
                 LotName = a.Lot.Name,
                 LotAddress = a.Lot.Address,
                 IsActive = a.Lot.IsActive,
-                AssignedAt = a.AssignedAt
+                AssignedAt = a.AssignedAt,
+                Duty = a.Duty,
+                FloorId = a.FloorId,
+                ZoneId = a.ZoneId
             })
             .ToListAsync(ct);
     }

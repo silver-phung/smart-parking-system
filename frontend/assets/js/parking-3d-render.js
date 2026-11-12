@@ -10,7 +10,7 @@
   var I = root.__P3R_INTERNAL__, C = I.C, AISLE_Z = I.AISLE_Z;
   var T;
 
-  var ROLE_LABEL = { guest: 'Khách vãng lai', user: 'Khách hàng (đã đăng nhập)', admin: 'Quản trị viên' };
+  var ROLE_LABEL = { guest: 'Khách vãng lai', user: 'Khách hàng', staff: 'Nhân viên vận hành', manager: 'Quản lý bãi', admin: 'Quản trị viên' };
   var STATUS_TXT = { OCCUPIED: 'Có xe', EMPTY: 'Trống', RESERVED: 'Giữ chỗ', MAINTENANCE: 'Bảo trì', UNAVAILABLE: 'Tạm ngừng' };
 
   function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
@@ -115,9 +115,9 @@
   };
 
   P._syncRoleUI = function () {
-    var loggedIn = this.role === 'user' || this.role === 'admin';
+    var isCustomer = this.role === 'user';
     if (this.elMyCar) {
-      this.elMyCar.hidden = !loggedIn || !this.mySlot;
+      this.elMyCar.hidden = !isCustomer || !this.mySlot;
       if (this.mySlot) {
         this.elMyCar.title = 'Đi tới xe của bạn tại ô ' + this.mySlot.code + ' (' + this.mySlot.plate + ')';
       }

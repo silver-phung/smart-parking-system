@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useLocation } from "react-router-dom";
 import AnchorLink from "./AnchorLink.jsx";
 import { apiRequest } from "../services/api.js";
+import { staffApi } from "../services/staffApi.js";
+import { staffDutiesOf, staffNavigationFor } from "../services/staffDuty.js";
 import {
   dashboardPath,
   navIsActive,
@@ -51,8 +53,22 @@ export default function Header({ workspace = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const role = session?.userProfile.role;
+  const userId = session?.userProfile.id;
+  // Staff chỉ thấy menu thuộc loại phân công của mình (trực cổng hoặc trực khu vực).
+  const [staffDuties, setStaffDuties] = useState(null);
+  useEffect(() => {
+    if (role !== "STAFF") { setStaffDuties(null); return undefined; }
+    const controller = new AbortController();
+    staffApi.assignedLots(controller.signal)
+      .then((lots) => { if (!controller.signal.aborted) setStaffDuties(staffDutiesOf(Array.isArray(lots) ? lots : [])); })
+      .catch(() => { if (!controller.signal.aborted) setStaffDuties([]); });
+    return () => controller.abort();
+  }, [role, userId]);
+  const navItems = role === "STAFF"
+    ? [["/parking", "3D"], ...(staffDuties === null ? [] : staffNavigationFor(staffDuties))]
+    : roleNavigation[role] || [];
   const roleLabel = { ADMIN: "Quản trị viên", MANAGER: "Quản lý bãi", STAFF: "Nhân viên", USER: "Khách hàng" }[role] || "Khách tham quan";
-  const activePage = pathname === "/parking" ? "Bãi đỗ 3D" : (roleNavigation[role] || []).find(([target]) => navIsActive(target, pathname, search))?.[1] || (pathname.startsWith("/parking") ? "Bãi đỗ 3D" : "Khu vực làm việc");
+  const activePage = pathname === "/parking" ? "Bãi đỗ 3D" : navItems.find(([target]) => navIsActive(target, pathname, search))?.[1] || (pathname.startsWith("/parking") ? "Bãi đỗ 3D" : "Khu vực làm việc");
   async function logout() {
     setBusy(true);
     setError("");
@@ -117,7 +133,7 @@ export default function Header({ workspace = false }) {
         </div>
         <nav className="header__nav" aria-label="Điều hướng chính">
           {session ? (
-            (roleNavigation[role] || []).map(([target, label]) => (
+            navItems.map(([target, label]) => (
               <Link
                 key={target}
                 to={target}

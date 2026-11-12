@@ -280,14 +280,14 @@ it("lets Manager assign only Staff at managed lots without calling account-manag
   expect(screen.queryByRole("button", { name: "Tài khoản", exact: true })).toBeNull();
   expect(screen.queryByRole("heading", { name: "Tạo tài khoản nội bộ" })).toBeNull();
   fireEvent.change(screen.getByLabelText("Bãi đỗ"), { target: { value: "1" } });
-  fireEvent.change(screen.getByLabelText("Phân công", { exact: true }), { target: { value: "GATE_IN" } });
+  fireEvent.change(screen.getByLabelText("Phân công", { exact: true }), { target: { value: "GATE" } });
   await screen.findByRole("option", { name: "Tầng 1A" });
   fireEvent.change(screen.getByLabelText("Tầng"), { target: { value: "10" } });
   expect(screen.queryByLabelText("Khu vực (Zone)")).toBeNull();
   await waitFor(() => expect(screen.getByRole("button", { name: "Lưu phân công" }).disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: "Lưu phân công" }));
   await screen.findByText("Đã lưu thành công");
-  expect(JSON.parse(writes()[0][1].body)).toMatchObject({ userId: 7, lotId: 1, floorId: 10, zoneId: null, duty: "GATE_IN" });
+  expect(JSON.parse(writes()[0][1].body)).toMatchObject({ userId: 7, lotId: 1, floorId: 10, zoneId: null, duty: "GATE" });
   expect(fetcher.mock.calls.some(([url]) => url.includes("/admin/users"))).toBe(false);
 });
 it("requires confirmation for revoking an assignment", async () => {
@@ -305,7 +305,8 @@ it("requires confirmation for revoking an assignment", async () => {
   expect(writes()[0][0]).toBe("/api/v1/staff-assignments/3/revoke");
 });
 
-it.each(["GATE_IN", "GATE_OUT"])("clears a previous zone and submits %s with only a floor", async (duty) => {
+it("clears a previous zone and submits the gate duty with only a floor", async () => {
+  const duty = "GATE";
   auth("ADMIN"); mount(<AdminPeople />, "/admin/people?view=assignments");
   fireEvent.change(screen.getByLabelText("Tìm Staff theo tên/email"), { target: { value: "staff" } });
   fireEvent.click(await screen.findByRole("button", { name: /Nhân viên Demo/ }));

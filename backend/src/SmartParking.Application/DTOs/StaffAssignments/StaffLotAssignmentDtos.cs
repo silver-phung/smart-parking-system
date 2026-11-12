@@ -50,7 +50,7 @@ public class CreateStaffAssignmentRequestDto : IValidatableObject
     /// Mỗi phân công chỉ có một nhiệm vụ.
     /// </summary>
     [Required(ErrorMessage = "Chọn loại phân công.")]
-    [RegularExpression("^(GATE_IN|GATE_OUT|SLOT_VERIFIER)$", ErrorMessage = "Chọn trực cổng vào, trực cổng ra hoặc quản lý khu vực.")]
+    [RegularExpression("^(GATE|GATE_IN|GATE_OUT|SLOT_VERIFIER)$", ErrorMessage = "Chọn trực cổng hoặc trực khu vực.")]
     public string Duty { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Chọn tầng được phân công.")]
@@ -63,7 +63,7 @@ public class CreateStaffAssignmentRequestDto : IValidatableObject
     {
         if (Duty == StaffDuties.SlotVerifier && ZoneId is not > 0)
             yield return new ValidationResult("Chọn khu vực được phân công.", [nameof(ZoneId)]);
-        if (Duty is StaffDuties.GateIn or StaffDuties.GateOut && ZoneId.HasValue)
+        if (Duty is StaffDuties.Gate or StaffDuties.GateIn or StaffDuties.GateOut && ZoneId.HasValue)
             yield return new ValidationResult("Phân công trực cổng chỉ chọn tầng, không chọn khu vực.", [nameof(ZoneId)]);
     }
 
@@ -97,6 +97,10 @@ public class AssignedLotSummaryDto
     public string? LotAddress { get; set; }
     public bool IsActive { get; set; }
     public DateTime AssignedAt { get; set; }
+    /// <summary>Loại phân công của Staff tại bãi này: GATE (trực cổng) hoặc SLOT_VERIFIER (trực khu vực).</summary>
+    public string Duty { get; set; } = StaffDuties.Gate;
+    public int? FloorId { get; set; }
+    public int? ZoneId { get; set; }
 }
 
 public class StaffCandidateFilterDto

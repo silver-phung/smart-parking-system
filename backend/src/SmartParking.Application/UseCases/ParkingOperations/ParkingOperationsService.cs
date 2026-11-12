@@ -203,8 +203,8 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
                 "Chỉ duyệt khi đã điền đủ tham số và nguồn quyết định. Dữ liệu chưa chốt hãy lưu nháp.", status: 400);
         return await writer.ExecuteAsync<object>(lotId, async () => {
             if (r.ZoneId.HasValue) Require(await db.ParkingZones.AnyAsync(z => z.Id == r.ZoneId && z.LotId == lotId, ct), "Khu không thuộc bãi.", status: 400);
-            // A new approved version cannot retroactively replace rules on existing transactions.
-            if (r.Approve) Require(r.EffectiveFrom >= DateTime.UtcNow.AddSeconds(-5), "Không duyệt chính sách có hiệu lực trong quá khứ.", status: 400);
+            // Cho phép dung sai thời gian tạo/duyệt (tối đa 24 giờ trước) để chính sách có hiệu lực ngay lập tức cho bãi.
+            if (r.Approve) Require(r.EffectiveFrom >= DateTime.UtcNow.AddHours(-24), "Thời điểm bắt đầu hiệu lực không được quá 24 giờ trong quá khứ.", status: 400);
             var p = new ParkingPolicy { LotId = lotId, ZoneId = r.ZoneId, EffectiveFrom = r.EffectiveFrom,
                 CreatedBy = actor, ApprovedBy = r.Approve ? actor : null, ApprovedAt = r.Approve ? DateTime.UtcNow : null,
                 DecisionReference = r.DecisionReference?.Trim() ?? "", HoldMinutes = r.HoldMinutes,

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import StaffBookings from "../components/staff/StaffBookings.jsx";
@@ -16,6 +16,7 @@ import {
   useStaffQuery,
 } from "../components/staff/StaffUI.jsx";
 import { staffApi } from "../services/staffApi.js";
+import { canUseStaffView } from "../services/staffDuty.js";
 import "../staff.css";
 
 const views = [
@@ -35,13 +36,10 @@ const views = [
     description: "Theo dõi kết quả xử lý",
   },
 ];
-// "Xe đặt qua web" vẫn mở được từ sidebar/thông báo, nhưng không có tab riêng trong dãy tab.
-const tabViews = views.filter((item) => item.id !== "bookings");
 
 function StaffContent() {
   const [params, setParams] = useSearchParams();
   const selectedView = params.get("view") || "entry";
-  const view = views.find((item) => item.id === selectedView) || views.find(item => item.id === "entry");
   const [selectedLotId, setSelectedLotId] = useState(params.get("lotId") || "");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -61,6 +59,18 @@ function StaffContent() {
     lots.data?.find((item) => String(item.lotId) === selectedLotId) ||
     lots.data?.[0];
   const lotId = lot?.lotId;
+  // Mỗi Staff chỉ thấy chức năng của loại phân công tại bãi đang chọn (trực cổng hoặc trực khu vực).
+  const duty = lot?.duty;
+  const visibleViews = views.filter((item) => canUseStaffView(duty, item.id));
+  // "Xe đặt qua web" mở từ sidebar/thông báo, không có tab riêng trong dãy tab.
+  const tabViews = visibleViews.filter((item) => item.id !== "bookings");
+  const view =
+    visibleViews.find((item) => item.id === selectedView) ||
+    visibleViews[0] ||
+    views.find((item) => item.id === "entry");
+  useEffect(() => {
+    if (lot && view.id !== selectedView) setParams({ view: view.id }, { replace: true });
+  }, [lot, view.id, selectedView, setParams]);
   const loadCapacity = useCallback(
     async (signal) =>
       lotId
@@ -137,6 +147,7 @@ function StaffContent() {
                   {lots.data.map((item) => (
                     <option key={item.lotId} value={item.lotId}>
                       {item.lotName}
+                      {item.duty ? ` (${item.duty === "GATE" || item.duty === "GATE_IN" || item.duty === "GATE_OUT" ? "Trực cổng" : item.duty === "SLOT_VERIFIER" ? "Trực khu vực" : "Toàn quyền"})` : ""}
                       {!item.isActive ? " · Đóng nhận xe" : ""}
                     </option>
                   ))}
@@ -191,10 +202,12 @@ function StaffContent() {
             </article>
           </div>
           <StaffError error={capacity.error} />
-          {newBookingsCount > 0 && view.id !== "bookings" && <Notice kind="success">Có {newBookingsCount} đặt chỗ mới. <button className="staff-text-button" disabled={busy} onClick={() => open("bookings")}>Xem xe đặt qua web</button></Notice>}
-          <section hidden={view.id !== "bookings"} aria-label="Xe đặt qua web">
-            <StaffBookings key={lotId} lotId={lotId} lotIsActive={lot.isActive} revision={revision} onChanged={refresh} onBusyChange={setBusy} onNewBookingsChange={setNewBookingsCount} onConfirmed={session => { setConfirmedSession(session); open("exit", session.id); }} />
-          </section>
+          {canUseStaffView(duty, "bookings") && newBookingsCount > 0 && view.id !== "bookings" && <Notice kind="success">Có {newBookingsCount} đặt chỗ mới. <button className="staff-text-button" disabled={busy} onClick={() => open("bookings")}>Xem xe đặt qua web</button></Notice>}
+          {canUseStaffView(duty, "bookings") && (
+            <section hidden={view.id !== "bookings"} aria-label="Xe đặt qua web">
+              <StaffBookings key={lotId} lotId={lotId} lotIsActive={lot.isActive} revision={revision} onChanged={refresh} onBusyChange={setBusy} onNewBookingsChange={setNewBookingsCount} onConfirmed={session => { setConfirmedSession(session); open("exit", session.id); }} />
+            </section>
+          )}
           <div
             className="staff-tabs"
             role="tablist"

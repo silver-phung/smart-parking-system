@@ -13,10 +13,16 @@ import {
 } from "../components/WorkspaceUI.jsx";
 
 const roles = ["STAFF", "MANAGER"];
+// Hai loại phân công khi tạo mới. Nhãn GATE_IN/GATE_OUT/BOTH chỉ để hiển thị dữ liệu cũ.
+const dutyOptions = {
+  GATE: "Trực cổng (xe vào và xe ra)",
+  SLOT_VERIFIER: "Trực khu vực (xác minh ô, điều phối)",
+};
 const duties = {
+  ...dutyOptions,
   GATE_IN: "Trực cổng vào",
   GATE_OUT: "Trực cổng ra",
-  SLOT_VERIFIER: "Quản lý khu vực",
+  BOTH: "Trực cổng và khu vực (phân công cũ)",
 };
 const emptyUser = {
   username: "",
@@ -333,7 +339,7 @@ export function People({ assignmentsOnly = false }) {
                   }
                 >
                   <option value="">Chọn phân công</option>
-                  {Object.entries(duties).map(([key, label]) => (
+                  {Object.entries(dutyOptions).map(([key, label]) => (
                     <option key={key} value={key}>
                       {label}
                     </option>

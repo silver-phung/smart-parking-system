@@ -24,8 +24,9 @@ export default function ParkingCanvas({ definition, floorId, role, onSelect, onF
     loadRenderer().then(() => {
       if (!active) return;
       let ready = false;
+      const mappedRole = role === "USER" ? "user" : role === "ADMIN" ? "admin" : role === "MANAGER" ? "manager" : role === "STAFF" ? "staff" : "guest";
       viewer = new window.ParkingRender({ container: host.current, definitions: [definition], lotId: definition.id,
-        role: role === "USER" ? "user" : role ? "admin" : "guest",
+        role: mappedRole,
         onSlotSelect: slot => selected.current(slot),
         onChange: state => { const index = state.floorIdx; if (ready && definition.liveFloors[index]) changeFloor.current(String(definition.liveFloors[index].id)); } });
       viewerRef.current = viewer;

@@ -55,7 +55,7 @@ export function navIsActive(target, pathname, search) {
   if (path !== pathname) return false;
   const current = new URLSearchParams(search).get("view");
   const expected = new URLSearchParams(query).get("view");
-  if (path === "/staff") return staffLocation(current).view === expected;
+  if (path === "/staff") return (current || "entry") === expected;
   if (path === "/manager")
     return (current || "overview") === (expected || "overview");
   if (path === "/admin/people")

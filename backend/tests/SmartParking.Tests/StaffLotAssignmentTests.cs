@@ -38,7 +38,8 @@ public class StaffLotAssignmentTests
     [InlineData(StaffDuties.GateIn, 1, false)]
     [InlineData(StaffDuties.SlotVerifier, null, false)]
     [InlineData(StaffDuties.SlotVerifier, 1, true)]
-    [InlineData(StaffDuties.Gate, null, false)]
+    [InlineData(StaffDuties.Gate, null, true)]
+    [InlineData(StaffDuties.Gate, 1, false)]
     public void AssignmentDto_ValidatesConditionalZone(string duty, int? zoneId, bool expected)
     {
         var request = new CreateStaffAssignmentRequestDto { UserId = 1, LotId = 1, Duty = duty, FloorId = 1, ZoneId = zoneId };

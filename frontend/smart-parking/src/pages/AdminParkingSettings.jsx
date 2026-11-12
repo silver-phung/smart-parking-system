@@ -103,18 +103,54 @@ function LotSettings({ lot, view, onBusyChange }) {
         <div className="operations-settings-columns operations-settings-columns--policy">
         <form onSubmit={e => { e.preventDefault(); perform(async () => {
           const body = { ...policy, zoneId: policy.zoneId ? Number(policy.zoneId) : null,
-            effectiveFrom: new Date(policy.effectiveFrom).toISOString() };
+            effectiveFrom: policy.effectiveFrom ? new Date(policy.effectiveFrom).toISOString() : new Date().toISOString() };
           for (const [key] of numeric) body[key] = policy[key] === "" || policy[key] == null ? null : Number(policy[key]);
           for (const [key] of choices) body[key] = policy[key] || null;
           await operationsApi(lot.id, "policies", body); patchPolicy("approve", false);
         }); }}><fieldset className="operations-fields" disabled={busy}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "12px", color: "#64748b" }}>Cần duyệt nhanh chính sách hoạt động?</span>
+            <button type="button" className="staff-button staff-button--secondary" onClick={() => {
+              const now = new Date();
+              const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+              setPolicy({
+                zoneId: "",
+                effectiveFrom: localIso,
+                decisionReference: "Quyết định phê duyệt quy định vận hành và giá cước bãi đỗ",
+                holdMinutes: 15,
+                earlyArrivalMinutes: 15,
+                lateArrivalMinutes: 15,
+                cancellationNoticeMinutes: 30,
+                depositAmount: 0,
+                nearFullThreshold: 5,
+                feeUnitMinutes: 60,
+                feeRounding: "CEILING",
+                noShowAction: "EXPIRE",
+                cancellationAction: "ALLOW",
+                rateSelection: "CHECK_IN",
+                approve: true,
+              });
+            }}>⚡ Điền mẫu chuẩn để duyệt ngay</button>
+          </div>
           <Field label="Phạm vi"><select value={policy.zoneId} onChange={e => patchPolicy("zoneId", e.target.value)}><option value="">Toàn bãi</option>{query.data?.zones.map(z => <option key={z.id} value={z.id}>{z.code}</option>)}</select></Field>
           <Field label="Bắt đầu có hiệu lực (giờ máy của bạn)"><input type="datetime-local" required value={policy.effectiveFrom} onChange={e => patchPolicy("effectiveFrom", e.target.value)} /></Field>
           <div className="operations-form-grid">{numeric.map(([key, label]) => <Field label={label} key={key}><input type="number" min={key === "holdMinutes" || key === "feeUnitMinutes" ? 1 : 0} step={key === "depositAmount" ? "0.01" : 1} value={policy[key] ?? ""} onChange={e => patchPolicy(key, e.target.value)} /></Field>)}</div>
           <div className="operations-form-grid">{choices.map(([key, label, options]) => <Field key={key} label={label}><select value={policy[key] || ""} onChange={e => patchPolicy(key, e.target.value)}><option value="">Chưa chốt</option>{options.map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>)}</div>
           <p>Mốc trả ô: sau xác nhận xe thực sự ra bãi.</p>
           <Field label="Nguồn quyết định / ghi chú"><textarea maxLength={500} value={policy.decisionReference} onChange={e => patchPolicy("decisionReference", e.target.value)} /></Field>
-          <label className="staff-check"><input type="checkbox" checked={policy.approve} onChange={e => patchPolicy("approve", e.target.checked)} />Tôi xác nhận quyết định đã được duyệt, cho áp dụng từ thời điểm trên.</label>
+          <label className="staff-check"><input type="checkbox" checked={policy.approve} onChange={e => {
+            const checked = e.target.checked;
+            patchPolicy("approve", checked);
+            if (checked) {
+              if (!policy.effectiveFrom) {
+                const now = new Date();
+                patchPolicy("effectiveFrom", new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+              }
+              if (!policy.decisionReference) {
+                patchPolicy("decisionReference", "Quyết định phê duyệt quy định vận hành");
+              }
+            }
+          }} />Tôi xác nhận quyết định đã được duyệt, cho áp dụng từ thời điểm trên.</label>
           <button className="staff-button staff-button--primary">{policy.approve ? "Tạo phiên bản được duyệt" : "Lưu phiên bản nháp"}</button>
         </fieldset></form>
         <div className="operations-policy-history"><h3>Lịch sử phiên bản</h3>
@@ -181,15 +217,54 @@ function Content() {
   const lots = useStaffQuery(load);
   const [selected, select] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showNewLotModal, setShowNewLotModal] = useState(false);
+  const [newLot, setNewLot] = useState({ name: "", address: "", totalCapacity: 100, isActive: true });
+  const [createLotBusy, setCreateLotBusy] = useState(false);
+  const [createLotError, setCreateLotError] = useState("");
   const lot = lots.data?.find(l => String(l.id) === selected) || lots.data?.[0];
   const openView = id => setParams(previous => { const next = new URLSearchParams(previous); next.set("view", id); return next; });
+
+  const handleCreateLot = async (e) => {
+    e.preventDefault();
+    setCreateLotBusy(true);
+    setCreateLotError("");
+    try {
+      const res = await apiRequest("/v1/parking-lots", {
+        method: "POST",
+        body: JSON.stringify({
+          name: newLot.name.trim(),
+          address: newLot.address.trim() || null,
+          totalCapacity: Number(newLot.totalCapacity) || 0,
+          isActive: Boolean(newLot.isActive)
+        })
+      });
+      setShowNewLotModal(false);
+      setNewLot({ name: "", address: "", totalCapacity: 100, isActive: true });
+      await lots.reload();
+      if (res?.data?.id) {
+        select(String(res.data.id));
+      }
+    } catch (err) {
+      setCreateLotError(err.message || "Không thể tạo bãi đỗ mới.");
+    } finally {
+      setCreateLotBusy(false);
+    }
+  };
+
   return <div className="staff-workspace operations-settings container"><header className="staff-workspace-heading"><div><Link className="operations-settings-back" to="/admin">← Tổng quan</Link><h1>Khu & chính sách</h1><p>Chọn bãi và mục cần quản lý.</p></div></header>
     <StaffError error={lots.error} />{lots.error && <button className="staff-button" onClick={lots.reload}>Tải lại bãi</button>}
     {lots.loading && <Notice>Đang tải bãi…</Notice>}
-    {!lots.loading && !lots.error && !lots.data?.length && <Notice>Chưa có bãi. Khai báo bãi trước khi cấu hình khu.</Notice>}
+    {!lots.loading && !lots.error && !lots.data?.length && (
+      <div className="workspace-panel workspace-empty" style={{ textAlign: "center", padding: "32px 16px" }}>
+        <h2>Chưa có bãi đỗ</h2>
+        <p style={{ margin: "12px 0 20px" }}>Hệ thống chưa có bãi đỗ nào. Hãy tạo bãi đỗ đầu tiên để cấu hình khu và chính sách.</p>
+        <button type="button" className="btn btn--primary" onClick={() => setShowNewLotModal(true)}>+ Thêm bãi đỗ mới</button>
+      </div>
+    )}
     {lot && <>
       <section className="staff-context-bar" aria-label="Bãi đang cấu hình"><div className="staff-context-select"><StaffIcon name="pin" size={23} />
-        <label htmlFor="settings-lot">Bãi cần cấu hình<select id="settings-lot" disabled={busy} value={lot.id} onChange={e => select(e.target.value)}>{lots.data.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+        <label htmlFor="settings-lot">Bãi cần cấu hình<select id="settings-lot" disabled={busy || createLotBusy} value={lot.id} onChange={e => select(e.target.value)}>{lots.data.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+        <button type="button" className="btn btn--primary" style={{ marginLeft: "14px", whiteSpace: "nowrap" }} onClick={() => setShowNewLotModal(true)}>+ Thêm bãi đỗ</button>
       </div></section>
       <div className="staff-tabs" role="tablist" aria-label="Quản lý khu và chính sách">
         {views.map((item, index) => <button key={item.id} type="button" role="tab" id={`settings-tab-${item.id}`} aria-controls={`settings-panel-${item.id}`} aria-selected={view.id === item.id} tabIndex={view.id === item.id ? 0 : -1} disabled={busy}
@@ -203,6 +278,37 @@ function Content() {
         <LotSettings lot={lot} view={view} key={lot.id} onBusyChange={setBusy} />
       </section>
     </>}
+
+    {showNewLotModal && (
+      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title-lot" style={{ position: "fixed", inset: 0, background: "rgba(16,36,59,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+        <div className="workspace-panel" style={{ width: "100%", maxWidth: "480px", background: "#fff", borderRadius: "14px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
+          <h2 id="modal-title-lot" style={{ marginTop: 0 }}>Thêm bãi đỗ xe mới</h2>
+          <p className="operations-settings-hint" style={{ margin: "4px 0 16px" }}>Khai báo tòa nhà / bãi đỗ xe mới trong hệ thống.</p>
+          {createLotError && <p className="feedback feedback--error" role="alert" style={{ color: "#d14343", margin: "8px 0" }}>{createLotError}</p>}
+          <form onSubmit={handleCreateLot}>
+            <fieldset disabled={createLotBusy} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: "12px" }}>
+              <Field label="Tên bãi đỗ xe (bắt buộc)">
+                <input required minLength={2} maxLength={100} placeholder="Ví dụ: Tòa nhà Landmark 81..." value={newLot.name} onChange={e => setNewLot({ ...newLot, name: e.target.value })} />
+              </Field>
+              <Field label="Địa chỉ">
+                <input maxLength={255} placeholder="Ví dụ: 720A Điện Biên Phủ, P. 22, Bình Thạnh..." value={newLot.address} onChange={e => setNewLot({ ...newLot, address: e.target.value })} />
+              </Field>
+              <Field label="Sức chứa dự kiến">
+                <input type="number" min={0} max={100000} value={newLot.totalCapacity} onChange={e => setNewLot({ ...newLot, totalCapacity: e.target.value })} />
+              </Field>
+              <label className="staff-check">
+                <input type="checkbox" checked={newLot.isActive} onChange={e => setNewLot({ ...newLot, isActive: e.target.checked })} />
+                Đang hoạt động (cho phép tiếp nhận xe)
+              </label>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
+                <button type="button" className="btn btn--outline" disabled={createLotBusy} onClick={() => { setShowNewLotModal(false); setCreateLotError(""); }}>Hủy</button>
+                <button type="submit" className="btn btn--primary" disabled={createLotBusy || !newLot.name.trim()}>{createLotBusy ? "Đang tạo…" : "Tạo bãi đỗ"}</button>
+              </div>
+            </fieldset>
+          </form>
+        </div>
+      </div>
+    )}
   </div>;
 }
 export default function AdminParkingSettings() { return <RequireRole role="ADMIN"><Content /></RequireRole>; }
