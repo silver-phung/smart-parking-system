@@ -43,6 +43,11 @@ public class AdminUserService : IAdminUserService
             .AsNoTracking()
             .AsQueryable();
 
+        if (filter.InternalOnly)
+        {
+            query = query.Where(u => u.Role.Code == Roles.Staff || u.Role.Code == Roles.Manager || u.Role.Code == Roles.Admin);
+        }
+
         // 1. Search by username, email or full name
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
@@ -479,8 +484,9 @@ public class AdminUserService : IAdminUserService
                 targetUser.UpdatedAt = DateTime.UtcNow;
 
                 int revokedAssignmentsCount = 0;
-                // If user demoted/changed to a role that cannot hold lot assignments (e.g. USER or ADMIN)
-                if (targetRoleCode != Roles.Manager && targetRoleCode != Roles.Staff)
+                // Assignments belong to the old role. In particular, a Staff assignment must
+                // never become lot-wide Manager access just because the role changed.
+                if (oldRoleCode != targetRoleCode)
                 {
                     var activeAssignments = await _context.StaffLotAssignments
                         .Include(a => a.Lot)

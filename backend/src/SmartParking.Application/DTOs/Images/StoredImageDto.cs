@@ -6,6 +6,6 @@ public sealed record StoredImageDto(
     string Url,
     string Format,
     long Bytes,
-    int Width,
-    int Height,
+    int? Width,
+    int? Height,
     DateTime CreatedAt);

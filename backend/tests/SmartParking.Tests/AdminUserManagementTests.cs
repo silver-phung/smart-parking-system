@@ -9,7 +9,7 @@ using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.AdminUsers;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Data;
+using SmartParking.Persistence.Data;
 using SmartParking.Infrastructure.Services;
 using Xunit;
 
@@ -107,6 +107,36 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
     }
 
     #region Unit Tests - AdminUserService
+
+    [Fact]
+    public async Task GetUsersAsync_InternalOnly_ExcludesCustomersBeforePagination()
+    {
+        var (service, _, _, _, _, _, _, _) = await SetupServiceAsync();
+        var result = await service.GetUsersAsync(new AdminUserFilterDto { InternalOnly = true, PageSize = 100 });
+        Assert.Equal(4, result.TotalCount);
+        Assert.DoesNotContain(result.Items, u => u.Role == Roles.User);
+        var customers = await service.GetUsersAsync(new AdminUserFilterDto { InternalOnly = true, Role = Roles.User });
+        Assert.Empty(customers.Items);
+    }
+
+    [Theory]
+    [InlineData(Roles.Staff, Roles.Manager)]
+    [InlineData(Roles.Manager, Roles.Staff)]
+    public async Task UpdateUserRoleAsync_InternalRoleChange_PersistsRoleAndRevokesOldAccess(string from, string to)
+    {
+        var (service, context, admin, _, manager, staff, _, lot) = await SetupServiceAsync();
+        var user = from == Roles.Staff ? staff : manager;
+        context.StaffLotAssignments.Add(new StaffLotAssignment { UserId = user.Id, LotId = lot.Id, AssignedBy = admin.Id, IsActive = true });
+        context.RefreshTokens.Add(new RefreshToken { UserId = user.Id, TokenHash = Guid.NewGuid().ToString(), ExpiresAt = DateTime.UtcNow.AddDays(1) });
+        await context.SaveChangesAsync();
+        var result = await service.UpdateUserRoleAsync(user.Id, new AdminUpdateRoleRequestDto { Role = to }, admin.Id, "127.0.0.1");
+        Assert.True(result.Success);
+        Assert.Equal(to, result.Data!.Role);
+        context.ChangeTracker.Clear();
+        Assert.Equal(to, (await context.Users.Include(u => u.Role).SingleAsync(u => u.Id == user.Id)).Role.Code);
+        Assert.False((await context.StaffLotAssignments.SingleAsync()).IsActive);
+        Assert.True((await context.RefreshTokens.SingleAsync()).IsRevoked);
+    }
 
     [Fact]
     public async Task GetUsersAsync_WithPaginationAndFilter_ReturnsCorrectUsers()
@@ -293,8 +323,10 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
         Assert.Contains("Địa chỉ email đã được sử dụng", result.Message);
     }
 
-    [Fact]
-    public async Task CreateUserAsync_StaffCreatedWithMixedCase_CanLoginWithAnyCasing()
+    [Theory]
+    [InlineData(Roles.Staff)]
+    [InlineData(Roles.Manager)]
+    public async Task CreateUserAsync_InternalAccount_CanLoginImmediatelyWithAnyCasing(string role)
     {
         var (service, context, admin1, _, _, _, _, _) = await SetupServiceAsync();
 
@@ -304,7 +336,7 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
             Email = "staff.login.mixed@smartparking.test",
             Password = "Password123@",
             FullName = "Login Mixed Staff",
-            Role = Roles.Staff,
+            Role = role,
             IsActive = true
         };
 
@@ -735,6 +767,14 @@ public class AdminUserManagementTests : IClassFixture<CustomWebApplicationFactor
     #endregion
 
     #region Integration HTTP Tests - Role Authorization & Endpoints
+
+    [Fact]
+    public async Task AssignmentLocationsEndpoint_IsRegisteredAndRequiresAuthentication()
+    {
+        using var client = _factory.CreateClient();
+        var response = await client.GetAsync("/api/v1/staff-assignments/locations/1");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
 
     private HttpClient CreateClientForRole(string role)
     {

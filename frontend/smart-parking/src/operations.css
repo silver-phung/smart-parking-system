@@ -1,0 +1,40 @@
+.operations-fields { border: 0; padding: 0; margin: 16px 0; min-width: 0; display: grid; gap: 14px; }
+.operations-form-grid, .operations-slot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.operations-session-list { display: grid; gap: 10px; margin: 16px 0; max-height: 480px; overflow-y: auto; }
+.operations-session { text-align: left; display: grid; gap: 5px; padding: 14px; border: 1px solid #dbe3ed; border-radius: 10px; background: #fff; color: #243449; cursor: pointer; overflow-wrap: anywhere; }
+.operations-session.is-selected { border-color: #2563eb; background: #eff6ff; }
+.operations-floor { padding: 14px 0; border-bottom: 1px solid #e2e8f0; }
+.operations-settings { gap: 16px; }
+.operations-settings-back { display: inline-block; margin-bottom: 6px; font-size: 12px; }
+.operations-settings-view, .operations-settings-panels { min-width: 0; display: grid; gap: 16px; }
+.operations-settings-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.operations-settings-toolbar p, .operations-settings-hint { color: #617186; font-size: 12px; line-height: 1.6; }
+.operations-settings-toolbar .staff-button { flex: none; }
+.operations-settings-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 28px; }
+.operations-settings-columns > * { min-width: 0; }
+.operations-settings-columns--policy { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+.operations-settings .operations-fields { margin: 0; }
+.operations-settings .operations-fields > p { color: #617186; font-size: 12px; }
+.operations-settings .operations-floor { display: grid; gap: 10px; }
+.operations-settings .operations-floor .staff-button { justify-self: start; }
+.operations-settings .operations-session-list { max-height: 380px; margin: 12px 0 0; }
+.operations-settings .operations-session small { color: #617186; font-size: 11px; }
+.operations-settings-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.operations-zone-floors { min-width: 0; margin: 0; padding: 12px; border: 1px solid #e0e7ef; border-radius: 10px; display: grid; gap: 12px; }
+.operations-zone-floors legend { padding: 0 5px; color: #425a72; font-size: 12px; font-weight: 650; }
+.operations-zone-floor-options { display: grid; gap: 10px; max-height: 180px; overflow-y: auto; }
+.operations-zone-floor-options .staff-check { overflow-wrap: anywhere; }
+.operations-settings-columns .staff-notice { margin-top: 12px; }
+.operations-settings .operations-slot-grid { margin-top: 16px; }
+.operations-policy-history details { margin: 12px 0; padding: 12px; background: #f8fafc; border: 1px solid #e0e7ef; border-radius: 10px; overflow-wrap: anywhere; }
+.operations-policy-history summary { cursor: pointer; color: #243f5c; font-size: 13px; font-weight: 650; }
+.operations-policy-history details p, .operations-policy-history dl { margin-top: 12px; }
+.operations-policy-history dt { font-size: 12px; color: #64748b; }
+.operations-policy-history dd { margin: 0 0 8px; }
+@media (max-width: 900px) { .operations-settings-columns, .operations-settings-columns--policy { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+@media (max-width: 560px) {
+  .operations-settings-toolbar { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .operations-settings .staff-panel { padding: 18px; }
+  .operations-settings .operations-form-grid, .operations-settings .operations-slot-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) { .operations-form-grid, .operations-slot-grid { grid-template-columns: minmax(0, 1fr); } }

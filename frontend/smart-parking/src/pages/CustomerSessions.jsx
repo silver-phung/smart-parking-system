@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import RequireCustomer from "../components/RequireCustomer.jsx";
+import { useImageUrl } from "../services/useImageUrl.js";
 import {
   Feedback,
   Pager,
@@ -10,6 +11,13 @@ import {
   statusLabel,
   useResource,
 } from "../components/WorkspaceUI.jsx";
+
+function SessionPhoto({ url, label }) {
+  const image = useImageUrl(url);
+  if (!url) return <p>Chưa có ảnh.</p>;
+  if (!image.source) return <p>{image.error ? "Không tải được ảnh." : "Đang tải ảnh…"}</p>;
+  return <img src={image.source} alt={label} loading="lazy" referrerPolicy="no-referrer" />;
+}
 
 function Sessions() {
   const [page, setPage] = useState(1);
@@ -210,16 +218,7 @@ function Sessions() {
                 ].map(([label, url]) => (
                   <div key={label}>
                     <h3>{label}</h3>
-                    {url ? (
-                      <img
-                        src={url}
-                        alt={label}
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <p>Chưa có ảnh.</p>
-                    )}
+                    <SessionPhoto url={url} label={label} />
                   </div>
                 ))}
               </div>

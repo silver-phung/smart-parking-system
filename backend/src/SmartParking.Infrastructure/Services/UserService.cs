@@ -56,9 +56,22 @@ public class UserService : IUserService
             return null;
         }
 
-        // Only allow updating FullName and PhoneNumber
         user.FullName = request.FullName.Trim();
         user.PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+        if (!string.IsNullOrWhiteSpace(request.Email))
+        {
+            var nextEmail = request.Email.Trim();
+            if (!string.Equals(user.Email, nextEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                var emailTaken = await _context.Users.AnyAsync(
+                    u => u.Id != userId && u.Email.ToLower() == nextEmail.ToLower(),
+                    cancellationToken);
+                if (!emailTaken)
+                {
+                    user.Email = nextEmail;
+                }
+            }
+        }
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);

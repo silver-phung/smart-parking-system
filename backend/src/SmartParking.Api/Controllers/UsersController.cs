@@ -50,15 +50,21 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật thông tin hồ sơ của người dùng hiện tại (chỉ cho phép cập nhật FullName và PhoneNumber).
+    /// Cập nhật thông tin hồ sơ của người dùng hiện tại (cho phép ADMIN, MANAGER, USER cập nhật FullName và PhoneNumber; STAFF chỉ được xem).
     /// </summary>
     [HttpPut("me")]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileRequestDto request, CancellationToken cancellationToken)
     {
+        if (User.IsInRole("STAFF"))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Tài khoản nhân viên không được phép tự thay đổi thông tin cá nhân." });
+        }
+
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);

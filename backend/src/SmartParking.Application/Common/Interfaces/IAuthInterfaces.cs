@@ -24,6 +24,7 @@ public interface IAuthService
     Task<AuthResult<bool>> VerifyEmailAsync(VerifyEmailRequestDto request, CancellationToken cancellationToken = default);
     Task<AuthResult<bool>> ResendVerificationAsync(ResendVerificationRequestDto request, CancellationToken cancellationToken = default);
     Task<AuthResult<AuthResponseDto>> LoginAsync(LoginRequestDto request, string? userAgent, string? clientIp, CancellationToken cancellationToken = default);
+    Task<AuthResult<AuthResponseDto>> LoginWithVerifiedGmailAsync(string email, string? userAgent, string? clientIp, CancellationToken cancellationToken);
     Task<AuthResult<AuthResponseDto>> RefreshTokenAsync(RefreshTokenRequestDto request, string? userAgent, string? clientIp, CancellationToken cancellationToken = default);
     Task<AuthResult<bool>> LogoutAsync(LogoutRequestDto request, CancellationToken cancellationToken = default);
 }

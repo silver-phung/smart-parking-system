@@ -19,26 +19,8 @@ Tài liệu nghiệp vụ, kiến trúc, API và hướng dẫn vận hành bắ
 - Tuyệt đối không commit file `.env`, connection strings có chứa password hoặc credentials của Neon Cloud vào repository.
 - Sử dụng file cấu hình mẫu `.env.example` hoặc user secrets khi phát triển cục bộ.
 
-Để chạy luồng Staff nhận diện ảnh ở local, copy `.env.example` thành `.env`, điền
-`ConnectionStrings__AiRecognitionConnection` và các giá trị cần thiết, sau đó nạp
-biến môi trường vào terminal hiện tại:
-
-```powershell
-Copy-Item .env.example .env
-notepad .env
-. .\scripts\Load-Env.ps1
-```
-
-Sau đó chạy migration database AI và backend:
-
-```powershell
-dotnet ef database update `
-  --project backend\src\SmartParking.Infrastructure `
-  --startup-project backend\src\SmartParking.Api `
-  --context AiRecognitionDbContext
-
-dotnet run --project backend\src\SmartParking.Api --launch-profile http
-```
+Parking Core đọc `ConnectionStrings__DefaultConnection` để truy cập `smartparking`.
+Xem [cấu hình, migration và lệnh chạy vận hành bãi](docs/operations/neon-microservices.md).
 
 Endpoint `POST /api/v1/staff/detect` trả `PENDING_CONFIRMATION` khi có biển số và
 `UNREADABLE` khi AI không đọc được. Staff xác nhận hoặc nhập biển số bằng
@@ -74,7 +56,7 @@ Các endpoint yêu cầu JWT:
 Ảnh được tải lên Cloudinary trước rồi metadata mới được lưu vào PostgreSQL. Chạy migration bằng:
 
 ```powershell
-dotnet ef database update --project backend\src\SmartParking.Infrastructure --startup-project backend\src\SmartParking.Api
+dotnet ef database update --project backend\src\SmartParking.Persistence --startup-project backend\src\SmartParking.Api --context SmartParkingDbContext
 ```
 
 Request mẫu có trong `backend/src/SmartParking.Api/SmartParking.Api.http`.

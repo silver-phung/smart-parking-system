@@ -21,7 +21,7 @@ public sealed class ImagesController : ControllerBase
         _imageService = imageService;
     }
 
-    /// <summary>Uploads a JPEG, PNG, or WebP image to Cloudinary.</summary>
+    /// <summary>Stores a JPEG, PNG, or WebP image in the database.</summary>
     [HttpPost]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(StoredImageDto), StatusCodes.Status201Created)]
@@ -81,6 +81,25 @@ public sealed class ImagesController : ControllerBase
         return image is null
             ? NotFound(new { message = "Image was not found." })
             : Ok(new { message = "Image metadata retrieved successfully.", data = image });
+    }
+
+    /// <summary>Returns a database image to its owner or an authorized user of its parking session.</summary>
+    [HttpGet("content/{key}")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetContent(string key, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized(new { message = "Unable to identify the authenticated user." });
+        if (!Guid.TryParseExact(key, "N", out _))
+            return NotFound(new { message = "Image was not found." });
+        var image = await _imageService.GetContentAsync(
+            key, userId, User.FindFirstValue(ClaimTypes.Role) ?? "", cancellationToken);
+        if (image is null) return NotFound(new { message = "Image was not found." });
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.XContentTypeOptions = "nosniff";
+        return File(image.Content, image.ContentType);
     }
 
     /// <summary>Deletes an image owned by the caller or any image when called by an administrator.</summary>

@@ -140,7 +140,22 @@ public class DemoLotLayoutProvisioningTests
         Assert.Equal(1, cap1!.ActiveReservationsCount);
         Assert.Equal(299, cap1.AvailableForBooking);
 
-        var inReserved = await sessions.CheckInAsync(new CheckInRequestDto { LotId = lotId, PlateNumber = "51A-30000" }, 1, Roles.Admin, "127.0.0.1");
+        var firstSlotId = await context.ParkingSlots
+            .Where(s => s.Floor.LotId == lotId && s.IsActive)
+            .OrderBy(s => s.Id)
+            .Select(s => s.Id)
+            .FirstAsync();
+        var inReserved = await sessions.ConfirmBookingParkedAsync(
+            book.Data!.Id,
+            new ConfirmBookingParkedRequestDto
+            {
+                PlateNumber = "51A-30000",
+                SlotId = firstSlotId,
+                CheckInImageUrl = "https://cdn.example.com/plates/51A-30000.jpg"
+            },
+            1,
+            Roles.Admin,
+            "127.0.0.1");
         Assert.True(inReserved.Success, inReserved.Message);
         var inWalk = await sessions.CheckInAsync(new CheckInRequestDto { LotId = lotId, PlateNumber = "51A-30001" }, 1, Roles.Admin, "127.0.0.1");
         Assert.True(inWalk.Success, inWalk.Message);

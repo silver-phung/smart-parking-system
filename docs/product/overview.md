@@ -28,7 +28,7 @@ flowchart LR
   CLIENT[API client] --> GW[YARP Gateway]
   GW --> API
   API --> PG[(PostgreSQL Neon)]
-  API --> IMG[Cloudinary]
+  API --> IMG[Cloudinary cho ảnh cũ]
   API --> GEM[Gemini khi cấu hình]
   OCR[FastAPI YOLO OCR]
   VIEW[Viewer Three.js riêng] --> MEM[API viewer và sự kiện bộ nhớ]

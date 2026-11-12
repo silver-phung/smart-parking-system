@@ -1,8 +1,8 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+﻿using SmartParking.Application.Common.Helpers;
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.Application.DTOs.Sessions;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Common;
 using SmartParking.Infrastructure.Services;
 using Xunit;
 
@@ -195,9 +195,13 @@ public class WalkInSessionAndStaffDutyTests
         Assert.True(verifyRes.Success);
         Assert.Equal(20201, verifyRes.Data!.CurrentSlotId);
 
-        // Fix 4 Invariant: Sensor state remains unchanged (EMPTY) under business verification (staff association != IoT sensor update)
+        // A staff verification confirms that the vehicle is physically present in the selected slot.
         var slot = await context.ParkingSlots.FindAsync(20201L);
-        Assert.Equal(SlotPhysicalStatuses.Empty, slot!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, slot!.PhysicalStatus);
+        var verifyAudit = context.AuditLogs.FirstOrDefault(a => a.Action == "VERIFY_SESSION_SLOT");
+        Assert.NotNull(verifyAudit);
+        Assert.Contains("\"SensorStatusBeforeVerification\":\"EMPTY\"", verifyAudit.NewValues);
+        Assert.Contains("\"PhysicalStatusAfterVerification\":\"OCCUPIED\"", verifyAudit.NewValues);
 
         // 3. SLOT_VERIFIER attempts check-out -> rejected
         var checkOutRes = await sessionService.CheckOutAsync(
@@ -327,7 +331,7 @@ public class WalkInSessionAndStaffDutyTests
     }
 
     [Fact]
-    public async Task ReportSessionWrongSlot_MovesToActualSlot_PreservesPreviousPhysicalState()
+    public async Task ReportSessionWrongSlot_MovesToActualSlot_AndMarksActualSlotOccupied()
     {
         var (sessionService, _, context) = await CreateServicesAsync();
         SeedLot(context, 207, "Bãi Wrong Slot Correction");
@@ -360,9 +364,9 @@ public class WalkInSessionAndStaffDutyTests
         slot1 = await context.ParkingSlots.FindAsync(20701L);
         Assert.Equal(SlotPhysicalStatuses.Occupied, slot1!.PhysicalStatus);
 
-        // New slot physical status remains what IoT reported (does not force OCCUPIED)
+        // Staff confirms the vehicle is physically present in the actual slot.
         var slot2 = await context.ParkingSlots.FindAsync(20702L);
-        Assert.Equal(SlotPhysicalStatuses.Empty, slot2!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, slot2!.PhysicalStatus);
     }
 
     [Fact]
@@ -477,26 +481,30 @@ public class WalkInSessionAndStaffDutyTests
         context.Users.AddRange(staff1, staff2);
         await context.SaveChangesAsync();
 
-        // 1. Unspecified duty -> defaults to GATE (least privilege, NOT BOTH)
+        context.ParkingZones.Add(new ParkingZone { Id = 211, LotId = 211, Code = "Z211", Name = "Khu 211" });
+        (await context.ParkingFloors.FindAsync(2111))!.ZoneId = 211;
+        await context.SaveChangesAsync();
+
+        // 1. Unspecified duty -> defaults to GATE_IN (least privilege, NOT BOTH)
         var defaultDutyRes = await assignmentService.CreateAssignmentAsync(
             new SmartParking.Application.DTOs.StaffAssignments.CreateStaffAssignmentRequestDto
             {
                 UserId = 2111,
-                LotId = 211,
+                LotId = 211, FloorId = 2111, ZoneId = null,
                 Duty = ""
             },
             actorId: 1,
             ipAddress: "127.0.0.1");
 
         Assert.True(defaultDutyRes.Success);
-        Assert.Equal(StaffDuties.Gate, defaultDutyRes.Data!.Duty);
+        Assert.Equal(StaffDuties.GateIn, defaultDutyRes.Data!.Duty);
 
         // 2. Invalid duty -> rejected
         var invalidDutyRes = await assignmentService.CreateAssignmentAsync(
             new SmartParking.Application.DTOs.StaffAssignments.CreateStaffAssignmentRequestDto
             {
                 UserId = 2112,
-                LotId = 211,
+                LotId = 211, FloorId = 2111, ZoneId = 211,
                 Duty = "SUPER_STAFF"
             },
             actorId: 1,
@@ -507,7 +515,7 @@ public class WalkInSessionAndStaffDutyTests
     }
 
     [Fact]
-    public async Task PaymentClearance_ValidPayment_EnablesGateCheckOut()
+    public async Task PaymentClearance_RecordsPaidStatusWithoutCheckoutDependency()
     {
         var (sessionService, _, context) = await CreateServicesAsync();
         SeedLot(context, 212, "Bãi Payment Clearance Contract");
@@ -523,17 +531,7 @@ public class WalkInSessionAndStaffDutyTests
         Assert.True(checkInRes.Success);
         var sessionId = checkInRes.Data!.Id;
 
-        // 2. Gate staff attempts checkout before payment -> rejected
-        var prePaymentCheckOut = await sessionService.CheckOutAsync(
-            sessionId,
-            new CheckOutRequestDto(),
-            actorId: 2121,
-            actorRole: Roles.Staff,
-            ipAddress: "127.0.0.1");
-        Assert.False(prePaymentCheckOut.Success);
-        Assert.Contains("chưa hoàn tất tính phí và thanh toán", prePaymentCheckOut.Message);
-
-        // 3. Nam Anh's Payment module calls RecordPaymentClearanceAsync via trusted server-to-server flow
+        // Payment clearance remains available, but checkout no longer depends on it for the demo.
         var clearanceRes = await sessionService.RecordPaymentClearanceAsync(
             sessionId,
             amountPaid: 35000m,
@@ -548,17 +546,6 @@ public class WalkInSessionAndStaffDutyTests
         Assert.Equal(SessionStatuses.Paid, clearanceRes.Data!.Status);
         Assert.Equal(35000m, clearanceRes.Data.TotalFee);
         Assert.NotNull(clearanceRes.Data.PaidAt);
-
-        // 4. Gate staff checks vehicle out now that financial clearance is complete -> succeeds
-        var postPaymentCheckOut = await sessionService.CheckOutAsync(
-            sessionId,
-            new CheckOutRequestDto(),
-            actorId: 2121,
-            actorRole: Roles.Staff,
-            ipAddress: "127.0.0.1");
-
-        Assert.True(postPaymentCheckOut.Success);
-        Assert.Equal(SessionStatuses.Completed, postPaymentCheckOut.Data!.Status);
 
         // Verify audit trail for PAYMENT_CLEARED
         var audit = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
@@ -795,7 +782,7 @@ public class WalkInSessionAndStaffDutyTests
         Assert.False(verifyMaint.Success);
         Assert.Contains("bảo trì hoặc không khả dụng", verifyMaint.Message);
 
-        // Verify to normal slot -> succeeds and sensor state remains EMPTY
+        // Verify to normal slot -> succeeds and marks the occupied position.
         var normalSlot = slots[0];
         var verifyNormal = await sessionService.VerifySessionSlotAsync(
             sessionId,
@@ -803,7 +790,7 @@ public class WalkInSessionAndStaffDutyTests
             actorId: 1, actorRole: Roles.Admin, ipAddress: "127.0.0.1");
         Assert.True(verifyNormal.Success);
         var reloadedSlot = await context.ParkingSlots.FindAsync(normalSlot.Id);
-        Assert.Equal(SlotPhysicalStatuses.Empty, reloadedSlot!.PhysicalStatus);
+        Assert.Equal(SlotPhysicalStatuses.Occupied, reloadedSlot!.PhysicalStatus);
     }
 
     [Fact]

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SmartPark 3D Render - Hầm &amp; Bãi đỗ xe cao tầng (Three.js)</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="assets/css/parking-3d-render.css">
+</head>
+<body class="p3r-page">
+  <header class="p3r-header">
+    <div class="p3r-brand"><span class="p3r-logo">P</span><div><h1>SmartPark 3D · Render bãi đỗ xe</h1><small>FPT Q9 (2 tầng · 64 slots) · Landmark 81 (3 tầng · 82 slots) · Aeon Mall (4 tầng · 112 slots)</small></div></div>
+    <nav>
+      <a href="/app/parking">Web Client</a>
+      <a href="/app/admin">Web Admin</a>
+      <a href="3d-viewer.html">Viewer nối API</a>
+    </nav>
+  </header>
+
+  <main class="p3r-main">
+    <section id="render3d"></section>
+
+    <aside class="p3r-side">
+      <div class="p3r-card"><h3>Trình diễn 3D</h3><p>Bãi, xe và vai trò trên trang này là dữ liệu mẫu. Để xem trạng thái ô từ hệ thống, mở <a href="3d-viewer.html">Viewer nối API</a>.</p></div>
+      <div class="p3r-card">
+        <h3>Vai trò đang xem</h3>
+        <select id="roleSel">
+          <option value="guest">Khách vãng lai (chưa đăng nhập)</option>
+          <option value="user">Khách hàng (đã đăng nhập)</option>
+          <option value="admin">Quản trị viên (Admin)</option>
+        </select>
+        <p class="p3r-note" id="roleNote"></p>
+      </div>
+      <div class="p3r-card">
+        <h3>Luồng di chuyển &amp; Phân khu</h3>
+        <ul>
+          <li><b>Tầng đầu (B1 / T1):</b> dành riêng cho <span class="tag blue">Xe tháng</span> (quẹt thẻ ở <b>Booth Check-in</b> phía trong sau khi xuống dốc).</li>
+          <li><b>Lane xe vãng lai (mũi tên xanh dương):</b> đi thẳng dọc hành lang phía Nam (ngăn cách gờ đỏ với khu xe tháng) xuống dốc <b>B2, B3, B4</b> kèm bảng LED báo số slot trống từng tầng.</li>
+          <li><b>Lối ra 2 lane (cọc tiêu phân làn):</b> xe tháng quẹt thẻ ở <b>Booth Check-out B1</b> đi <b>lane trái (mũi tên vàng)</b>; xe vãng lai quẹt thẻ <b>Checkout ở B2</b> rồi lên dốc đi <b>lane phải (mũi tên xanh lá)</b> cùng lên mặt đất.</li>
+          <li><b>Phòng thang máy:</b> phòng kín vách kính tách biệt với hầm (2 vị trí sát tường/tầng), chỉ khi đi vào bên trong cánh cửa mới hiện nút ▲ Lên / ▼ Xuống.</li>
+        </ul>
+      </div>
+      <div class="p3r-card">
+        <h3>Các bãi mẫu &amp; Mã slot</h3>
+        <p><code>[Tầng]-[Dãy A..D][Số]</code> → <code>B1-A01</code>, <code>B2-C05</code>, <code>B4-D07</code></p>
+        <p>• <b>Hầm ngầm FPT Q9 (2 tầng B1–B2):</b> 64 slots (32 ô/tầng chuẩn DB)<br>
+           • <b>Vincom Landmark 81 (3 tầng B1–B3):</b> 82 slots<br>
+           • <b>Aeon Mall Mega Hub (4 tầng B1–B4):</b> 112 slots</p>
+        <div class="p3r-legend">
+          <span><i style="background:#10b981"></i>Trống</span><span><i style="background:#ef4444"></i>Có xe</span><span><i style="background:#f59e0b"></i>Bảo trì (cọc tiêu)</span>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/parking-3d-render-kit.js"></script>
+  <script src="assets/js/parking-3d-render-floor.js"></script>
+  <script src="assets/js/parking-3d-render.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var NOTES = {
+        guest: 'Không thấy biển số xe trong nhãn slot (chỉ thấy trạng thái). Nút "Xe của tôi" ẩn khi chưa đăng nhập.',
+        user: 'Đã đăng nhập: hiện nút "Xe của tôi", thấy biển số xe của mình và che một phần biển số xe khác (51A-***.45).',
+        admin: 'Quản trị viên: hiện nút "Xe của tôi", thấy đầy đủ biển số và trạng thái từng slot.'
+      };
+      var params = new URLSearchParams(location.search);
+      var role = 'guest';
+      try { var s = window.SP && SP.auth && SP.auth.session(); if (s) role = s.role === 'admin' ? 'admin' : 'user'; } catch (e) { }
+      if (['guest', 'user', 'admin'].indexOf(params.get('role')) >= 0) role = params.get('role');
+      var sel = document.getElementById('roleSel'), note = document.getElementById('roleNote');
+      sel.value = role; note.textContent = NOTES[role];
+      var viewer = new ParkingRender({ container: '#render3d', role: role, lotId: params.get('lot') || undefined });
+      window.parkingRender = viewer;
+      // Tham số tiện kiểm thử: ?lot=fptq9&floor=1&mode=orbit&go=core|entry|checkin|checkout|ramp&mycar=1&find=51G
+      if (params.get('mode') === 'orbit') { viewer.setMode('orbit'); viewer.tr = null; }
+      if (params.get('floor')) { viewer.lifting = false; viewer.setFloor(+params.get('floor')); viewer.tr = null; }
+      if (params.get('go')) setTimeout(function () { viewer.lifting = false; viewer._goTo(params.get('go')); }, 1200);
+      if (params.get('mycar')) setTimeout(function () { viewer.lifting = false; viewer.goToMyCar(); }, 1200);
+      if (params.get('find')) setTimeout(function () { viewer.lifting = false; viewer.toggleSearch(true); viewer.elSearchIn.value = params.get('find'); viewer.findCarByPlate(params.get('find')); }, 1200);
+      if (params.get('step')) {
+        var steps = +params.get('step');
+        setTimeout(function () {
+          for (var i = 0; i < steps; i++) {
+            viewer.tween = null;
+            viewer._step(1);
+            if (viewer.tween) { viewer._place(viewer.tween.node, null, null); }
+          }
+        }, 1200);
+      }
+      sel.addEventListener('change', function () { viewer.setRole(sel.value); note.textContent = NOTES[sel.value]; });
+    });
+  </script>
+</body>
+</html>

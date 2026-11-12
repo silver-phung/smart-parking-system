@@ -13,6 +13,7 @@ public class ParkingSlotDto
     public string SlotCode { get; set; } = null!;
     public string PhysicalStatus { get; set; } = null!;
     public bool IsAvailable { get; set; }
+    public bool IsProtected { get; set; }
     public decimal? PositionX { get; set; }
     public decimal? PositionY { get; set; }
     public decimal? PositionZ { get; set; }

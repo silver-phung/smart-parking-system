@@ -99,4 +99,8 @@ public class UpdateProfileRequestDto
     [MaxLength(20)]
     [Phone(ErrorMessage = "Số điện thoại không đúng định dạng")]
     public string? PhoneNumber { get; set; }
+
+    [EmailAddress(ErrorMessage = "Địa chỉ email không đúng định dạng")]
+    [MaxLength(255)]
+    public string? Email { get; set; }
 }

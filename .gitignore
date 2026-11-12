@@ -37,6 +37,7 @@ packages/
 pgdata/
 docker_data/
 *.log
+TestResults/
 
 ## =====================================
 ## 4. OS Temporary Files

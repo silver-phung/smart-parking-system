@@ -7,6 +7,8 @@
 
 **Mốc đối chiếu:** `Sprint3/demo` tại `4bed0c8a929fe050d644aa4e07c0a1caa77d8d0e`, ngày 28/10/2026. Xem [README](../README.md) để biết nguồn, quy ước và trạng thái.
 
+Xem [phạm vi dữ liệu và API hiện tại](README.md#vận-hành-bãi) cho các bảng vận hành bãi bổ sung vào `smartparking` sau mốc này.
+
 ## 1 Phạm vi xác minh
 
 Danh mục dưới đây được lấy từ design-time model EF Core của mã nguồn; không mở kết nối DB. Có **14 bảng được ánh xạ**, không phải kết quả khẳng định 14 bảng đã được migration thành công trên một Neon cụ thể. Bảng migration nội bộ của EF không tính là bảng nghiệp vụ.
@@ -56,7 +58,7 @@ ERD lược bớt hai liên kết actor cấp/thu hồi phân công để dễ �
 | `refresh_tokens` | `RefreshToken` | Hash refresh token, người dùng, thời hạn, thu hồi và thiết bị/IP. |
 | `roles` | `Role` | Bốn mã ADMIN, MANAGER, STAFF, USER; Guest không phải một dòng role. |
 | `staff_lot_assignments` | `StaffLotAssignment` | Phân công người dùng vào bãi, người cấp/thu hồi và lịch sử; chưa có loại nhiệm vụ Staff. |
-| `stored_images` | `StoredImage` | Metadata ảnh Cloudinary và người tải; chưa có FK phiên/bãi/quyền chia sẻ ảnh theo bãi. |
+| `stored_images` | `StoredImage` | Nội dung ảnh mới (bytea), metadata và người tải; ảnh Cloudinary cũ giữ URL. Liên kết phiên qua URL, không có FK phiên/bãi. |
 | `user_tokens` | `UserToken` | Cấu trúc token EMAIL_VERIFICATION/PASSWORD_RESET còn tồn tại; không chứng minh endpoint xác minh/đổi mật khẩu còn có. |
 | `users` | `User` | Tài khoản, một role, trạng thái xác minh/duyệt/khóa và hồ sơ. |
 | `vehicles` | `Vehicle` | Biển số unique và chủ tài khoản có thể null cho vãng lai; hãng/model/màu và cờ hoạt động. |
@@ -416,7 +418,7 @@ Phân công người dùng vào bãi, người cấp/thu hồi và lịch sử; 
 
 ### `stored_images`
 
-Metadata ảnh Cloudinary và người tải; chưa có FK phiên/bãi/quyền chia sẻ ảnh theo bãi.
+Nội dung ảnh mới (bytea), metadata và người tải; ảnh Cloudinary cũ giữ URL. Quyền xem ảnh database theo người tải, Admin, chủ xe hoặc staff/manager tại bãi của phiên liên kết qua URL.
 
 | Cột | Kiểu PostgreSQL | NULL | Khóa | Default khai báo | Thuộc tính C# |
 |---|---|---|---|---|---|
@@ -572,7 +574,7 @@ Biển số unique và chủ tài khoản có thể null cho vãng lai; hãng/mo
 
 ## 6 Entity không thuộc 14 bảng đang ánh xạ
 
-`EventParkingSession`, `ParkingEventLog` có class nhưng chưa được đưa vào DbContext đang dùng; repository thực tế là InMemory. Các file EF adapter còn dưới `#if EF_REPOSITORIES`; bridge còn dưới `#if LIVE_BRIDGE`. `SimulatorParkingLot` dùng nguồn JSON. Dictionary của viewer và localStorage của HTML cũ cũng không phải bảng PostgreSQL.
+`EventParkingSession`, `ParkingEventLog` có class nhưng chưa được đưa vào DbContext đang dùng; repository thực tế là InMemory. Bridge còn dưới `#if LIVE_BRIDGE`. `SimulatorParkingLot` dùng nguồn JSON. Dictionary của viewer và localStorage của HTML cũ cũng không phải bảng PostgreSQL.
 
 ## 7 Thiết kế dữ liệu bổ sung
 

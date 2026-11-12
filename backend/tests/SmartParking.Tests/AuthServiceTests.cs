@@ -56,6 +56,29 @@ public class AuthServiceTests
     }
 
     [Theory]
+    [InlineData(4, true, true)]
+    [InlineData(1, true, false)]
+    [InlineData(4, false, false)]
+    public async Task GoogleLogin_RequiresAnExistingVerifiedCustomer(int roleId, bool verified, bool allowed)
+    {
+        using var context = await TestDbHelper.CreateInMemoryDbContextAsync();
+        var user = await SeedAccountAsync(context);
+        user.Email = "existing@gmail.com";
+        user.RoleId = roleId;
+        user.IsEmailVerified = verified;
+        await context.SaveChangesAsync();
+
+        var result = await CreateAuthService(context).LoginWithVerifiedGmailAsync(
+            "EXISTING@gmail.com", "TestAgent", "127.0.0.1", default);
+        Assert.Equal(allowed, result.Succeeded);
+        if (allowed)
+            Assert.Equal(Roles.User, result.Data!.UserProfile.Role);
+        else
+            Assert.Equal(403, result.StatusCode);
+        Assert.Equal(allowed ? 1 : 0, context.RefreshTokens.Count());
+    }
+
+    [Theory]
     [InlineData("unknown_user", Password)]
     [InlineData(Username, "WrongPassword!")]
     public async Task LoginAsync_WithInvalidCredentials_ReturnsUnauthorized(string username, string password)

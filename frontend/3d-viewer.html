@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SmartPark 3D - Không Gian Hầm Đỗ Xe Ngầm (Three.js)</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=JetBrains+Mono:wght@500;600&display=swap">
@@ -215,11 +216,14 @@
         </div>
       </div>
       <div class="header-actions">
-        <a href="client/index.html" class="action-btn">
+        <a href="3d-parking-render.html" class="action-btn">
+          🏢 Render 3D Demo (Hầm &amp; Cao tầng)
+        </a>
+        <a href="/app/parking" class="action-btn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Web Client
         </a>
-        <a href="admin/index.html" class="action-btn">
+        <a href="/app/admin" class="action-btn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
           Web Admin
         </a>
@@ -298,13 +302,17 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      var query = new URLSearchParams(location.search);
+      var requestedLot = Number(query.get('lotId'));
+      var requestedFloor = query.get('floorId');
+      var initialFloor = /^\d+$/.test(requestedFloor || '') ? requestedFloor : 'B1';
       var viewer = new Parking3DViewer({
         container: '#parking3DContainer',
-        lotId: 1,
-        floorId: 'B1',
+        lotId: Number.isInteger(requestedLot) && requestedLot > 0 ? requestedLot : 1,
+        floorId: initialFloor,
         apiEndpoint: '/api/v1/parking-floors/{floorId}/slots',
         lotName: 'Bãi đỗ xe',
-        floors: ['B1'],
+        floors: [initialFloor],
         showInternalDetails: false,
         onSlotClick: function (slot) {
           showSlotDetail(slot);

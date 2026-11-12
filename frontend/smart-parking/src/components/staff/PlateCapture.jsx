@@ -55,11 +55,15 @@ export default function PlateCapture({
   onChange,
   disabled,
   onWorking,
+  enableRecognition = true,
   title = "Ảnh xe tại cổng",
   plateLabel = "Biển số xe",
   lotId,
   purpose = "ENTRY",
   onRecognition,
+  requiredPhoto = false,
+  autoDetect = false,
+  allowRecognition = true,
 }) {
   const id = useId();
   const [preview, setPreview] = useState("");
@@ -75,25 +79,13 @@ export default function PlateCapture({
     return () => URL.revokeObjectURL(url);
   }, [value.file]);
   const update = (patch) => onChange((current) => ({ ...current, ...patch }));
-  const choose = (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    try {
-      validatePhoto(file);
-      setError(null);
-      update({ file, plate: "", recognition: null, note: "", imageUrl: "" });
-    } catch (err) {
-      setError(err);
-    }
-  };
-  const detect = async () => {
-    if (detecting || !value.file) return;
+  const detect = async (file = value.file) => {
+    if (detecting || !file) return;
     setDetecting(true);
     setError(null);
     onWorking?.(true);
     try {
-      const recognition = await staffApi.detect(value.file, lotId, purpose);
+      const recognition = await staffApi.detect(file, lotId, purpose);
       if (!recognition?.id)
         throw new Error(
           "Chưa nhận được kết quả nhận diện hợp lệ. Bạn có thể nhập biển số bằng tay.",
@@ -107,15 +99,44 @@ export default function PlateCapture({
       onWorking?.(false);
     }
   };
+  const choose = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      validatePhoto(file);
+      setError(null);
+      onChange((current) => ({
+        ...current,
+        file,
+        plate: allowRecognition ? "" : current.plate,
+        recognition: null,
+        note: "",
+        imageUrl: "",
+      }));
+      if (enableRecognition && allowRecognition && autoDetect) void detect(file);
+    } catch (err) {
+      setError(err);
+    }
+  };
   return (
     <fieldset className="staff-capture" disabled={disabled || detecting}>
       <legend>
-        {title} <span className="staff-optional">· Không bắt buộc</span>
+        {title}{" "}
+        <span className="staff-optional">
+          · {requiredPhoto ? "Bắt buộc" : "Không bắt buộc"}
+        </span>
       </legend>
       <div className="staff-capture-row">
         <SafePhoto url={preview} alt="Ảnh xe vừa chọn" />
         <div className="staff-capture-controls">
-          <p>Chọn ảnh rõ biển số, hoặc nhập biển số đã kiểm tra bên dưới.</p>
+          <p>
+            {autoDetect
+              ? "Chụp hoặc chọn ảnh biển số để tự động nhận diện và điền biển số."
+              : requiredPhoto
+              ? "Chụp ảnh rõ biển số xe tại vị trí thực tế và nhập biển số để đối chiếu."
+              : "Chọn ảnh rõ biển số, hoặc nhập biển số đã kiểm tra bên dưới."}
+          </p>
           <label className="staff-file-button" htmlFor={`${id}-file`}>
             <StaffIcon name="camera" />
             {value.file ? "Đổi ảnh" : "Chọn / chụp ảnh"}
@@ -133,18 +154,23 @@ export default function PlateCapture({
             <>
               <span className="staff-file-name">{value.file.name}</span>
               <div className="staff-inline-actions">
-                <button
-                  type="button"
-                  className="staff-button staff-button--secondary"
-                  onClick={detect}
-                >
-                  {detecting ? "Đang nhận diện…" : "Nhận diện biển số"}
-                </button>
+                {enableRecognition && allowRecognition && (
+                  <button
+                    type="button"
+                    className="staff-button staff-button--secondary"
+                    onClick={() => detect()}
+                  >
+                    {detecting ? "Đang nhận diện…" : "Nhận diện biển số"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="staff-text-button"
                   onClick={() => {
-                    onChange(emptyCapture());
+                    onChange((current) => ({
+                      ...emptyCapture(),
+                      plate: allowRecognition ? "" : current.plate,
+                    }));
                     setError(null);
                   }}
                 >
@@ -156,6 +182,11 @@ export default function PlateCapture({
         </div>
       </div>
       <StaffError error={error} />
+      {autoDetect && error && (
+        <p className="staff-hint">
+          Bạn vẫn có thể nhập biển số thực tế bằng tay để xác nhận.
+        </p>
+      )}
       {value.recognition && (
         <Notice kind={value.recognition.plateNumber ? "info" : "warning"}>
           {value.recognition.plateNumber ? (
@@ -204,8 +235,15 @@ export default function PlateCapture({
       )}
       {value.file && (
         <p className="staff-hint">
-          Ảnh sẽ được lưu cùng phiên khi xác nhận. Nếu lưu ảnh thất bại, bạn có
-          thể thử lại hoặc bỏ ảnh để nhập tay.
+          Ảnh sẽ được lưu cùng phiên khi xác nhận.
+          {requiredPhoto
+            ? " Nếu lưu ảnh thất bại, hãy thử lại trước khi nhận xe."
+            : " Nếu lưu ảnh thất bại, bạn có thể thử lại hoặc bỏ ảnh để nhập tay."}
+        </p>
+      )}
+      {requiredPhoto && !value.file && (
+        <p className="staff-hint">
+          Cần chụp hoặc chọn ảnh biển số trước khi nhận xe đã đặt chỗ.
         </p>
       )}
     </fieldset>

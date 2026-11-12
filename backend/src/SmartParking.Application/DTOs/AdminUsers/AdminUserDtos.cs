@@ -9,6 +9,7 @@ public class AdminUserFilterDto
     public int PageSize { get; set; } = 10;
     public string? Search { get; set; }
     public string? Role { get; set; }
+    public bool InternalOnly { get; set; }
     public bool? IsActive { get; set; }
     public string? ApprovalStatus { get; set; }
 }
