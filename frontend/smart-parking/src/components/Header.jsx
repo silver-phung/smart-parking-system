@@ -52,8 +52,59 @@ export default function Header({ workspace = false }) {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [accountDetails, setAccountDetails] = useState(null);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const profileRef = useRef(null);
   const role = session?.userProfile.role;
   const userId = session?.userProfile.id;
+  const displayName = session?.userProfile?.fullName || session?.userProfile?.username || "Tài khoản";
+  const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "U";
+
+  useEffect(() => {
+    setProfileOpen(false);
+  }, [pathname, search]);
+
+  useEffect(() => {
+    if (!profileOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setProfileOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [profileOpen]);
+
+  useEffect(() => {
+    if (!accountModalOpen || !session) return undefined;
+    const controller = new AbortController();
+    setAccountLoading(true);
+    apiRequest("/v1/users/me", { signal: controller.signal })
+      .then((data) => {
+        if (!controller.signal.aborted && data) setAccountDetails(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!controller.signal.aborted) setAccountLoading(false);
+      });
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setAccountModalOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      controller.abort();
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [accountModalOpen, session]);
   // Staff chỉ thấy menu thuộc loại phân công của mình (trực cổng hoặc trực khu vực).
   const [staffDuties, setStaffDuties] = useState(null);
   useEffect(() => {
@@ -100,20 +151,59 @@ export default function Header({ workspace = false }) {
         <div className="header__actions">
           {session ? (
             <>
-              <span className="header__identity">
-                {session.userProfile.fullName || session.userProfile.username}
-                <small>{roleLabel}</small>
-              </span>
-              {!workspace && <Link className="btn btn--outline" to={dashboardPath(role)}>
-                Khu vực của tôi
-              </Link>}
-              <button
-                className="btn btn--outline"
-                onClick={logout}
-                disabled={busy}
-              >
-                {busy ? "Đang đăng xuất…" : "Đăng xuất"}
-              </button>
+              {!workspace && (
+                <Link className="btn btn--outline" to={dashboardPath(role)}>
+                  Khu vực của tôi
+                </Link>
+              )}
+              <div className="header__profile" ref={profileRef}>
+                <button
+                  type="button"
+                  className={`header__profile-trigger ${profileOpen ? "is-open" : ""}`}
+                  onClick={() => setProfileOpen((prev) => !prev)}
+                  aria-expanded={profileOpen}
+                  aria-haspopup="menu"
+                >
+                  <span className="header__profile-avatar" aria-hidden="true">
+                    {avatarInitial}
+                  </span>
+                  <span className="header__profile-text">
+                    <strong>{displayName}</strong>
+                    <small>{roleLabel}</small>
+                  </span>
+                  <span className="header__profile-caret" aria-hidden="true">
+                    ▾
+                  </span>
+                </button>
+                {profileOpen && (
+                  <div className="header__profile-popup" role="menu" aria-label="Menu tài khoản">
+                    <div className="header__profile-summary">
+                      <strong>{displayName}</strong>
+                      <span className="header__profile-role">{roleLabel}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="header__profile-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        setAccountModalOpen(true);
+                      }}
+                    >
+                      Thông tin cá nhân
+                    </button>
+                    <button
+                      type="button"
+                      className="header__profile-logout"
+                      role="menuitem"
+                      onClick={logout}
+                      disabled={busy}
+                    >
+                      {busy ? "Đang đăng xuất…" : "Đăng xuất"}
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <>
@@ -162,6 +252,79 @@ export default function Header({ workspace = false }) {
           )}
         </nav>
       </div>
+      {session && accountModalOpen && (
+        <div
+          className="header__account-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Thông tin tài khoản"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setAccountModalOpen(false);
+          }}
+        >
+          <div className="header__account-modal">
+            <div className="header__account-modal-head">
+              <div className="header__account-modal-user">
+                <span className="header__profile-avatar header__profile-avatar--large" aria-hidden="true">
+                  {avatarInitial}
+                </span>
+                <div>
+                  <h3>Thông tin tài khoản</h3>
+                  <span className="header__profile-role">{roleLabel}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="header__account-close"
+                aria-label="Đóng"
+                onClick={() => setAccountModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <dl className="header__account-list">
+              <div>
+                <dt>Họ và tên</dt>
+                <dd>{accountDetails?.fullName || session.userProfile.fullName || "Chưa cập nhật"}</dd>
+              </div>
+              <div>
+                <dt>Tên đăng nhập</dt>
+                <dd>{accountDetails?.username || session.userProfile.username || "—"}</dd>
+              </div>
+              <div>
+                <dt>Chức vụ</dt>
+                <dd>{roleLabel}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd>{accountDetails?.email || session.userProfile.email || "Chưa cập nhật"}</dd>
+              </div>
+              <div>
+                <dt>Số điện thoại</dt>
+                <dd>{accountDetails?.phone || session.userProfile.phone || "Chưa cập nhật"}</dd>
+              </div>
+              <div>
+                <dt>Trạng thái</dt>
+                <dd>
+                  {(accountDetails?.status || session.userProfile.status || "ACTIVE") === "ACTIVE"
+                    ? "Đang hoạt động"
+                    : accountDetails?.status || session.userProfile.status}
+                </dd>
+              </div>
+            </dl>
+            {accountLoading && <p className="header__account-loading">Đang đồng bộ thông tin tài khoản…</p>}
+            <div className="header__account-modal-foot">
+              <button
+                type="button"
+                className="btn btn--outline"
+                onClick={() => setAccountModalOpen(false)}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
