@@ -238,6 +238,21 @@ function Content() {
           isActive: Boolean(newLot.isActive)
         })
       });
+      if (res?.data?.id) {
+        try {
+          await apiRequest(`/v1/parking-lots/${res.data.id}/floors`, {
+            method: "POST",
+            body: JSON.stringify({
+              name: "Tầng 1",
+              floorNumber: 1,
+              totalSlots: 0,
+              isActive: true
+            })
+          });
+        } catch {
+          // Ignore if floor creation fails; user can still add floors manually
+        }
+      }
       setShowNewLotModal(false);
       setNewLot({ name: "", address: "", totalCapacity: 100, isActive: true });
       await lots.reload();

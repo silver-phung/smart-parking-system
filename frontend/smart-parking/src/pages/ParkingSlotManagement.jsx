@@ -65,20 +65,72 @@ export default function ParkingSlotManagement({ role }) {
   const [lotId, setLotId] = useState(params.get("lotId") || "");
   const [floorId, setFloorId] = useState(params.get("floorId") || "");
   const [revision, setRevision] = useState(0);
+  const [floorRevision, setFloorRevision] = useState(0);
+  const [showAddFloor, setShowAddFloor] = useState(false);
+  const [newFloorName, setNewFloorName] = useState("Tầng 1");
+  const [newFloorNumber, setNewFloorNumber] = useState(1);
   const action = useMutation();
   const lots = useResource(role === "MANAGER" ? "/v1/staff-assignments/my-lots" : "/v1/parking-lots?pageNumber=1&pageSize=100", 0, { allPages: "pageNumber" });
   const availableLots = itemsOf(lots.data).map(l => role === "MANAGER" ? { id: l.lotId, name: l.lotName } : l);
   const lot = availableLots.find(l => String(l.id) === lotId) || availableLots[0];
-  const floors = useResource(lot ? `/v1/parking-lots/${lot.id}/floors?isActiveOnly=false` : null);
-  const floor = itemsOf(floors.data).find(f => String(f.id) === floorId) || itemsOf(floors.data)[0];
+  const floors = useResource(lot ? `/v1/parking-lots/${lot.id}/floors?isActiveOnly=false` : null, floorRevision);
+  const floorList = itemsOf(floors.data);
+  const floor = floorList.find(f => String(f.id) === floorId) || floorList[0];
   const refresh = () => setRevision(r => r + 1);
   return <section className="workspace container"><header className="workspace-heading"><div><span className="tag">{role === "ADMIN" ? "Quản trị bãi" : "Quản lý bãi"}</span><h1>Quản lý ô đỗ</h1><p>Thêm, sửa, xóa và cập nhật trạng thái ô tại bãi được phép quản lý.</p></div></header>
     <Feedback loading={lots.loading || floors.loading} error={lots.error || floors.error || action.error} message={action.message} />
     {!lots.loading && !lots.error && !availableLots.length && <section className="workspace-panel">Chưa có bãi được phép quản lý.</section>}
-    {lot && <section className="workspace-panel"><h2>Chọn bãi và tầng</h2>{floor && <a className="btn btn--outline" href={`/app/parking?lotId=${lot.id}&floorId=${floor.id}`}>Xem tầng này bằng 3D</a>}<div className="workspace-filters">
-      <label>Bãi đỗ<select disabled={action.busy} value={lot.id} onChange={e => { setLotId(e.target.value); setFloorId(""); }} >{availableLots.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
-      <label>Tầng<select value={floor?.id || ""} disabled={action.busy || floors.loading || !floor} onChange={e => setFloorId(e.target.value)}>{!floor && <option value="">Chưa có tầng</option>}{itemsOf(floors.data).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-    </div></section>}
+    {lot && <section className="workspace-panel">
+      <div className="workspace-heading">
+        <h2>Chọn bãi và tầng</h2>
+        <div className="workspace-actions">
+          {floor && <a className="btn btn--outline" href={`/app/parking?lotId=${lot.id}&floorId=${floor.id}`}>Xem tầng này bằng 3D</a>}
+          <button type="button" className="btn btn--outline" disabled={action.busy} onClick={() => {
+            const nextNum = floorList.length ? Math.max(...floorList.map(f => Number(f.floorNumber) || 0)) + 1 : 1;
+            setNewFloorNumber(nextNum);
+            setNewFloorName(`Tầng ${nextNum}`);
+            setShowAddFloor(v => !v);
+          }}>{showAddFloor ? "Đóng tạo tầng" : "+ Thêm tầng"}</button>
+        </div>
+      </div>
+      <div className="workspace-filters">
+        <label>Bãi đỗ<select disabled={action.busy} value={lot.id} onChange={e => { setLotId(e.target.value); setFloorId(""); setShowAddFloor(false); }} >{availableLots.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+        <label>Tầng<select value={floor?.id || ""} disabled={action.busy || floors.loading || !floor} onChange={e => setFloorId(e.target.value)}>{!floor && <option value="">Chưa có tầng</option>}{floorList.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+      </div>
+    </section>}
+    {lot && !floors.loading && !floors.error && (!floor || showAddFloor) && (
+      <section className="workspace-panel">
+        <div>
+          <h2>{!floor ? `Bãi "${lot.name}" chưa có tầng nào — Tạo tầng đầu tiên` : `Thêm tầng mới cho bãi "${lot.name}"`}</h2>
+          <p className="workspace-note">Tạo tầng để bắt đầu thêm và quản lý các ô đỗ xe trong bãi này. Hệ thống sẽ tự động gắn khu mặc định nếu bãi chưa có khu.</p>
+        </div>
+        <form className="workspace-form" onSubmit={event => {
+          event.preventDefault();
+          action.run(
+            () => write(`/v1/parking-lots/${lot.id}/floors`, {
+              name: newFloorName.trim(),
+              floorNumber: Number(newFloorNumber) || 1,
+              totalSlots: 0,
+              isActive: true
+            }, "POST"),
+            res => {
+              setShowAddFloor(false);
+              if (res?.data?.id) setFloorId(String(res.data.id));
+              setFloorRevision(r => r + 1);
+            }
+          );
+        }}>
+          <fieldset disabled={action.busy}>
+            <label>Tên tầng<input required maxLength={50} value={newFloorName} onChange={e => setNewFloorName(e.target.value)} placeholder="VD: Tầng 1, Tầng G, Hầm B1" /></label>
+            <label>Số thứ tự tầng<input type="number" required min={-10} max={100} value={newFloorNumber} onChange={e => setNewFloorNumber(e.target.value)} /></label>
+            <div className="workspace-actions">
+              <button className="btn btn--primary" type="submit">Tạo tầng ngay</button>
+              {floor && <button type="button" className="btn btn--outline" onClick={() => setShowAddFloor(false)}>Hủy</button>}
+            </div>
+          </fieldset>
+        </form>
+      </section>
+    )}
     {lot && floor && !floors.loading && !floors.error && <FloorSlots key={`${lot.id}-${floor.id}`} floor={floor} revision={revision} action={action} refresh={refresh} />}
   </section>;
 }

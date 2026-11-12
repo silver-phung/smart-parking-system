@@ -463,11 +463,48 @@ public class AuthService : IAuthService
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var user = await _dbContext.Users.Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.Role.Code == Roles.User, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
 
-        if (user is null)
+        if (user is not null && user.Role.Code != Roles.User)
             return AuthResult<AuthResponseDto>.Failure(
                 "Đăng nhập Google dành cho tài khoản khách đã đăng ký bằng Gmail này.", 403);
+
+        if (user is null)
+        {
+            var customerRole = await _dbContext.Roles
+                .FirstOrDefaultAsync(r => r.Code == Roles.User, cancellationToken);
+            if (customerRole is null)
+                return AuthResult<AuthResponseDto>.Failure("Hệ thống chưa cấu hình vai trò khách hàng.", 500);
+
+            var localPart = normalizedEmail.Split('@')[0];
+            var baseUsername = new string(localPart.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray()).Trim('_');
+            if (string.IsNullOrWhiteSpace(baseUsername)) baseUsername = "google_user";
+            if (baseUsername.Length > 40) baseUsername = baseUsername[..40];
+
+            var candidateUsername = baseUsername;
+            var suffix = 1;
+            while (await _dbContext.Users.AnyAsync(u => u.Username == candidateUsername, cancellationToken))
+            {
+                candidateUsername = $"{baseUsername}_{suffix++}";
+            }
+
+            user = new User
+            {
+                Username = candidateUsername,
+                Email = normalizedEmail,
+                FullName = localPart,
+                RoleId = customerRole.Id,
+                Role = customerRole,
+                IsActive = true,
+                IsEmailVerified = true,
+                ApprovalStatus = ApprovalStatuses.Approved,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            user.PasswordHash = _passwordHasher.HashPassword(user, Guid.NewGuid().ToString("N") + "Aa1!");
+            _dbContext.Users.Add(user);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         return await StartSessionAsync(user, userAgent, clientIp, cancellationToken);
     }

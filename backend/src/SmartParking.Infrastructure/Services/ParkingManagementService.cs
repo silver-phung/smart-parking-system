@@ -515,15 +515,42 @@ public class ParkingManagementService : IParkingManagementService
             return (false, $"Tên tầng '{trimmedName}' đã tồn tại trong bãi xe này.", null);
         }
 
-        if (request.ZoneId.HasValue && !await _context.ParkingZones.AnyAsync(z => z.Id == request.ZoneId && z.LotId == lotId && z.IsActive, ct))
+        var zoneId = request.ZoneId;
+        if (zoneId.HasValue && !await _context.ParkingZones.AnyAsync(z => z.Id == zoneId && z.LotId == lotId && z.IsActive, ct))
             return (false, "Khu phải hoạt động và thuộc đúng bãi.", null);
-        if (!request.ZoneId.HasValue && await _context.ParkingZones.AnyAsync(z => z.LotId == lotId, ct))
-            return (false, "Cần chọn khu sở hữu cho tầng mới.", null);
+        if (!zoneId.HasValue)
+        {
+            var defaultZone = await _context.ParkingZones
+                .Where(z => z.LotId == lotId && z.IsActive)
+                .OrderBy(z => z.Id)
+                .FirstOrDefaultAsync(ct)
+                ?? await _context.ParkingZones
+                .Where(z => z.LotId == lotId)
+                .OrderBy(z => z.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (defaultZone == null)
+            {
+                defaultZone = new ParkingZone
+                {
+                    LotId = lotId,
+                    Code = "KHU-A",
+                    Name = "Khu vực bình thường",
+                    Type = "TRANSIENT",
+                    Layout = "INSIDE",
+                    IsActive = true,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.ParkingZones.Add(defaultZone);
+                await _context.SaveChangesAsync(ct);
+            }
+            zoneId = defaultZone.Id;
+        }
 
         var floor = new ParkingFloor
         {
             LotId = lotId,
-            ZoneId = request.ZoneId,
+            ZoneId = zoneId,
             FloorNumber = request.FloorNumber,
             Name = trimmedName,
             TotalSlots = request.TotalSlots,
