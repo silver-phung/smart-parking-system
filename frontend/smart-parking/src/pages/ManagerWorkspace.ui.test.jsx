@@ -188,7 +188,7 @@ it("uses active navigation for query tabs and exposes only Manager links", () =>
       .getAttribute("aria-current"),
   ).toBe("page");
   expect(
-    screen.getByRole("link", { name: "Bãi đỗ 3D" }).getAttribute("aria-current"),
+    screen.getByRole("link", { name: "3D" }).getAttribute("aria-current"),
   ).toBeNull();
   expect(screen.queryByRole("link", { name: "Tài khoản" })).toBeNull();
   expect(

@@ -52,7 +52,7 @@ export default function Header({ workspace = false }) {
   const [error, setError] = useState("");
   const role = session?.userProfile.role;
   const roleLabel = { ADMIN: "Quản trị viên", MANAGER: "Quản lý bãi", STAFF: "Nhân viên", USER: "Khách hàng" }[role] || "Khách tham quan";
-  const activePage = (roleNavigation[role] || []).find(([target]) => navIsActive(target, pathname, search))?.[1] || (pathname.startsWith("/parking") ? "Bãi đỗ 3D" : "Khu vực làm việc");
+  const activePage = pathname === "/parking" ? "Bãi đỗ 3D" : (roleNavigation[role] || []).find(([target]) => navIsActive(target, pathname, search))?.[1] || (pathname.startsWith("/parking") ? "Bãi đỗ 3D" : "Khu vực làm việc");
   async function logout() {
     setBusy(true);
     setError("");
@@ -122,7 +122,7 @@ export default function Header({ workspace = false }) {
                 key={target}
                 to={target}
                 className={
-                  navIsActive(target, pathname, search) ? "is-active" : ""
+                  [navIsActive(target, pathname, search) ? "is-active" : "", target === "/parking" ? "nav-3d" : ""].filter(Boolean).join(" ")
                 }
                 aria-current={
                   navIsActive(target, pathname, search) ? "page" : undefined
@@ -131,7 +131,7 @@ export default function Header({ workspace = false }) {
                 {label}
               </Link>
             ))
-          ) : workspace ? <Link to="/parking" className="is-active" aria-current="page">Bãi đỗ 3D</Link> : (
+          ) : workspace ? <Link to="/parking" className="is-active" aria-current="page">3D</Link> : (
             <>
               <Link
                 to="/parking"

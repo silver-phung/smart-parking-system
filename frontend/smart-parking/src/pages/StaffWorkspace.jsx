@@ -35,6 +35,8 @@ const views = [
     description: "Theo dõi kết quả xử lý",
   },
 ];
+// "Xe đặt qua web" vẫn mở được từ sidebar/thông báo, nhưng không có tab riêng trong dãy tab.
+const tabViews = views.filter((item) => item.id !== "bookings");
 
 function StaffContent() {
   const [params, setParams] = useSearchParams();
@@ -198,7 +200,7 @@ function StaffContent() {
             role="tablist"
             aria-label="Nghiệp vụ Staff"
           >
-            {views.map((item, index) => (
+            {tabViews.map((item, index) => (
               <button
                 ref={(node) => {
                   tabRefs.current[item.id] = node;
@@ -208,25 +210,25 @@ function StaffContent() {
                 id={`staff-tab-${item.id}`}
                 aria-controls={`staff-panel-${item.id}`}
                 aria-selected={view.id === item.id}
-                tabIndex={view.id === item.id ? 0 : -1}
+                tabIndex={view.id === item.id || (view.id === "bookings" && index === 0) ? 0 : -1}
                 key={item.id}
                 disabled={busy}
                 onClick={() => open(item.id)}
                 onKeyDown={(event) => {
                   const nextIndex =
                     event.key === "ArrowRight"
-                      ? (index + 1) % views.length
+                      ? (index + 1) % tabViews.length
                       : event.key === "ArrowLeft"
-                        ? (index + views.length - 1) % views.length
+                        ? (index + tabViews.length - 1) % tabViews.length
                         : event.key === "Home"
                           ? 0
                           : event.key === "End"
-                            ? views.length - 1
+                            ? tabViews.length - 1
                             : null;
                   if (nextIndex === null || busy) return;
                   event.preventDefault();
-                  open(views[nextIndex].id);
-                  tabRefs.current[views[nextIndex].id]?.focus();
+                  open(tabViews[nextIndex].id);
+                  tabRefs.current[tabViews[nextIndex].id]?.focus();
                 }}
               >
                 <StaffIcon name={item.id} />
