@@ -340,9 +340,7 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
                 LotAddress = a.Lot.Address,
                 IsActive = a.Lot.IsActive,
                 AssignedAt = a.AssignedAt,
-                Duty = a.Duty,
-                FloorId = a.FloorId,
-                ZoneId = a.ZoneId
+                Duty = a.Duty
             })
             .ToListAsync(ct);
     }
