@@ -20,20 +20,29 @@ export const needsCorrectionNote = (capture) =>
         normalizePlate(capture.plate),
   );
 
-export async function prepareCapture(capture, update, lotId) {
+export async function prepareCapture(capture, update, lotId, sessionId) {
   if (needsCorrectionNote(capture) && !capture.note.trim())
     throw new Error("Nhập lý do sửa biển số AI trước khi xác nhận.");
   if (
     capture.recognition?.id &&
-    normalizePlate(capture.recognition.confirmedPlateNumber || "") !==
-      normalizePlate(capture.plate)
+    (normalizePlate(capture.recognition.confirmedPlateNumber || "") !==
+      normalizePlate(capture.plate) ||
+      (sessionId && capture.recognition.matchedParkingSessionId !== sessionId))
   ) {
-    const result = await staffApi.confirmDetection(
-      capture.recognition.id,
-      capture.plate,
-      capture.note.trim() || null,
-      lotId,
-    );
+    const result = sessionId
+      ? await staffApi.confirmExitDetection(
+          capture.recognition.id,
+          sessionId,
+          capture.plate,
+          capture.note.trim() || null,
+          lotId,
+        )
+      : await staffApi.confirmDetection(
+          capture.recognition.id,
+          capture.plate,
+          capture.note.trim() || null,
+          lotId,
+        );
     if (
       normalizePlate(result?.data?.confirmedPlateNumber || "") !==
       normalizePlate(capture.plate)

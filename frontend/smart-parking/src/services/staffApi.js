@@ -252,6 +252,13 @@ export const staffApi = {
       note,
       ...(lotId ? { lotId: Number(lotId) } : {}),
     }),
+  confirmExitDetection: (id, sessionId, plateNumber, note, lotId) =>
+    post(`/v1/staff/detections/${id}/confirm-exit`, {
+      sessionId: Number(sessionId),
+      plateNumber: validatePlate(plateNumber),
+      note,
+      ...(lotId ? { lotId: Number(lotId) } : {}),
+    }),
   checkIn: (lotId, plateNumber, imageUrl, entryRecognitionId) =>
     post("/v1/parking-sessions/check-in", {
       lotId: Number(lotId),

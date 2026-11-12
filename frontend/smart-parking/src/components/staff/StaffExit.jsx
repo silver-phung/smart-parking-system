@@ -94,7 +94,7 @@ export function StaffExit({
           "Biển số tại cổng ra không khớp với phiên xe. Hãy kiểm tra lại.",
         );
       const exitCapture = isTicketed ? { ...capture, recognition: null } : capture;
-      const imageUrl = await prepareCapture(exitCapture, setCapture);
+      const imageUrl = await prepareCapture(exitCapture, setCapture, lot.lotId, session.id);
       const result = await staffApi.checkOut(
         session.id,
         lot.lotId,

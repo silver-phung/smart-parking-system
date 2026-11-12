@@ -165,7 +165,7 @@ export default function StaffBookings({
           `Biển số đã nhập không khớp với booking (${selectedBooking.plateNumber}). Hãy đối chiếu lại xe và ảnh trước khi xác nhận.`,
         );
 
-      const imageUrl = await prepareCapture(capture, setCapture);
+      const imageUrl = await prepareCapture(capture, setCapture, lotId);
       if (!imageUrl) throw new Error("Chưa lưu được ảnh biển số xe.");
 
       const result = await staffApi.confirmBookingParked(
