@@ -107,8 +107,8 @@ export default function ParkingScene() {
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
           {role === "ADMIN" && <>
-            <Link className="btn btn--outline" to={`/parking/slots?${context}`}>Quản lý ô đỗ</Link>
-            <Link className="btn btn--outline" to="/admin/parking-settings">Khu & chính sách</Link>
+            <Link className="btn btn--outline" to={`/admin/parking-settings?view=slots&${context}`}>Quản lý bãi xe</Link>
+            <Link className="btn btn--outline" to={`/admin/policies?${context}`}>Chính sách</Link>
             <Link className="btn btn--outline" to="/admin/people?view=assignments">Phân công ca trực</Link>
           </>}
           {role === "MANAGER" && <>

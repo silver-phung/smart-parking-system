@@ -16,6 +16,7 @@ import ManagerWorkspace from "./pages/ManagerWorkspace.jsx";
 import ManagerStaffAssignments from "./pages/ManagerStaffAssignments.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminParkingSettings from "./pages/AdminParkingSettings.jsx";
+import AdminPolicies from "./pages/AdminPolicies.jsx";
 import StaffWorkspace from "./pages/StaffWorkspace.jsx";
 import AdminPeople from "./pages/AdminPeople.jsx";
 import CustomerSessions from "./pages/CustomerSessions.jsx";
@@ -46,11 +47,12 @@ export default function App() {
           <Route path="/customer" element={<CustomerDashboard />} />
           <Route path="/parking" element={<ParkingScene />} />
           <Route path="/parking/3d" element={<ParkingScene />} />
-          <Route path="/parking/slots" element={<RequireRole role={["ADMIN", "MANAGER"]}><ParkingSlotManagement role={session?.userProfile.role} /></RequireRole>} />
+          <Route path="/parking/slots" element={<RequireRole role={["ADMIN", "MANAGER"]}>{session?.userProfile.role === "ADMIN" ? <AdminPolicies /> : <ParkingSlotManagement role={session?.userProfile.role} />}</RequireRole>} />
           <Route path="/customer/sessions" element={<CustomerSessions />} />
           <Route path="/customer/profile" element={<CustomerProfile />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/parking-settings" element={<AdminParkingSettings />} />
+          <Route path="/admin/policies" element={<AdminPolicies />} />
           <Route path="/admin/people" element={<AdminPeople />} />
           <Route path="/manager" element={<ManagerWorkspace />} />
           <Route path="/manager/assignments" element={<ManagerStaffAssignments />} />

@@ -11,25 +11,23 @@ import "../operations.css";
 const Field = ({ label, children }) => <label className="staff-field">{label}{children}</label>;
 const views = [
   { id: "zones", name: "Khu bãi", icon: "pin", description: "Quản lý khu bình thường và khu dành cho xe có vé tháng." },
-  { id: "policies", name: "Chính sách", icon: "dispatches", description: "Thiết lập quy định vận hành và xem lịch sử phiên bản." },
-  { id: "floors", name: "Tầng", icon: "floors", description: "Thêm tầng, gắn khu và quản lý trạng thái khai thác." },
-  { id: "slots", name: "Ô đỗ", icon: "slots", description: "Thêm ô đỗ và cấu hình loại nhiên liệu phù hợp." },
+  { id: "floors", name: "Tầng", icon: "floors", description: "Thêm, sửa, xóa tầng, gắn khu và quản lý trạng thái khai thác." },
+  { id: "slots", name: "Ô đỗ", icon: "slots", description: "Thêm, sửa, xóa ô đỗ (slot), đổi trạng thái và cấu hình loại nhiên liệu." },
   { id: "tickets", name: "Xử lý vé", icon: "tickets", description: "Tra cứu, thay vé mất hoặc thu hồi vé sau đối chiếu." },
 ];
 const zoneTypes = { TRANSIENT: "Bình thường", FIXED: "Vé tháng" };
+const slotStatuses = { EMPTY: "Trống", OCCUPIED: "Có xe", RESERVED: "Đang giữ chỗ", MAINTENANCE: "Bảo trì" };
 const emptyZone = () => ({ code: "", name: "", type: "TRANSIENT", layout: "INSIDE", isActive: true, floorIds: [], newFloor: null });
-const numeric = [
-  ["holdMinutes", "Hạn giữ chỗ (phút)"], ["earlyArrivalMinutes", "Đến sớm (phút)"],
-  ["lateArrivalMinutes", "Đến trễ (phút)"], ["cancellationNoticeMinutes", "Báo hủy trước (phút)"],
-  ["depositAmount", "Tiền cọc (VNĐ)"], ["nearFullThreshold", "Ngưỡng gần đầy (số chỗ còn)"],
-  ["feeUnitMinutes", "Đơn vị tính phí (phút)"],
-];
-const choices = [
-  ["feeRounding", "Làm tròn phí", [["CEILING", "Lên"], ["FLOOR", "Xuống"], ["NEAREST", "Gần nhất"]]],
-  ["noShowAction", "Không đến", [["EXPIRE", "Hết hạn đặt"]]],
-  ["cancellationAction", "Hủy đặt", [["ALLOW", "Cho phép theo thời hạn"], ["DENY", "Không cho hủy"]]],
-  ["rateSelection", "Mốc chọn phiên bản giá", [["CHECK_IN", "Lúc nhận xe"]]],
-];
+const emptySlotDraft = (defaultFloorId = "") => ({
+  floorId: defaultFloorId,
+  slotCode: "",
+  physicalStatus: "EMPTY",
+  positionX: "",
+  positionY: "",
+  positionZ: "",
+  isActive: true,
+});
+
 function LotSettings({ lot, view, onBusyChange }) {
   const load = useCallback(async signal => {
     const [zones, policies, layout] = await Promise.all(["zones", "policies", "layout"].map(path => operationsApi(lot.id, path, null, null, signal)));
@@ -40,16 +38,25 @@ function LotSettings({ lot, view, onBusyChange }) {
   const [message, setMessage] = useState("");
   const [zone, setZone] = useState(emptyZone);
   const [editId, setEdit] = useState(null);
-  const [policy, setPolicy] = useState({ zoneId: "", effectiveFrom: "", decisionReference: "", approve: false });
   const [ticket, setTicket] = useState({ code: "", action: "REPLACE", replacementCode: "", reason: "" });
   const [ticketResult, setTicketResult] = useState(null);
   const [floorDraft, setFloorDraft] = useState({ name: "", floorNumber: "", zoneId: "" });
+  const [editingFloor, setEditingFloor] = useState(null);
   const [createdFloor, setCreatedFloor] = useState(null);
-  const [slotDraft, setSlotDraft] = useState({ floorId: "", slotCode: "", positionX: "", positionY: "", positionZ: "" });
+  const [slotDraft, setSlotDraft] = useState(() => emptySlotDraft(""));
+  const [editingSlot, setEditingSlot] = useState(null);
+  const [slotFloorFilter, setSlotFloorFilter] = useState("");
+
   useEffect(() => { setMessage(""); action.setError(null); }, [view.id, action.setError]);
   const busy = action.busy || query.loading || Boolean(query.error);
   const perform = work => action.run(async () => { setMessage(""); await work(); setMessage("Đã lưu vào máy chủ."); query.reload(); });
-  const patchPolicy = (key, value) => setPolicy(p => ({ ...p, [key]: value }));
+
+  const allFloors = query.data?.layout?.floors || [];
+  const allSlots = query.data?.layout?.slots || [];
+  const filteredSlots = slotFloorFilter
+    ? allSlots.filter(s => String(s.floorId) === String(slotFloorFilter))
+    : allSlots;
+
   return <>
     <div className="operations-settings-toolbar">
       <p>{view.description}</p>
@@ -98,102 +105,184 @@ function LotSettings({ lot, view, onBusyChange }) {
         </fieldset></form>
         </div>
       </section>}
-      {view.id === "policies" && <section className="staff-panel"><div><h2>Chính sách vận hành</h2>
-        <p className="operations-settings-hint">Lưu nháp khi chưa chốt đủ tham số. Phiên gửi cũ giữ nguyên chính sách đã áp dụng.</p></div>
-        <div className="operations-settings-columns operations-settings-columns--policy">
-        <form onSubmit={e => { e.preventDefault(); perform(async () => {
-          const body = { ...policy, zoneId: policy.zoneId ? Number(policy.zoneId) : null,
-            effectiveFrom: policy.effectiveFrom ? new Date(policy.effectiveFrom).toISOString() : new Date().toISOString() };
-          for (const [key] of numeric) body[key] = policy[key] === "" || policy[key] == null ? null : Number(policy[key]);
-          for (const [key] of choices) body[key] = policy[key] || null;
-          await operationsApi(lot.id, "policies", body); patchPolicy("approve", false);
-        }); }}><fieldset className="operations-fields" disabled={busy}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <span style={{ fontSize: "12px", color: "#64748b" }}>Cần duyệt nhanh chính sách hoạt động?</span>
-            <button type="button" className="staff-button staff-button--secondary" onClick={() => {
-              const now = new Date();
-              const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-              setPolicy({
-                zoneId: "",
-                effectiveFrom: localIso,
-                decisionReference: "Quyết định phê duyệt quy định vận hành và giá cước bãi đỗ",
-                holdMinutes: 15,
-                earlyArrivalMinutes: 15,
-                lateArrivalMinutes: 15,
-                cancellationNoticeMinutes: 30,
-                depositAmount: 0,
-                nearFullThreshold: 5,
-                feeUnitMinutes: 60,
-                feeRounding: "CEILING",
-                noShowAction: "EXPIRE",
-                cancellationAction: "ALLOW",
-                rateSelection: "CHECK_IN",
-                approve: true,
-              });
-            }}>⚡ Điền mẫu chuẩn để duyệt ngay</button>
-          </div>
-          <Field label="Phạm vi"><select value={policy.zoneId} onChange={e => patchPolicy("zoneId", e.target.value)}><option value="">Toàn bãi</option>{query.data?.zones.map(z => <option key={z.id} value={z.id}>{z.code}</option>)}</select></Field>
-          <Field label="Bắt đầu có hiệu lực (giờ máy của bạn)"><input type="datetime-local" required value={policy.effectiveFrom} onChange={e => patchPolicy("effectiveFrom", e.target.value)} /></Field>
-          <div className="operations-form-grid">{numeric.map(([key, label]) => <Field label={label} key={key}><input type="number" min={key === "holdMinutes" || key === "feeUnitMinutes" ? 1 : 0} step={key === "depositAmount" ? "0.01" : 1} value={policy[key] ?? ""} onChange={e => patchPolicy(key, e.target.value)} /></Field>)}</div>
-          <div className="operations-form-grid">{choices.map(([key, label, options]) => <Field key={key} label={label}><select value={policy[key] || ""} onChange={e => patchPolicy(key, e.target.value)}><option value="">Chưa chốt</option>{options.map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>)}</div>
-          <p>Mốc trả ô: sau xác nhận xe thực sự ra bãi.</p>
-          <Field label="Nguồn quyết định / ghi chú"><textarea maxLength={500} value={policy.decisionReference} onChange={e => patchPolicy("decisionReference", e.target.value)} /></Field>
-          <label className="staff-check"><input type="checkbox" checked={policy.approve} onChange={e => {
-            const checked = e.target.checked;
-            patchPolicy("approve", checked);
-            if (checked) {
-              if (!policy.effectiveFrom) {
-                const now = new Date();
-                patchPolicy("effectiveFrom", new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
-              }
-              if (!policy.decisionReference) {
-                patchPolicy("decisionReference", "Quyết định phê duyệt quy định vận hành");
-              }
-            }
-          }} />Tôi xác nhận quyết định đã được duyệt, cho áp dụng từ thời điểm trên.</label>
-          <button className="staff-button staff-button--primary">{policy.approve ? "Tạo phiên bản được duyệt" : "Lưu phiên bản nháp"}</button>
-        </fieldset></form>
-        <div className="operations-policy-history"><h3>Lịch sử phiên bản</h3>
-          {!query.loading && !query.error && !query.data?.policies.length && <Notice>Chưa có phiên bản chính sách.</Notice>}
-          {query.data?.policies.map(p => <details key={p.id}><summary>#{p.id} · {p.approvedAt ? "Đã duyệt" : "Nháp"} · {new Date(p.effectiveFrom).toLocaleString("vi-VN")}</summary><p>{p.decisionReference || "Chưa có nguồn quyết định"}</p><dl>{numeric.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{p[key] ?? "Chưa chốt"}</dd></div>)}</dl></details>)}
-        </div></div>
-      </section>}
-      {view.id === "floors" && <section className="staff-panel"><div><h2>Quản lý tầng</h2><p className="operations-settings-hint">Gắn mỗi tầng với một khu. Tầng có xe hoặc lịch sử phiên không được chuyển khu.</p></div>
+
+      {view.id === "floors" && <section className="staff-panel"><div><h2>Quản lý tầng</h2><p className="operations-settings-hint">Thêm, sửa, xóa tầng và gắn tầng với khu vực. Tầng đang có xe hoặc lịch sử phiên không được xóa.</p></div>
         <div className="operations-settings-columns">
-        <div><h3>Danh sách tầng</h3>
-        {!query.loading && !query.error && !query.data?.layout.floors.length && <Notice>Chưa có tầng trong bãi này.</Notice>}
-        {query.data?.layout.floors.map(f => <div key={f.id} className="operations-floor"><strong>{f.name} · #{f.id}</strong>
-          <Field label="Khu sở hữu"><select value={f.zoneId || ""} disabled={busy} onChange={e => perform(() => operationsApi(lot.id, `floors/${f.id}/zone`, { zoneId: Number(e.target.value) }, "PUT"))}><option value="" disabled>Chưa gắn khu</option>{query.data.zones.map(z => <option key={z.id} value={z.id}>{z.code}</option>)}</select></Field>
-          <button className="staff-button" disabled={busy} onClick={() => perform(() => apiRequest(`/v1/parking-floors/${f.id}`, { method: "PUT", body: JSON.stringify({ floorNumber: f.floorNumber, name: f.name, totalSlots: query.data.layout.slots.filter(s => s.floorId === f.id).length, isActive: !f.isActive }) }))}>{f.isActive ? "Ngừng dùng tầng" : "Mở lại tầng"}</button>
-        </div>)}</div>
+        <div><h3>Danh sách tầng ({allFloors.length})</h3>
+        {!query.loading && !query.error && !allFloors.length && <Notice>Chưa có tầng trong bãi này.</Notice>}
+        {allFloors.map(f => {
+          const floorSlotCount = allSlots.filter(s => s.floorId === f.id).length;
+          return <div key={f.id} className="operations-floor" style={{ display: "grid", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+              <strong>{f.name} · Tầng số {f.floorNumber ?? "—"} ({floorSlotCount} ô)</strong>
+              <span style={{ fontSize: "12px", color: f.isActive ? "#15803d" : "#64748b", fontWeight: 600 }}>
+                {f.isActive ? "Đang hoạt động" : "Ngừng dùng"}
+              </span>
+            </div>
+            <Field label="Khu sở hữu"><select value={f.zoneId || ""} disabled={busy} onChange={e => perform(() => operationsApi(lot.id, `floors/${f.id}/zone`, { zoneId: Number(e.target.value) }, "PUT"))}><option value="" disabled>Chưa gắn khu</option>{query.data.zones.map(z => <option key={z.id} value={z.id}>{z.code} · {z.name}</option>)}</select></Field>
+            <div className="operations-settings-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button type="button" className="staff-button staff-button--secondary" disabled={busy} onClick={() => {
+                setEditingFloor(f);
+                setFloorDraft({ name: f.name, floorNumber: String(f.floorNumber ?? 1), zoneId: String(f.zoneId || "") });
+              }}>Sửa tầng</button>
+              <button type="button" className="staff-button" disabled={busy} onClick={() => perform(() => apiRequest(`/v1/parking-floors/${f.id}`, { method: "PUT", body: JSON.stringify({ floorNumber: f.floorNumber, name: f.name, totalSlots: floorSlotCount, isActive: !f.isActive }) }))}>{f.isActive ? "Ngừng dùng tầng" : "Mở lại tầng"}</button>
+              <button type="button" className="staff-button staff-button--secondary" disabled={busy || floorSlotCount > 0} title={floorSlotCount > 0 ? "Chỉ xóa được tầng chưa có ô đỗ" : "Xóa tầng"} onClick={() => perform(() => apiRequest(`/v1/parking-floors/${f.id}`, { method: "DELETE" }))}>Xóa tầng</button>
+            </div>
+          </div>;
+        })}</div>
         <form onSubmit={e => { e.preventDefault(); perform(async () => {
+          if (editingFloor) {
+            const slotCount = allSlots.filter(s => s.floorId === editingFloor.id).length;
+            await apiRequest(`/v1/parking-floors/${editingFloor.id}`, {
+              method: "PUT",
+              body: JSON.stringify({
+                name: floorDraft.name.trim(),
+                floorNumber: Number(floorDraft.floorNumber),
+                totalSlots: slotCount,
+                isActive: editingFloor.isActive,
+              }),
+            });
+            if (floorDraft.zoneId && Number(floorDraft.zoneId) !== editingFloor.zoneId) {
+              await operationsApi(lot.id, `floors/${editingFloor.id}/zone`, { zoneId: Number(floorDraft.zoneId) }, "PUT");
+            }
+            setEditingFloor(null);
+            setFloorDraft({ name: "", floorNumber: "", zoneId: "" });
+            return;
+          }
           let floor = createdFloor;
-          if (!floor) { const result = await apiRequest(`/v1/parking-lots/${lot.id}/floors`, { method: "POST", body: JSON.stringify({ zoneId: Number(floorDraft.zoneId), name: floorDraft.name, floorNumber: Number(floorDraft.floorNumber), totalSlots: 0, isActive: true }) }); floor = result.data; setCreatedFloor(floor); }
-          await operationsApi(lot.id, `floors/${floor.id}/zone`, { zoneId: Number(floorDraft.zoneId) }, "PUT"); setCreatedFloor(null); setFloorDraft({ name: "", floorNumber: "", zoneId: "" });
-        }); }}><fieldset disabled={busy} className="operations-fields"><h3>Thêm tầng</h3>
+          const chosenZoneId = floorDraft.zoneId ? Number(floorDraft.zoneId) : (query.data?.zones?.find(z => z.isActive)?.id || null);
+          if (!floor) {
+            const result = await apiRequest(`/v1/parking-lots/${lot.id}/floors`, {
+              method: "POST",
+              body: JSON.stringify({
+                zoneId: chosenZoneId,
+                name: floorDraft.name.trim(),
+                floorNumber: Number(floorDraft.floorNumber),
+                totalSlots: 0,
+                isActive: true,
+              }),
+            });
+            floor = result.data;
+            setCreatedFloor(floor);
+          }
+          if (chosenZoneId) {
+            await operationsApi(lot.id, `floors/${floor.id}/zone`, { zoneId: chosenZoneId }, "PUT");
+          }
+          setCreatedFloor(null);
+          setFloorDraft({ name: "", floorNumber: "", zoneId: "" });
+        }); }}><fieldset disabled={busy} className="operations-fields"><h3>{editingFloor ? `Sửa tầng ${editingFloor.name}` : "Thêm tầng"}</h3>
           <Field label="Tên tầng"><input required disabled={Boolean(createdFloor)} value={floorDraft.name} onChange={e => setFloorDraft({ ...floorDraft, name: e.target.value })} /></Field>
           <Field label="Số tầng"><input type="number" min={-10} max={100} required disabled={Boolean(createdFloor)} value={floorDraft.floorNumber} onChange={e => setFloorDraft({ ...floorDraft, floorNumber: e.target.value })} /></Field>
-          <Field label="Khu của tầng"><select required value={floorDraft.zoneId} onChange={e => setFloorDraft({ ...floorDraft, zoneId: e.target.value })}><option value="">Chọn khu</option>{query.data?.zones.filter(z => z.isActive).map(z => <option key={z.id} value={z.id}>{z.code}</option>)}</select></Field>
-          <button className="staff-button">{createdFloor ? "Gắn khu cho tầng vừa tạo" : "Tạo tầng và gắn khu"}</button>
+          <Field label="Khu của tầng"><select value={floorDraft.zoneId} onChange={e => setFloorDraft({ ...floorDraft, zoneId: e.target.value })}><option value="">Tự động gắn khu mặc định</option>{query.data?.zones.filter(z => z.isActive).map(z => <option key={z.id} value={z.id}>{z.code} · {z.name}</option>)}</select></Field>
+          <div className="operations-settings-actions">
+            <button className="staff-button staff-button--primary">{editingFloor ? "Lưu cập nhật tầng" : createdFloor ? "Gắn khu cho tầng vừa tạo" : "Tạo tầng và gắn khu"}</button>
+            {editingFloor && <button type="button" className="staff-button staff-button--secondary" onClick={() => { setEditingFloor(null); setFloorDraft({ name: "", floorNumber: "", zoneId: "" }); }}>Hủy sửa</button>}
+          </div>
         </fieldset></form></div>
       </section>}
-      {view.id === "slots" && <section className="staff-panel"><div><h2>Quản lý ô đỗ</h2><p className="operations-settings-hint">Thêm ô vào tầng đã gắn khu và chọn loại nhiên liệu được phép.</p></div>
+
+      {view.id === "slots" && <section className="staff-panel"><div><h2>Quản lý ô đỗ</h2><p className="operations-settings-hint">Thêm, sửa, xóa ô đỗ (slot), cập nhật trạng thái vật lý và cấu hình loại nhiên liệu phù hợp.</p></div>
         <div className="operations-settings-columns">
         <form onSubmit={e => { e.preventDefault(); perform(async () => {
-          const body = { slotCode: slotDraft.slotCode, physicalStatus: "EMPTY", isActive: true };
-          for (const key of ["positionX", "positionY", "positionZ"]) body[key] = slotDraft[key] === "" ? null : Number(slotDraft[key]);
-          await apiRequest(`/v1/parking-floors/${slotDraft.floorId}/slots`, { method: "POST", body: JSON.stringify(body) }); setSlotDraft({ ...slotDraft, slotCode: "" });
-        }); }}><fieldset disabled={busy} className="operations-fields"><h3>Thêm ô</h3>
-          <Field label="Tầng"><select required value={slotDraft.floorId} onChange={e => setSlotDraft({ ...slotDraft, floorId: e.target.value })}><option value="">Chọn tầng</option>{query.data?.layout.floors.filter(f => f.zoneId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
+          const body = {
+            slotCode: slotDraft.slotCode.trim(),
+            isActive: slotDraft.isActive !== false,
+          };
+          for (const key of ["positionX", "positionY", "positionZ"]) {
+            body[key] = slotDraft[key] === "" || slotDraft[key] == null ? null : Number(slotDraft[key]);
+          }
+          if (editingSlot) {
+            await apiRequest(`/v1/parking-slots/${editingSlot.id}`, {
+              method: "PUT",
+              body: JSON.stringify(body),
+            });
+            setEditingSlot(null);
+            setSlotDraft(emptySlotDraft(slotDraft.floorId));
+          } else {
+            body.physicalStatus = slotDraft.physicalStatus || "EMPTY";
+            await apiRequest(`/v1/parking-floors/${slotDraft.floorId}/slots`, {
+              method: "POST",
+              body: JSON.stringify(body),
+            });
+            setSlotDraft({ ...emptySlotDraft(slotDraft.floorId), floorId: slotDraft.floorId });
+          }
+        }); }}><fieldset disabled={busy} className="operations-fields"><h3>{editingSlot ? `Sửa ô ${editingSlot.slotCode}` : "Thêm ô"}</h3>
+          {!editingSlot && (
+            <Field label="Tầng"><select required value={slotDraft.floorId} onChange={e => setSlotDraft({ ...slotDraft, floorId: e.target.value })}><option value="">Chọn tầng</option>{allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
+          )}
           <Field label="Mã ô"><input required maxLength={20} value={slotDraft.slotCode} onChange={e => setSlotDraft({ ...slotDraft, slotCode: e.target.value })} /></Field>
-          <div className="operations-form-grid">{["X", "Y", "Z"].map(axis => <Field key={axis} label={`Tọa độ ${axis}`}><input type="number" step="0.01" value={slotDraft[`position${axis}`]} onChange={e => setSlotDraft({ ...slotDraft, [`position${axis}`]: e.target.value })} /></Field>)}</div>
-          <button className="staff-button">Tạo ô</button>
+          {!editingSlot && (
+            <Field label="Trạng thái ban đầu">
+              <select value={slotDraft.physicalStatus || "EMPTY"} onChange={e => setSlotDraft({ ...slotDraft, physicalStatus: e.target.value })}>
+                {Object.entries(slotStatuses).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </Field>
+          )}
+          <div className="operations-form-grid">{["X", "Y", "Z"].map(axis => <Field key={axis} label={`Tọa độ ${axis}`}><input type="number" step="0.01" value={slotDraft[`position${axis}`] ?? ""} onChange={e => setSlotDraft({ ...slotDraft, [`position${axis}`]: e.target.value })} /></Field>)}</div>
+          <label className="staff-check"><input type="checkbox" checked={slotDraft.isActive !== false} onChange={e => setSlotDraft({ ...slotDraft, isActive: e.target.checked })} />Đang sử dụng</label>
+          <div className="operations-settings-actions">
+            <button className="staff-button staff-button--primary">{editingSlot ? "Lưu ô đỗ" : "Tạo ô"}</button>
+            {editingSlot && <button type="button" className="staff-button staff-button--secondary" onClick={() => { setEditingSlot(null); setSlotDraft(emptySlotDraft("")); }}>Hủy sửa</button>}
+          </div>
         </fieldset></form>
-        <div><h3>Tương thích nhiên liệu</h3>
-          {!query.loading && !query.error && !query.data?.layout.slots.length && <Notice>Chưa có ô đỗ trong bãi này.</Notice>}
-          <div className="operations-slot-grid">{query.data?.layout.slots.map(s => <Field key={s.id} label={`${s.floorName} · ${s.slotCode}`}><select disabled={busy} value={s.allowedFuelType} onChange={e => perform(() => operationsApi(lot.id, `slots/${s.id}/fuel`, { allowedFuelType: e.target.value }, "PUT"))}><option value="ANY">Mọi loại</option><option value="PETROL">Xăng/dầu</option><option value="ELECTRIC">Điện</option><option value="HYBRID">Hybrid</option></select></Field>)}</div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+            <h3 style={{ margin: 0 }}>Danh sách ô đỗ ({filteredSlots.length})</h3>
+            <select aria-label="Lọc theo tầng" value={slotFloorFilter} onChange={e => setSlotFloorFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
+              <option value="">Tất cả các tầng</option>
+              {allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </div>
+          {!query.loading && !query.error && !filteredSlots.length && <Notice>Chưa có ô đỗ trong bãi/tầng này.</Notice>}
+          <div className="operations-slot-grid" style={{ display: "grid", gap: "10px", maxHeight: "480px", overflowY: "auto" }}>
+            {filteredSlots.map(s => (
+              <div key={s.id} style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", background: "#fff", display: "grid", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong>{s.floorName} · {s.slotCode}</strong>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button type="button" className="staff-button staff-button--secondary" disabled={busy} onClick={() => {
+                      setEditingSlot(s);
+                      setSlotDraft({
+                        floorId: String(s.floorId || ""),
+                        slotCode: s.slotCode,
+                        physicalStatus: s.physicalStatus || "EMPTY",
+                        positionX: s.positionX ?? "",
+                        positionY: s.positionY ?? "",
+                        positionZ: s.positionZ ?? "",
+                        isActive: s.isActive !== false,
+                      });
+                    }}>Sửa</button>
+                    <button type="button" className="staff-button staff-button--secondary" disabled={busy || s.physicalStatus === "OCCUPIED"} onClick={() => perform(() => apiRequest(`/v1/parking-slots/${s.id}`, { method: "DELETE" }))}>Xóa</button>
+                  </div>
+                </div>
+                <div className="operations-form-grid">
+                  <Field label="Trạng thái">
+                    <select
+                      disabled={busy || s.physicalStatus === "OCCUPIED"}
+                      value={s.physicalStatus || "EMPTY"}
+                      onChange={e => perform(() => apiRequest(`/v1/parking-slots/${s.id}/status`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ physicalStatus: e.target.value, reason: "Cập nhật từ Quản lý bãi xe" }),
+                      }))}
+                    >
+                      {Object.entries(slotStatuses).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label={`${s.floorName} · ${s.slotCode}`}>
+                    <select disabled={busy} value={s.allowedFuelType || "ANY"} onChange={e => perform(() => operationsApi(lot.id, `slots/${s.id}/fuel`, { allowedFuelType: e.target.value }, "PUT"))}>
+                      <option value="ANY">Mọi loại</option>
+                      <option value="PETROL">Xăng/dầu</option>
+                      <option value="ELECTRIC">Điện</option>
+                      <option value="HYBRID">Hybrid</option>
+                    </select>
+                  </Field>
+                </div>
+              </div>
+            ))}
+          </div>
         </div></div>
       </section>}
+
       {view.id === "tickets" && <section className="staff-panel"><div><h2>Xử lý vé mất hoặc thu hồi</h2><p className="operations-settings-hint">Tra cứu vé trước khi thay hoặc thu hồi. Ghi rõ lý do và kết quả đối chiếu.</p></div>
         <div className="operations-settings-columns"><div>
         <form onSubmit={e => { e.preventDefault(); action.run(async () => setTicketResult(await operationsApi(lot.id, `tickets/${encodeURIComponent(ticket.code.trim())}`))); }}><Field label="Mã vé"><input required disabled={busy} value={ticket.code} onChange={e => { setTicket({ ...ticket, code: e.target.value }); setTicketResult(null); }} /></Field><button className="staff-button" disabled={busy}>Tra vé</button></form>
@@ -209,6 +298,7 @@ function LotSettings({ lot, view, onBusyChange }) {
     </div>
   </>;
 }
+
 function Content() {
   const [params, setParams] = useSearchParams();
   const view = views.find(item => item.id === params.get("view")) || views[0];
@@ -217,71 +307,154 @@ function Content() {
   const lots = useStaffQuery(load);
   const [selected, select] = useState("");
   const [busy, setBusy] = useState(false);
-  const [showNewLotModal, setShowNewLotModal] = useState(false);
-  const [newLot, setNewLot] = useState({ name: "", address: "", totalCapacity: 100, isActive: true });
-  const [createLotBusy, setCreateLotBusy] = useState(false);
-  const [createLotError, setCreateLotError] = useState("");
+  const [showLotModal, setShowLotModal] = useState(false);
+  const [editingLot, setEditingLot] = useState(null);
+  const [lotForm, setLotForm] = useState({ name: "", address: "", totalCapacity: 100, isActive: true });
+  const [lotModalBusy, setLotModalBusy] = useState(false);
+  const [lotModalError, setLotModalError] = useState("");
+  const [lotActionMessage, setLotActionMessage] = useState("");
+
   const lot = lots.data?.find(l => String(l.id) === selected) || lots.data?.[0];
   const openView = id => setParams(previous => { const next = new URLSearchParams(previous); next.set("view", id); return next; });
 
-  const handleCreateLot = async (e) => {
+  const openCreateLotModal = () => {
+    setEditingLot(null);
+    setLotForm({ name: "", address: "", totalCapacity: 100, isActive: true });
+    setLotModalError("");
+    setShowLotModal(true);
+  };
+
+  const openEditLotModal = () => {
+    if (!lot) return;
+    setEditingLot(lot);
+    setLotForm({
+      name: lot.name || "",
+      address: lot.address || "",
+      totalCapacity: lot.configuredCapacity ?? lot.totalCapacity ?? 100,
+      isActive: lot.isActive !== false,
+    });
+    setLotModalError("");
+    setShowLotModal(true);
+  };
+
+  const handleSaveLot = async (e) => {
     e.preventDefault();
-    setCreateLotBusy(true);
-    setCreateLotError("");
+    setLotModalBusy(true);
+    setLotModalError("");
+    setLotActionMessage("");
     try {
-      const res = await apiRequest("/v1/parking-lots", {
-        method: "POST",
-        body: JSON.stringify({
-          name: newLot.name.trim(),
-          address: newLot.address.trim() || null,
-          totalCapacity: Number(newLot.totalCapacity) || 0,
-          isActive: Boolean(newLot.isActive)
-        })
-      });
-      if (res?.data?.id) {
-        try {
-          await apiRequest(`/v1/parking-lots/${res.data.id}/floors`, {
-            method: "POST",
-            body: JSON.stringify({
-              name: "Tầng 1",
-              floorNumber: 1,
-              totalSlots: 0,
-              isActive: true
-            })
-          });
-        } catch {
-          // Ignore if floor creation fails; user can still add floors manually
+      if (editingLot) {
+        await apiRequest(`/v1/parking-lots/${editingLot.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            name: lotForm.name.trim(),
+            address: lotForm.address.trim() || null,
+            totalCapacity: Number(lotForm.totalCapacity) || 0,
+            isActive: Boolean(lotForm.isActive),
+          }),
+        });
+        setShowLotModal(false);
+        await lots.reload();
+        setLotActionMessage(`Đã cập nhật bãi đỗ "${lotForm.name.trim()}".`);
+      } else {
+        const res = await apiRequest("/v1/parking-lots", {
+          method: "POST",
+          body: JSON.stringify({
+            name: lotForm.name.trim(),
+            address: lotForm.address.trim() || null,
+            totalCapacity: Number(lotForm.totalCapacity) || 0,
+            isActive: Boolean(lotForm.isActive),
+          }),
+        });
+        if (res?.data?.id) {
+          try {
+            await apiRequest(`/v1/parking-lots/${res.data.id}/floors`, {
+              method: "POST",
+              body: JSON.stringify({
+                name: "Tầng 1",
+                floorNumber: 1,
+                totalSlots: 0,
+                isActive: true,
+              }),
+            });
+            await operationsApi(res.data.id, "policies", {
+              zoneId: null,
+              effectiveFrom: new Date(Date.now() - 60000).toISOString(),
+              approve: true,
+              decisionReference: "Quy định vận hành chuẩn mặc định khi khởi tạo bãi đỗ",
+              holdMinutes: 15,
+              earlyArrivalMinutes: 15,
+              lateArrivalMinutes: 10,
+              cancellationNoticeMinutes: 30,
+              depositAmount: 0,
+              nearFullThreshold: 5,
+              feeUnitMinutes: 60,
+              feeRounding: "CEILING",
+              noShowAction: "EXPIRE",
+              cancellationAction: "ALLOW",
+              rateSelection: "CHECK_IN",
+            }, "POST");
+          } catch {
+            // Ignore optional bootstrap errors
+          }
         }
-      }
-      setShowNewLotModal(false);
-      setNewLot({ name: "", address: "", totalCapacity: 100, isActive: true });
-      await lots.reload();
-      if (res?.data?.id) {
-        select(String(res.data.id));
+        setShowLotModal(false);
+        await lots.reload();
+        if (res?.data?.id) {
+          select(String(res.data.id));
+        }
+        setLotActionMessage(`Đã tạo bãi đỗ "${lotForm.name.trim()}".`);
       }
     } catch (err) {
-      setCreateLotError(err.message || "Không thể tạo bãi đỗ mới.");
+      setLotModalError(err.message || "Không thể lưu thông tin bãi đỗ.");
     } finally {
-      setCreateLotBusy(false);
+      setLotModalBusy(false);
     }
   };
 
-  return <div className="staff-workspace operations-settings container"><header className="staff-workspace-heading"><div><Link className="operations-settings-back" to="/admin">← Tổng quan</Link><h1>Khu & chính sách</h1><p>Chọn bãi và mục cần quản lý.</p></div></header>
-    <StaffError error={lots.error} />{lots.error && <button className="staff-button" onClick={lots.reload}>Tải lại bãi</button>}
+  const handleDeleteLot = async () => {
+    if (!lot) return;
+    setLotModalError("");
+    setLotActionMessage("");
+    setLotModalBusy(true);
+    try {
+      await apiRequest(`/v1/parking-lots/${lot.id}`, { method: "DELETE" });
+      setSelectedAfterDelete();
+      await lots.reload();
+      setLotActionMessage(`Đã xóa bãi đỗ "${lot.name}".`);
+    } catch (err) {
+      setLotModalError(err.message || "Không thể xóa bãi đỗ đang có tầng hoặc lịch sử phiên gửi xe.");
+    } finally {
+      setLotModalBusy(false);
+    }
+  };
+
+  const setSelectedAfterDelete = () => {
+    const remaining = (lots.data || []).filter(l => l.id !== lot?.id);
+    select(remaining[0] ? String(remaining[0].id) : "");
+  };
+
+  return <div className="staff-workspace operations-settings container"><header className="staff-workspace-heading"><div><Link className="operations-settings-back" to="/admin">← Tổng quan</Link><h1>Quản lý bãi xe</h1><p>Quản lý toàn diện bãi đỗ xe, khu vực, tầng và ô đỗ (slot).</p></div></header>
+    <StaffError error={lots.error || (!showLotModal ? lotModalError : "")} />{lots.error && <button className="staff-button" onClick={lots.reload}>Tải lại bãi</button>}
+    {lotActionMessage && <Notice kind="success">{lotActionMessage}</Notice>}
     {lots.loading && <Notice>Đang tải bãi…</Notice>}
     {!lots.loading && !lots.error && !lots.data?.length && (
       <div className="workspace-panel workspace-empty" style={{ textAlign: "center", padding: "32px 16px" }}>
         <h2>Chưa có bãi đỗ</h2>
-        <p style={{ margin: "12px 0 20px" }}>Hệ thống chưa có bãi đỗ nào. Hãy tạo bãi đỗ đầu tiên để cấu hình khu và chính sách.</p>
-        <button type="button" className="btn btn--primary" onClick={() => setShowNewLotModal(true)}>+ Thêm bãi đỗ mới</button>
+        <p style={{ margin: "12px 0 20px" }}>Hệ thống chưa có bãi đỗ nào. Hãy tạo bãi đỗ đầu tiên để bắt đầu quản lý tầng, khu vực và slot.</p>
+        <button type="button" className="btn btn--primary" onClick={openCreateLotModal}>+ Thêm bãi đỗ mới</button>
       </div>
     )}
     {lot && <>
-      <section className="staff-context-bar" aria-label="Bãi đang cấu hình"><div className="staff-context-select"><StaffIcon name="pin" size={23} />
-        <label htmlFor="settings-lot">Bãi cần cấu hình<select id="settings-lot" disabled={busy || createLotBusy} value={lot.id} onChange={e => select(e.target.value)}>{lots.data.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
-        <button type="button" className="btn btn--primary" style={{ marginLeft: "14px", whiteSpace: "nowrap" }} onClick={() => setShowNewLotModal(true)}>+ Thêm bãi đỗ</button>
+      <section className="staff-context-bar" aria-label="Bãi đang cấu hình"><div className="staff-context-select" style={{ flexWrap: "wrap", gap: "10px" }}><StaffIcon name="pin" size={23} />
+        <label htmlFor="settings-lot">Bãi cần cấu hình<select id="settings-lot" disabled={busy || lotModalBusy} value={lot.id} onChange={e => select(e.target.value)}>{lots.data.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginLeft: "8px" }}>
+          <button type="button" className="btn btn--primary" style={{ whiteSpace: "nowrap" }} disabled={busy || lotModalBusy} onClick={openCreateLotModal}>+ Thêm bãi đỗ</button>
+          <button type="button" className="btn btn--outline" style={{ whiteSpace: "nowrap", background: "#fff" }} disabled={busy || lotModalBusy} onClick={openEditLotModal}>✎ Sửa bãi đỗ</button>
+          <button type="button" className="btn btn--outline" style={{ whiteSpace: "nowrap", background: "#fff", color: "#b91c1c" }} disabled={busy || lotModalBusy} onClick={handleDeleteLot}>🗑 Xóa bãi</button>
+        </div>
       </div></section>
-      <div className="staff-tabs" role="tablist" aria-label="Quản lý khu và chính sách">
+      <div className="staff-tabs" role="tablist" aria-label="Quản lý bãi xe">
         {views.map((item, index) => <button key={item.id} type="button" role="tab" id={`settings-tab-${item.id}`} aria-controls={`settings-panel-${item.id}`} aria-selected={view.id === item.id} tabIndex={view.id === item.id ? 0 : -1} disabled={busy}
           ref={node => { tabRefs.current[item.id] = node; }} onClick={() => openView(item.id)} onKeyDown={event => {
             const nextIndex = event.key === "ArrowRight" ? (index + 1) % views.length : event.key === "ArrowLeft" ? (index + views.length - 1) % views.length : event.key === "Home" ? 0 : event.key === "End" ? views.length - 1 : null;
@@ -294,30 +467,30 @@ function Content() {
       </section>
     </>}
 
-    {showNewLotModal && (
+    {showLotModal && (
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title-lot" style={{ position: "fixed", inset: 0, background: "rgba(16,36,59,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
         <div className="workspace-panel" style={{ width: "100%", maxWidth: "480px", background: "#fff", borderRadius: "14px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
-          <h2 id="modal-title-lot" style={{ marginTop: 0 }}>Thêm bãi đỗ xe mới</h2>
-          <p className="operations-settings-hint" style={{ margin: "4px 0 16px" }}>Khai báo tòa nhà / bãi đỗ xe mới trong hệ thống.</p>
-          {createLotError && <p className="feedback feedback--error" role="alert" style={{ color: "#d14343", margin: "8px 0" }}>{createLotError}</p>}
-          <form onSubmit={handleCreateLot}>
-            <fieldset disabled={createLotBusy} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: "12px" }}>
+          <h2 id="modal-title-lot" style={{ marginTop: 0 }}>{editingLot ? `Sửa bãi đỗ: ${editingLot.name}` : "Thêm bãi đỗ xe mới"}</h2>
+          <p className="operations-settings-hint" style={{ margin: "4px 0 16px" }}>{editingLot ? "Cập nhật thông tin tòa nhà / bãi đỗ xe." : "Khai báo tòa nhà / bãi đỗ xe mới trong hệ thống."}</p>
+          {lotModalError && <p className="feedback feedback--error" role="alert" style={{ color: "#d14343", margin: "8px 0" }}>{lotModalError}</p>}
+          <form onSubmit={handleSaveLot}>
+            <fieldset disabled={lotModalBusy} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: "12px" }}>
               <Field label="Tên bãi đỗ xe (bắt buộc)">
-                <input required minLength={2} maxLength={100} placeholder="Ví dụ: Tòa nhà Landmark 81..." value={newLot.name} onChange={e => setNewLot({ ...newLot, name: e.target.value })} />
+                <input required minLength={2} maxLength={100} placeholder="Ví dụ: Tòa nhà Landmark 81..." value={lotForm.name} onChange={e => setLotForm({ ...lotForm, name: e.target.value })} />
               </Field>
               <Field label="Địa chỉ">
-                <input maxLength={255} placeholder="Ví dụ: 720A Điện Biên Phủ, P. 22, Bình Thạnh..." value={newLot.address} onChange={e => setNewLot({ ...newLot, address: e.target.value })} />
+                <input maxLength={255} placeholder="Ví dụ: 720A Điện Biên Phủ, P. 22, Bình Thạnh..." value={lotForm.address} onChange={e => setLotForm({ ...lotForm, address: e.target.value })} />
               </Field>
               <Field label="Sức chứa dự kiến">
-                <input type="number" min={0} max={100000} value={newLot.totalCapacity} onChange={e => setNewLot({ ...newLot, totalCapacity: e.target.value })} />
+                <input type="number" min={0} max={100000} value={lotForm.totalCapacity} onChange={e => setLotForm({ ...lotForm, totalCapacity: e.target.value })} />
               </Field>
               <label className="staff-check">
-                <input type="checkbox" checked={newLot.isActive} onChange={e => setNewLot({ ...newLot, isActive: e.target.checked })} />
+                <input type="checkbox" checked={lotForm.isActive} onChange={e => setLotForm({ ...lotForm, isActive: e.target.checked })} />
                 Đang hoạt động (cho phép tiếp nhận xe)
               </label>
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
-                <button type="button" className="btn btn--outline" disabled={createLotBusy} onClick={() => { setShowNewLotModal(false); setCreateLotError(""); }}>Hủy</button>
-                <button type="submit" className="btn btn--primary" disabled={createLotBusy || !newLot.name.trim()}>{createLotBusy ? "Đang tạo…" : "Tạo bãi đỗ"}</button>
+                <button type="button" className="btn btn--outline" disabled={lotModalBusy} onClick={() => { setShowLotModal(false); setLotModalError(""); }}>Hủy</button>
+                <button type="submit" className="btn btn--primary" disabled={lotModalBusy || !lotForm.name.trim()}>{lotModalBusy ? "Đang lưu…" : editingLot ? "Lưu cập nhật" : "Tạo bãi đỗ"}</button>
               </div>
             </fieldset>
           </form>
