@@ -119,7 +119,7 @@ public sealed class GoogleAuthController(
         challenges.Remove("google:" + nonce);
         Response.Cookies.Delete(cookieName, CookieSettings());
 
-        var db = HttpContext.RequestServices.GetService<ISmartParkingDbContext>();
+        var db = HttpContext.RequestServices.GetService<IApplicationDbContext>();
         if (db is not null)
         {
             var normalizedEmail = email.Trim().ToLowerInvariant();

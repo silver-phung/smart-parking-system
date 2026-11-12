@@ -1,4 +1,4 @@
-using SmartParking.Persistence.Data;
+﻿using SmartParking.Persistence.Data;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +17,7 @@ public class ParkingSessionService : IParkingSessionService
     private readonly IApplicationDbContext _context;
     private readonly IParkingAuthorizationService _authService;
     private readonly ILogger<ParkingSessionService> _logger;
+    private readonly AiRecognitionDbContext _aiRecognitionDb;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -27,11 +28,13 @@ public class ParkingSessionService : IParkingSessionService
     public ParkingSessionService(
         IApplicationDbContext context,
         IParkingAuthorizationService authService,
-        ILogger<ParkingSessionService> logger)
+        ILogger<ParkingSessionService> logger,
+        AiRecognitionDbContext? aiRecognitionDb = null)
     {
         _context = context;
         _authService = authService;
         _logger = logger;
+        _aiRecognitionDb = aiRecognitionDb!;
     }
 
     public async Task<MonthlyTrafficStatsDto> GetMonthlyTrafficStatsAsync(int year, int month, int? lotId, CancellationToken ct = default)
@@ -249,6 +252,22 @@ public class ParkingSessionService : IParkingSessionService
 
                 _context.ParkingSessions.Add(session);
                 await _context.SaveChangesAsync(ct);
+                StaffVehicleEntry? entryWorkflow = null;
+                if (request.EntryRecognitionId.HasValue)
+                {
+                    entryWorkflow = await _context.StaffVehicleEntries
+                        .Where(x => x.RecognitionId == request.EntryRecognitionId.Value
+                            && x.LotId == lot.Id && x.StaffUserId == actorId
+                            && x.PlateNumber == normalizedPlate && x.Status == "SEARCHING_FOR_SLOT")
+                        .FirstOrDefaultAsync(ct);
+                    if (entryWorkflow is null)
+                    {
+                        await transaction.RollbackAsync(ct);
+                        return (false, "Không tìm thấy lượt vào đã xác nhận tương ứng với biển số, bãi và nhân viên.", null);
+                    }
+                    entryWorkflow.ParkingSessionId = session.Id;
+                    entryWorkflow.Status = "PARKING";
+                }
 
                 await LogAuditAsync(
                     action: "CHECK_IN_SESSION",
@@ -326,6 +345,23 @@ public class ParkingSessionService : IParkingSessionService
         if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, session.LotId, StaffDuties.GateOut,
             session.CurrentSlot?.FloorId, session.ZoneId ?? session.CurrentSlot?.Floor.ZoneId, ct))
             return (false, "Phiên xe nằm ngoài tầng hoặc khu vực được phân công.", null);
+        if (request.ExitRecognitionId.HasValue)
+        {
+            if (_aiRecognitionDb is null)
+                return (false, "AI recognition database is not configured.", null);
+            var recognition = await _aiRecognitionDb.RecognitionRecords
+                .FirstOrDefaultAsync(x => x.Id == request.ExitRecognitionId.Value, ct);
+            if (recognition is null || recognition.Purpose != "EXIT"
+                || recognition.ParkingLotId != session.LotId
+                || recognition.StaffUserId != actorId
+                || recognition.MatchedParkingSessionId != session.Id
+                || !PlateNumberHelper.IsMatch(recognition.ConfirmedPlateNumber ?? string.Empty, session.PlateNumber)
+                || !recognition.ConfirmedAt.HasValue)
+                return (false, "Kết quả AI tại cổng ra chưa được staff xác nhận cho phiên xe này.", null);
+        }
+        var pendingEntryWorkflow = await _context.StaffVehicleEntries.AnyAsync(x => x.ParkingSessionId == session.Id && x.Status == "PARKING", ct);
+        if (pendingEntryWorkflow)
+            return (false, "Xe chưa được staff xác nhận đã đỗ; chưa thể checkout.", null);
 
         // Kiểm tra nhận diện biển số tại cổng ra nếu có cung cấp (chuẩn hóa đối chiếu theo PlateNumberHelper.IsMatch)
         if (!string.IsNullOrWhiteSpace(request.ConfirmedPlateNumber))
@@ -333,53 +369,6 @@ public class ParkingSessionService : IParkingSessionService
             if (!PlateNumberHelper.IsMatch(request.ConfirmedPlateNumber, session.PlateNumber))
             {
                 return (false, $"Biển số xe xác nhận tại cổng ra ({request.ConfirmedPlateNumber.Trim()}) không khớp với phiên gửi xe #{session.Id} (Biển số: {session.PlateNumber}).", null);
-            }
-        }
-
-        // Financial Clearance Invariant:
-        // 1. Xe đã thanh toán hoàn tất (Status == PAID): Đủ điều kiện tài chính để xác nhận ra bãi.
-        // 2. Nếu phiên có thu phí (TotalFee > 0) mà chưa thanh toán (Status != PAID):
-        //    - Nhân viên cổng (STAFF) tuyệt đối không được phép check-out (BLOCKED).
-        //    - STAFF không được tự ý bypass bằng allowExitWithoutPayment.
-        //    - Chỉ ADMIN hoặc MANAGER mới có quyền phê duyệt miễn trừ thanh toán với lý do cụ thể.
-        // 3. Nếu phiên có TotalFee == 0:
-        //    - ADMIN và MANAGER có thẩm quyền xử lý phiên miễn phí / kiểm thử / quản trị.
-        //    - STAFF không được tự tiện miễn phí nếu phiên chưa được xác nhận thanh toán/miễn phí hợp lệ.
-        if (session.Status != SessionStatuses.Paid)
-        {
-            if (session.TotalFee > 0)
-            {
-                if (request.AllowExitWithoutPayment == true)
-                {
-                    if (actorRole != Roles.Admin && actorRole != Roles.Manager)
-                    {
-                        return (false, "Nhân viên cổng (STAFF) không có thẩm quyền tự miễn phí hoặc cho phép xe chưa thanh toán xuất bãi. Yêu cầu phê duyệt từ Quản lý (MANAGER) hoặc Quản trị viên (ADMIN).", null);
-                    }
-
-                    if (string.IsNullOrWhiteSpace(request.ExemptionReason))
-                    {
-                        return (false, "Yêu cầu cung cấp lý do miễn trừ/phê duyệt xuất bãi hợp lệ khi mở cổng cho xe chưa thanh toán.", null);
-                    }
-                }
-                else
-                {
-                    return (false, $"Phiên gửi xe #{session.Id} chưa được xác nhận thanh toán (Phí: {session.TotalFee:N0} VNĐ, Trạng thái: {session.Status}). Check-out có thu phí đang bị khóa cho tới khi thanh toán hoàn tất hoặc có phê duyệt miễn trừ từ Quản lý.", null);
-                }
-            }
-            else
-            {
-                // TotalFee == 0
-                if (actorRole == Roles.Staff)
-                {
-                    if (request.AllowExitWithoutPayment == true)
-                    {
-                        return (false, "Nhân viên cổng (STAFF) không có thẩm quyền tự miễn phí xuất bãi. Yêu cầu phê duyệt từ Quản lý (MANAGER) hoặc Quản trị viên (ADMIN).", null);
-                    }
-                    else
-                    {
-                        return (false, $"Phiên gửi xe #{session.Id} chưa hoàn tất tính phí và thanh toán (Trạng thái: ACTIVE). Cần thanh toán hoặc có xác nhận miễn phí từ Quản lý trước khi mở cổng.", null);
-                    }
-                }
             }
         }
 
@@ -1221,8 +1210,17 @@ public class ParkingSessionService : IParkingSessionService
                 );
 
                 await _context.SaveChangesAsync(ct);
+                var entryWorkflow = await _context.StaffVehicleEntries
+                    .Where(x => x.ParkingSessionId == session.Id && x.Status == "PARKING")
+                    .OrderByDescending(x => x.StartedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (entryWorkflow is not null)
+                {
+                    entryWorkflow.Status = "CLOSED_PARKED";
+                    entryWorkflow.ParkedAt = DateTime.UtcNow;
+                }
+                await _context.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
-
                 var dto = MapToDto(session, session.Lot?.Name ?? string.Empty, slot.SlotCode, slot.Floor?.FloorNumber);
                 return (true, $"Xác nhận liên kết xe '{session.PlateNumber}' vào ô đỗ '{slot.SlotCode}' thành công.", dto);
             }

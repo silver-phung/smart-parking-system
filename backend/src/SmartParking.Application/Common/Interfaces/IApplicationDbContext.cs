@@ -21,6 +21,7 @@ public interface IApplicationDbContext
     DbSet<Booking> Bookings { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<StoredImage> StoredImages { get; }
+    DbSet<StaffVehicleEntry> StaffVehicleEntries { get; }
     DbSet<ParkingZone> ParkingZones { get; }
     DbSet<ParkingPolicy> ParkingPolicies { get; }
     DbSet<ParkingTicket> ParkingTickets { get; }

@@ -9,6 +9,8 @@ public interface IStaffDetectionService
         string contentType,
         long contentLength,
         long staffUserId,
+        int lotId,
+        string purpose,
         CancellationToken cancellationToken);
 
     Task<StaffDetectionDto?> ConfirmAsync(
@@ -16,5 +18,15 @@ public interface IStaffDetectionService
         string plateNumber,
         string? note,
         long staffUserId,
+        int lotId,
+        CancellationToken cancellationToken);
+
+    Task<StaffDetectionDto?> ConfirmExitAsync(
+        long recognitionId,
+        long sessionId,
+        string plateNumber,
+        string? note,
+        long staffUserId,
+        int lotId,
         CancellationToken cancellationToken);
 }

@@ -100,13 +100,16 @@ export function StaffExit({
         lot.lotId,
         capture.plate,
         imageUrl,
-        exitTicketCode,
+        isTicketed ? exitTicketCode : null,
+        isTicketed ? null : capture.recognition?.id,
+        capture.note,
       );
-      if (!result?.data?.id)
+      const updatedSession = result?.data ?? result;
+      if (!updatedSession?.id)
         throw new Error(
           "Chưa xác nhận được kết quả xe ra. Hãy tra cứu lại phiên trước khi gửi lại.",
         );
-      setSession(result.data);
+      setSession(updatedSession);
       setCapture(emptyCapture());
       setChecked(false);
       onChanged();
@@ -210,6 +213,8 @@ export function StaffExit({
                 <PlateCapture
                   title="Ảnh tại cổng ra"
                   plateLabel="Biển số thực tế tại cổng ra"
+                  lotId={lot.lotId}
+                  purpose="EXIT"
                   enableRecognition={!isTicketed}
                   value={capture}
                   onChange={setCapture}

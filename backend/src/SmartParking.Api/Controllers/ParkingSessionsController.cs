@@ -44,6 +44,11 @@ public class ParkingSessionsController : ControllerBase
         var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
+        if (request.EntryRecognitionId.HasValue
+            && !await HttpContext.RequestServices.GetRequiredService<IParkingAuthorizationService>()
+                .CanOperateGateAsync(actorId ?? 0, actorRole, request.LotId, ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "You are not assigned to gate duty at this parking lot." });
+
         var (success, message, session) = await _sessionService.CheckInAsync(request, actorId, actorRole, clientIp, ct);
         if (!success)
         {
@@ -121,7 +126,7 @@ public class ParkingSessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Check-out xe rời bãi: Xác nhận thủ công từ nhân viên/quản trị viên khi xe rời bãi (chưa tích hợp cảm biến IoT cổng ra).
+    /// Check-out xe rời bãi sau khi AI nhận diện và staff xác nhận biển số tại cổng.
     /// Chuyển trạng thái phiên sang COMPLETED và giải phóng ô đỗ về EMPTY nếu trước đó có xe đỗ.
     /// Dành cho ADMIN hoặc MANAGER/STAFF được phân công tại bãi đỗ xe này.
     /// </summary>
@@ -142,6 +147,16 @@ public class ParkingSessionsController : ControllerBase
         var actorId = GetCurrentUserId();
         var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        if (!request.ExitRecognitionId.HasValue && string.IsNullOrWhiteSpace(request.TicketCode)
+            && actorId.HasValue)
+        {
+            var candidate = await _sessionService.GetSessionByIdAsync(id, actorId, actorRole, ct);
+            if (candidate is not null
+                && !await HttpContext.RequestServices.GetRequiredService<IParkingAuthorizationService>()
+                    .CanOperateGateAsync(actorId.Value, actorRole, candidate.LotId, ct))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "You are not assigned to gate duty at this parking lot." });
+        }
 
         var (success, message, session) = await _sessionService.CheckOutAsync(id, request, actorId, actorRole, clientIp, ct);
         if (!success)

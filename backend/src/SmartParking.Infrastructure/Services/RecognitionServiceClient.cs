@@ -13,7 +13,8 @@ public sealed class RecognitionServiceClient(HttpClient client) : IStaffDetectio
     public const string KeyHeader = "X-Recognition-Service-Key";
 
     public async Task<StaffDetectionDto> DetectAsync(
-        Stream image, string contentType, long contentLength, long staffUserId, CancellationToken cancellationToken)
+        Stream image, string contentType, long contentLength, long staffUserId, int lotId, string purpose,
+        CancellationToken cancellationToken)
     {
         if (contentLength <= 0 || !MediaTypeHeaderValue.TryParse(contentType, out var mediaType))
             throw new ImageValidationException("A non-empty image and a valid content type are required.");
@@ -22,7 +23,9 @@ public sealed class RecognitionServiceClient(HttpClient client) : IStaffDetectio
         var content = new StreamContent(image);
         content.Headers.ContentType = mediaType;
         form.Add(content, "file", "staff-upload");
-        var request = new HttpRequestMessage(HttpMethod.Post, $"internal/recognition/detect?staffUserId={staffUserId}")
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"internal/recognition/detect?staffUserId={staffUserId}&lotId={lotId}&purpose={Uri.EscapeDataString(purpose)}")
         {
             Content = form
         };
@@ -30,11 +33,24 @@ public sealed class RecognitionServiceClient(HttpClient client) : IStaffDetectio
     }
 
     public Task<StaffDetectionDto?> ConfirmAsync(
-        long recognitionId, string plateNumber, string? note, long staffUserId, CancellationToken cancellationToken) =>
+        long recognitionId, string plateNumber, string? note, long staffUserId, int lotId,
+        CancellationToken cancellationToken) =>
         SendAsync<StaffDetectionDto>(new HttpRequestMessage(HttpMethod.Post, $"internal/recognition/{recognitionId}/confirm")
         {
-            Content = JsonContent.Create(new ConfirmRecognition(plateNumber, note, staffUserId))
+            Content = JsonContent.Create(new ConfirmRecognition(plateNumber, note, staffUserId, lotId))
         }, allowNotFound: true, cancellationToken);
+
+    public Task<StaffDetectionDto?> ConfirmExitAsync(
+        long recognitionId, long sessionId, string plateNumber, string? note, long staffUserId, int lotId,
+        CancellationToken cancellationToken) =>
+        SendAsync<StaffDetectionDto>(
+            new HttpRequestMessage(HttpMethod.Post, $"internal/recognition/{recognitionId}/confirm-exit")
+            {
+                Content = JsonContent.Create(
+                    new ConfirmExitRecognition(sessionId, plateNumber, note, staffUserId, lotId))
+            },
+            allowNotFound: true,
+            cancellationToken);
 
     private async Task<T?> SendAsync<T>(HttpRequestMessage request, bool allowNotFound, CancellationToken ct) where T : class
     {
@@ -71,6 +87,8 @@ public sealed class RecognitionServiceClient(HttpClient client) : IStaffDetectio
     private static AiServiceException Unavailable() =>
         new(HttpStatusCode.ServiceUnavailable, "Recognition service is unavailable.");
 
-    public sealed record ConfirmRecognition(string PlateNumber, string? Note, long StaffUserId);
+    public sealed record ConfirmRecognition(string PlateNumber, string? Note, long StaffUserId, int LotId);
+    public sealed record ConfirmExitRecognition(
+        long SessionId, string PlateNumber, string? Note, long StaffUserId, int LotId);
     private sealed record RecognitionError(string Message);
 }

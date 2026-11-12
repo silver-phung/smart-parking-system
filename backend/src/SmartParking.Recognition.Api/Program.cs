@@ -21,6 +21,7 @@ if (!Uri.TryCreate(aiUrl.TrimEnd('/') + "/", UriKind.Absolute, out var aiUri) ||
 var maxBytes = builder.Configuration.GetValue<long?>("AiService:MaxUploadSizeBytes") ?? 10 * 1024 * 1024;
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = maxBytes);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = maxBytes + 64 * 1024);
+builder.Services.AddParkingPersistence(builder.Configuration);
 builder.Services.AddRecognitionPersistence(builder.Configuration);
 builder.Services.AddHttpClient<IStaffDetectionService, StaffDetectionService>(client =>
 {
@@ -50,26 +51,44 @@ recognition.AddEndpointFilter(async (context, next) =>
     { return Results.Json(new { message = "Recognition database is unavailable." }, statusCode: 503); }
 });
 
-recognition.MapPost("/detect", async (HttpRequest request, long staffUserId, IStaffDetectionService service, CancellationToken ct) =>
+recognition.MapPost("/detect", async (
+    HttpRequest request, long staffUserId, int lotId, string purpose,
+    IStaffDetectionService service, CancellationToken ct) =>
 {
-    if (staffUserId <= 0 || !request.HasFormContentType)
-        return Results.BadRequest(new { message = "A staff ID and an image upload are required." });
+    if (staffUserId <= 0 || lotId <= 0 || purpose is not ("ENTRY" or "EXIT") || !request.HasFormContentType)
+        return Results.BadRequest(new { message = "A valid staff ID, lotId, purpose and image upload are required." });
     var file = (await request.ReadFormAsync(ct)).Files.GetFile("file");
     if (file is null)
         return Results.BadRequest(new { message = "An image file is required." });
 
     await using var stream = file.OpenReadStream();
-    return Results.Ok(await service.DetectAsync(stream, file.ContentType, file.Length, staffUserId, ct));
+    return Results.Ok(await service.DetectAsync(
+        stream, file.ContentType, file.Length, staffUserId, lotId, purpose, ct));
 });
 
 recognition.MapPost("/{id:long}/confirm", async (
     long id, RecognitionServiceClient.ConfirmRecognition request, IStaffDetectionService service, CancellationToken ct) =>
 {
-    if (request.StaffUserId <= 0 || string.IsNullOrWhiteSpace(request.PlateNumber) ||
+    if (request.StaffUserId <= 0 || request.LotId <= 0 || string.IsNullOrWhiteSpace(request.PlateNumber) ||
         request.PlateNumber.Length > 32 || request.Note?.Length > 256)
         return Results.BadRequest(new { message = "Invalid recognition confirmation." });
 
-    var result = await service.ConfirmAsync(id, request.PlateNumber, request.Note, request.StaffUserId, ct);
+    var result = await service.ConfirmAsync(
+        id, request.PlateNumber, request.Note, request.StaffUserId, request.LotId, ct);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+recognition.MapPost("/{id:long}/confirm-exit", async (
+    long id, RecognitionServiceClient.ConfirmExitRecognition request,
+    IStaffDetectionService service, CancellationToken ct) =>
+{
+    if (request.StaffUserId <= 0 || request.LotId <= 0 || request.SessionId <= 0
+        || string.IsNullOrWhiteSpace(request.PlateNumber))
+        return Results.BadRequest(new { message = "Invalid exit recognition confirmation." });
+
+    var result = await service.ConfirmExitAsync(
+        id, request.SessionId, request.PlateNumber, request.Note,
+        request.StaffUserId, request.LotId, ct);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 

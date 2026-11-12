@@ -1094,6 +1094,54 @@ namespace SmartParking.Persistence.Migrations
                     b.ToTable("staff_lot_assignments", (string)null);
                 });
 
+            modelBuilder.Entity("SmartParking.Domain.Entities.StaffVehicleEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("LotId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ParkedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("ParkingSessionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PlateNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long>("RecognitionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("StaffUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParkingSessionId");
+
+                    b.HasIndex("RecognitionId")
+                        .IsUnique();
+
+                    b.HasIndex("LotId", "Status");
+
+                    b.ToTable("staff_vehicle_entries", (string)null);
+                });
+
             modelBuilder.Entity("SmartParking.Domain.Entities.StoredImage", b =>
                 {
                     b.Property<long>("Id")
@@ -1681,6 +1729,20 @@ namespace SmartParking.Persistence.Migrations
                     b.Navigation("User");
 
                     b.Navigation("Zone");
+                });
+
+            modelBuilder.Entity("SmartParking.Domain.Entities.StaffVehicleEntry", b =>
+                {
+                    b.HasOne("SmartParking.Domain.Entities.ParkingLot", null)
+                        .WithMany()
+                        .HasForeignKey("LotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmartParking.Domain.Entities.ParkingSession", null)
+                        .WithMany()
+                        .HasForeignKey("ParkingSessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("SmartParking.Domain.Entities.StoredImage", b =>

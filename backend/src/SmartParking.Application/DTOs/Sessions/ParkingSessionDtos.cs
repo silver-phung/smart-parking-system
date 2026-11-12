@@ -42,6 +42,8 @@ public class CheckInRequestDto
 
     [MaxLength(500, ErrorMessage = "URL hình ảnh check-in không được vượt quá 500 ký tự.")]
     public string? CheckInImageUrl { get; set; }
+
+    public long? EntryRecognitionId { get; set; }
 }
 
 public class ConfirmBookingParkedRequestDto
@@ -67,6 +69,8 @@ public class CheckOutRequestDto
 
     [MaxLength(20, ErrorMessage = "Biển số xe xác nhận xuất bãi không được vượt quá 20 ký tự.")]
     public string? ConfirmedPlateNumber { get; set; }
+
+    public long? ExitRecognitionId { get; set; }
 
     public bool? AllowExitWithoutPayment { get; set; }
 

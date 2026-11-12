@@ -228,11 +228,11 @@ export const staffApi = {
       throw new Error("Không tìm thấy phiên xe tại bãi đang chọn.");
     return session;
   },
-  detect(file) {
+  detect(file, lotId, purpose = "ENTRY") {
     validatePhoto(file);
     const body = new FormData();
     body.append("file", file);
-    return data("/v1/staff/detect", { method: "POST", body });
+    return data(`/v1/staff/detect?${query({ lotId, purpose })}`, { method: "POST", body });
   },
   async upload(file) {
     validatePhoto(file);
@@ -246,15 +246,17 @@ export const staffApi = {
       );
     return image.url;
   },
-  confirmDetection: (id, plateNumber, note) =>
+  confirmDetection: (id, plateNumber, note, lotId) =>
     post(`/v1/staff/detections/${id}/confirm`, {
       plateNumber: validatePlate(plateNumber),
       note,
+      ...(lotId ? { lotId: Number(lotId) } : {}),
     }),
-  checkIn: (lotId, plateNumber, imageUrl) =>
+  checkIn: (lotId, plateNumber, imageUrl, entryRecognitionId) =>
     post("/v1/parking-sessions/check-in", {
       lotId: Number(lotId),
       plateNumber: validatePlate(plateNumber),
+      ...(entryRecognitionId ? { entryRecognitionId: Number(entryRecognitionId) } : {}),
       ...(imageUrl ? { checkInImageUrl: imageUrl } : {}),
     }),
   confirmBookingParked: (bookingId, plateNumber, slotId, imageUrl) =>
@@ -263,7 +265,7 @@ export const staffApi = {
       slotId: Number(slotId),
       checkInImageUrl: imageUrl,
     }),
-  async checkOut(sessionId, lotId, plateNumber, imageUrl, ticketCode) {
+  async checkOut(sessionId, lotId, plateNumber, imageUrl, ticketCode, exitRecognitionId, note) {
     const fresh = await staffApi.session(sessionId);
     if (!fresh || fresh.lotId !== Number(lotId))
       throw new Error("Phiên xe không thuộc bãi đang chọn.");
@@ -279,6 +281,7 @@ export const staffApi = {
     return post(`/v1/parking-sessions/${sessionId}/check-out`, {
       confirmedPlateNumber: plate,
       ...(ticketCode ? { ticketCode: ticketCode.trim().toUpperCase() } : {}),
+      ...(exitRecognitionId ? { exitRecognitionId: Number(exitRecognitionId) } : {}),
       ...(imageUrl ? { checkOutImageUrl: imageUrl } : {}),
     });
   },
