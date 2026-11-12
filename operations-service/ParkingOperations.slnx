@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/ParkingOperations.Application/ParkingOperations.Application.csproj" />
+  <Project Path="src/ParkingOperations.Domain/ParkingOperations.Domain.csproj" />
+  <Project Path="src/ParkingOperations.Infrastructure/ParkingOperations.Infrastructure.csproj" />
+  <Project Path="src/ParkingOperations.Persistence/ParkingOperations.Persistence.csproj" />
+  <Project Path="src/ParkingOperations.WebAPI/ParkingOperations.WebAPI.csproj" />
+</Solution>

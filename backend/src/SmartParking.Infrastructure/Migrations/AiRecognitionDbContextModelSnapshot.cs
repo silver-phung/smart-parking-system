@@ -60,6 +60,12 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Property<bool>("IsLegit")
                         .HasColumnType("boolean");
 
+                    b.Property<long?>("MatchedParkingSessionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("ParkingLotId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PlateBboxJson")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -67,6 +73,12 @@ namespace SmartParking.Infrastructure.Migrations
                     b.Property<string>("PlateNumber")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Purpose")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("ENTRY");
 
                     b.Property<string>("RawPlateNumber")
                         .HasMaxLength(64)
@@ -87,6 +99,8 @@ namespace SmartParking.Infrastructure.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("StaffUserId");
+
+                    b.HasIndex("ParkingLotId", "Purpose", "CreatedAt");
 
                     b.ToTable("ai_recognition_records", (string)null);
                 });

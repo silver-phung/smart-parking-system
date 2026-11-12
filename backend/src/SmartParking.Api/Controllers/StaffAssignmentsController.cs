@@ -33,10 +33,13 @@ public class StaffAssignmentsController : ControllerBase
     [HttpPost("/api/v1/staff/detect")]
     [Authorize(Roles = $"{Roles.Staff},{Roles.Admin}")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Detect(IFormFile? file, CancellationToken ct)
+    public async Task<IActionResult> Detect(IFormFile? file, [FromQuery] int lotId, [FromQuery] string purpose = "ENTRY", CancellationToken ct = default)
     {
         if (file is null || file.Length == 0)
             return BadRequest(new { message = "A non-empty image file is required in the 'file' field." });
+
+        if (lotId <= 0 || purpose is not ("ENTRY" or "EXIT"))
+            return BadRequest(new { message = "A valid lotId and purpose (ENTRY or EXIT) are required." });
 
         var actorId = GetCurrentUserId();
         if (!actorId.HasValue)
@@ -44,9 +47,12 @@ public class StaffAssignmentsController : ControllerBase
 
         try
         {
+            if (!await IsAssignedToLot(actorId.Value, lotId, ct)
+                && !string.Equals(User.FindFirst(ClaimTypes.Role)?.Value, Roles.Admin, StringComparison.Ordinal))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "You are not assigned to gate duty at this parking lot." });
             await using var stream = file.OpenReadStream();
             var result = await _detectionService.DetectAsync(
-                stream, file.ContentType, file.Length, actorId.Value, ct);
+                stream, file.ContentType, file.Length, actorId.Value, lotId, purpose, ct);
             return Ok(new { message = "Image recognized successfully.", data = result });
         }
         catch (ImageValidationException exception)
@@ -90,8 +96,37 @@ public class StaffAssignmentsController : ControllerBase
 
         try
         {
+            if (request.LotId <= 0) return BadRequest(new { message = "A valid lotId is required." });
+            if (!await IsAssignedToLot(actorId.Value, request.LotId, ct)
+                && !string.Equals(User.FindFirst(ClaimTypes.Role)?.Value, Roles.Admin, StringComparison.Ordinal))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "You are not assigned to gate duty at this parking lot." });
             var result = await _detectionService.ConfirmAsync(id, plateNumber,
-                request.Note?.Trim(), actorId.Value, ct);
+                request.Note?.Trim(), actorId.Value, request.LotId, ct);
+            return result is null ? NotFound(new { message = "Recognition record was not found." }) : Ok(new { data = result });
+        }
+        catch (ImageValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [HttpPost("/api/v1/staff/detections/{id:long}/confirm-exit")]
+    [Authorize(Roles = $"{Roles.Staff},{Roles.Admin}")]
+    public async Task<IActionResult> ConfirmExitDetection(
+        long id, [FromBody] ConfirmExitStaffDetectionRequestDto request, CancellationToken ct)
+    {
+        var actorId = GetCurrentUserId();
+        if (!actorId.HasValue) return Unauthorized(new { message = "Cannot identify the current user." });
+        var plate = request.PlateNumber?.Trim().ToUpperInvariant();
+        if (request.LotId <= 0 || request.SessionId <= 0 || string.IsNullOrWhiteSpace(plate) || plate.Length > 32)
+            return BadRequest(new { message = "Valid lotId, sessionId and plateNumber are required." });
+        if (!await IsAssignedToLot(actorId.Value, request.LotId, ct)
+            && !string.Equals(User.FindFirst(ClaimTypes.Role)?.Value, Roles.Admin, StringComparison.Ordinal))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "You are not assigned to this parking lot." });
+        try
+        {
+            var result = await _detectionService.ConfirmExitAsync(id, request.SessionId, plate,
+                request.Note?.Trim(), actorId.Value, request.LotId, ct);
             return result is null ? NotFound(new { message = "Recognition record was not found." }) : Ok(new { data = result });
         }
         catch (ImageValidationException exception)
@@ -286,5 +321,11 @@ public class StaffAssignmentsController : ControllerBase
         }
 
         return null;
+    }
+
+    private async Task<bool> IsAssignedToLot(long userId, int lotId, CancellationToken ct)
+    {
+        var lots = await _assignmentService.GetMyAssignedLotsAsync(userId, ct);
+        return lots.Any(x => x.LotId == lotId);
     }
 }

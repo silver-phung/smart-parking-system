@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.Application.DTOs.Sessions;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
@@ -366,89 +366,33 @@ public class WalkInSessionAndStaffDutyTests
     }
 
     [Fact]
-    public async Task CheckOut_FinancialGuard_RequiresPaymentOrAdminManagerExemption()
+    public async Task CheckOut_DoesNotRequirePaymentDuringDemo()
     {
         var (sessionService, _, context) = await CreateServicesAsync();
-        SeedLot(context, 208, "Bãi Financial Guard");
+        SeedLot(context, 208, "Demo checkout lot");
         AddStaffWithDuty(context, 2081, 208, StaffDuties.Gate);
         await context.SaveChangesAsync();
 
-        var checkInRes = await sessionService.CheckInAsync(
-            new CheckInRequestDto { LotId = 208, PlateNumber = "51A-UNPAID-CAR" },
+        var checkIn = await sessionService.CheckInAsync(
+            new CheckInRequestDto { LotId = 208, PlateNumber = "51A-DEMO-01" },
             1, Roles.Admin, "127.0.0.1");
+        Assert.True(checkIn.Success);
 
-        var session = await context.ParkingSessions.FindAsync(checkInRes.Data!.Id);
-        // Default check-in session has TotalFee = 0, Status = ACTIVE (unsettled)
-        Assert.Equal(0m, session!.TotalFee);
-        Assert.Equal(SessionStatuses.Active, session.Status);
-
-        // 1. TotalFee = 0 but still ACTIVE: Regular Gate Staff checkout -> rejected (unsettled)
-        var failExit = await sessionService.CheckOutAsync(
-            session.Id,
-            new CheckOutRequestDto(),
-            actorId: 2081,
-            actorRole: Roles.Staff,
-            ipAddress: "127.0.0.1");
-
-        Assert.False(failExit.Success);
-        Assert.Contains("chưa hoàn tất tính phí và thanh toán", failExit.Message);
-
-        // 1b. Session with fee > 0 (TotalFee = 35,000đ): Regular Gate Staff checkout -> rejected (fee-bearing checkout blocked)
-        session.TotalFee = 35000m;
+        var session = await context.ParkingSessions.FindAsync(checkIn.Data!.Id);
+        session!.TotalFee = 35000m;
         await context.SaveChangesAsync();
 
-        var failFeeExit = await sessionService.CheckOutAsync(
+        var checkout = await sessionService.CheckOutAsync(
             session.Id,
-            new CheckOutRequestDto(),
-            actorId: 2081,
-            actorRole: Roles.Staff,
-            ipAddress: "127.0.0.1");
+            new CheckOutRequestDto { ConfirmedPlateNumber = session.PlateNumber },
+            2081,
+            Roles.Staff,
+            "127.0.0.1");
 
-        Assert.False(failFeeExit.Success);
-        Assert.Contains("Check-out có thu phí đang bị khóa cho tới khi thanh toán hoàn tất", failFeeExit.Message);
-
-        // 2. Gate Staff attempting self-exemption with AllowExitWithoutPayment -> strictly rejected
-        var staffExemptFail = await sessionService.CheckOutAsync(
-            session.Id,
-            new CheckOutRequestDto
-            {
-                AllowExitWithoutPayment = true,
-                ExemptionReason = "Staff tự cho xe ra"
-            },
-            actorId: 2081,
-            actorRole: Roles.Staff,
-            ipAddress: "127.0.0.1");
-
-        Assert.False(staffExemptFail.Success);
-        Assert.Contains("Nhân viên cổng (STAFF) không có thẩm quyền", staffExemptFail.Message);
-
-        // 3. ADMIN authorized exemption checkout -> succeeds
-        var exemptExit = await sessionService.CheckOutAsync(
-            session.Id,
-            new CheckOutRequestDto
-            {
-                AllowExitWithoutPayment = true,
-                ExemptionReason = "Xe ưu tiên / Miễn phí sự kiện"
-            },
-            actorId: 1,
-            actorRole: Roles.Admin,
-            ipAddress: "127.0.0.1");
-
-        Assert.True(exemptExit.Success);
-        Assert.Equal(SessionStatuses.Completed, exemptExit.Data!.Status);
-
-        // 4. Retry checkout on already completed session -> rejected (cannot complete twice)
-        var retryExit = await sessionService.CheckOutAsync(
-            session.Id,
-            new CheckOutRequestDto(),
-            actorId: 1,
-            actorRole: Roles.Admin,
-            ipAddress: "127.0.0.1");
-
-        Assert.False(retryExit.Success);
-        Assert.Contains("đã kết thúc trước đó", retryExit.Message);
+        Assert.True(checkout.Success);
+        Assert.Equal(SessionStatuses.Completed, checkout.Data!.Status);
+        Assert.NotNull(checkout.Data.CheckOutTime);
     }
-
     [Fact]
     public async Task CheckIn_AntiPassback_DuplicateActivePlateRejected()
     {

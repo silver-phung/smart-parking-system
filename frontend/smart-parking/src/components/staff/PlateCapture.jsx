@@ -20,7 +20,7 @@ export const needsCorrectionNote = (capture) =>
         normalizePlate(capture.plate),
   );
 
-export async function prepareCapture(capture, update) {
+export async function prepareCapture(capture, update, lotId) {
   if (needsCorrectionNote(capture) && !capture.note.trim())
     throw new Error("Nhập lý do sửa biển số AI trước khi xác nhận.");
   if (
@@ -32,6 +32,7 @@ export async function prepareCapture(capture, update) {
       capture.recognition.id,
       capture.plate,
       capture.note.trim() || null,
+      lotId,
     );
     if (
       normalizePlate(result?.data?.confirmedPlateNumber || "") !==
@@ -56,6 +57,9 @@ export default function PlateCapture({
   onWorking,
   title = "Ảnh xe tại cổng",
   plateLabel = "Biển số xe",
+  lotId,
+  purpose = "ENTRY",
+  onRecognition,
 }) {
   const id = useId();
   const [preview, setPreview] = useState("");
@@ -89,12 +93,13 @@ export default function PlateCapture({
     setError(null);
     onWorking?.(true);
     try {
-      const recognition = await staffApi.detect(value.file);
+      const recognition = await staffApi.detect(value.file, lotId, purpose);
       if (!recognition?.id)
         throw new Error(
           "Chưa nhận được kết quả nhận diện hợp lệ. Bạn có thể nhập biển số bằng tay.",
         );
       update({ recognition, plate: recognition.plateNumber || "", note: "" });
+      onRecognition?.(recognition);
     } catch (err) {
       setError(err);
     } finally {

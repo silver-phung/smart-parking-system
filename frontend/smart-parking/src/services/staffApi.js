@@ -206,11 +206,11 @@ export const staffApi = {
       throw new Error("Không tìm thấy phiên xe tại bãi đang chọn.");
     return session;
   },
-  detect(file) {
+  detect(file, lotId, purpose = "ENTRY") {
     validatePhoto(file);
     const body = new FormData();
     body.append("file", file);
-    return data("/v1/staff/detect", { method: "POST", body });
+    return data(`/v1/staff/detect?${query({ lotId, purpose })}`, { method: "POST", body });
   },
   async upload(file) {
     validatePhoto(file);
@@ -223,32 +223,43 @@ export const staffApi = {
       );
     return image.url;
   },
-  confirmDetection: (id, plateNumber, note) =>
+  confirmDetection: (id, plateNumber, note, lotId) =>
     post(`/v1/staff/detections/${id}/confirm`, {
       plateNumber: validatePlate(plateNumber),
       note,
+      lotId: Number(lotId),
     }),
-  checkIn: (lotId, plateNumber, imageUrl) =>
+  confirmExitDetection: (id, plateNumber, note, lotId, sessionId) =>
+    post(`/v1/staff/detections/${id}/confirm-exit`, {
+      plateNumber: validatePlate(plateNumber),
+      note,
+      lotId: Number(lotId),
+      sessionId: Number(sessionId),
+    }),
+  checkIn: (lotId, plateNumber, imageUrl, entryRecognitionId) =>
     post("/v1/parking-sessions/check-in", {
       lotId: Number(lotId),
       plateNumber: validatePlate(plateNumber),
+      ...(entryRecognitionId ? { entryRecognitionId: Number(entryRecognitionId) } : {}),
       ...(imageUrl ? { checkInImageUrl: imageUrl } : {}),
     }),
-  async checkOut(sessionId, lotId, plateNumber, imageUrl) {
+  async checkOut(sessionId, lotId, plateNumber, imageUrl, exitRecognitionId, note) {
     const fresh = await staffApi.session(sessionId);
     if (!fresh || fresh.lotId !== Number(lotId))
       throw new Error("Phiên xe không thuộc bãi đang chọn.");
-    if (fresh.status !== "PAID")
-      throw new Error(
-        "Phiên xe chưa được xác nhận thanh toán. Vui lòng hoàn tất thu phí trước khi cho xe ra.",
-      );
     const plate = validatePlate(plateNumber);
     if (!platesMatch(fresh.plateNumber, plate))
       throw new Error(
         "Biển số tại cổng ra không khớp với phiên xe. Hãy kiểm tra lại.",
       );
+    if (!exitRecognitionId)
+      throw new Error("Hãy nhận diện ảnh xe ra bằng AI trước khi xác nhận checkout.");
+    await staffApi.confirmExitDetection(
+      exitRecognitionId, plate, note || null, lotId, sessionId,
+    );
     return post(`/v1/parking-sessions/${sessionId}/check-out`, {
       confirmedPlateNumber: plate,
+      ...(exitRecognitionId ? { exitRecognitionId: Number(exitRecognitionId) } : {}),
       ...(imageUrl ? { checkOutImageUrl: imageUrl } : {}),
     });
   },

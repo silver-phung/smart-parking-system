@@ -67,3 +67,6 @@ ai-service/logs/
 # ai-service/weights/ppocrv4/*.onnx
 ai-service/tracking/deep_sort/deep/checkpoint/*.t7
 ai-service/tracking/deep_sort/deep/checkpoint/*.pb
+
+# Local sprint requirement notes
+/ai-service/ReqInSprint.md

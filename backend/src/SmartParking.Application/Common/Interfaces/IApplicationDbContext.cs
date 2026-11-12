@@ -21,6 +21,7 @@ public interface IApplicationDbContext
     DbSet<Booking> Bookings { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<StoredImage> StoredImages { get; }
+    DbSet<StaffVehicleEntry> StaffVehicleEntries { get; }
 
     DatabaseFacade Database { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

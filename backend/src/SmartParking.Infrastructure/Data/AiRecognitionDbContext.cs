@@ -20,6 +20,10 @@ public sealed class AiRecognitionDbContext : DbContext
             entity.Property(x => x.FailureReason).HasMaxLength(512);
             entity.Property(x => x.ConfirmedPlateNumber).HasMaxLength(32);
             entity.Property(x => x.ConfirmationNote).HasMaxLength(256);
+            entity.Property(x => x.Purpose).HasMaxLength(16).HasDefaultValue("ENTRY");
+            entity.Property(x => x.ParkingLotId);
+            entity.Property(x => x.MatchedParkingSessionId);
+            entity.HasIndex(x => new { x.ParkingLotId, x.Purpose, x.CreatedAt });
             entity.Property(x => x.VehicleBboxJson).HasMaxLength(128);
             entity.Property(x => x.PlateBboxJson).HasMaxLength(128);
             entity.HasIndex(x => x.StaffUserId);

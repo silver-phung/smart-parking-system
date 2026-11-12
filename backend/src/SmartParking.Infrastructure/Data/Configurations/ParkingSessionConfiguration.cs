@@ -125,3 +125,18 @@ public class ParkingSessionConfiguration : IEntityTypeConfiguration<ParkingSessi
             .IsRequired();
     }
 }
+
+public sealed class StaffVehicleEntryConfiguration : IEntityTypeConfiguration<StaffVehicleEntry>
+{
+    public void Configure(EntityTypeBuilder<StaffVehicleEntry> builder)
+    {
+        builder.ToTable("staff_vehicle_entries");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.PlateNumber).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
+        builder.HasIndex(x => x.RecognitionId).IsUnique();
+        builder.HasIndex(x => new { x.LotId, x.Status });
+        builder.HasOne<ParkingLot>().WithMany().HasForeignKey(x => x.LotId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ParkingSession>().WithMany().HasForeignKey(x => x.ParkingSessionId).OnDelete(DeleteBehavior.SetNull);
+    }
+}

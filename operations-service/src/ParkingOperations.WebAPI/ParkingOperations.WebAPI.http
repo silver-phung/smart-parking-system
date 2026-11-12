@@ -1,0 +1,6 @@
+@ParkingOperations_HostAddress = http://localhost:5174
+
+GET {{ParkingOperations_HostAddress}}/health
+Accept: application/json
+
+###

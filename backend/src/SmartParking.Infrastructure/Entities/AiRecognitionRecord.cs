@@ -11,6 +11,9 @@ public sealed class AiRecognitionRecord
     public long? ConfirmedByStaffUserId { get; set; }
     public DateTime? ConfirmedAt { get; set; }
     public string? ConfirmationNote { get; set; }
+    public int? ParkingLotId { get; set; }
+    public string? Purpose { get; set; }
+    public long? MatchedParkingSessionId { get; set; }
     public double Confidence { get; set; }
     public bool IsLegit { get; set; }
     public double? VehicleConfidence { get; set; }
