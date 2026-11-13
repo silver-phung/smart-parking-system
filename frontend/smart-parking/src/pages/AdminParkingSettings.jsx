@@ -374,6 +374,7 @@ function Content() {
   const [selected, select] = useState("");
   const [busy, setBusy] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
+  const [showDeleteLotModal, setShowDeleteLotModal] = useState(false);
   const [editingLot, setEditingLot] = useState(null);
   const [lotForm, setLotForm] = useState({ name: "", address: "", totalCapacity: 100, isActive: true,
     quickSetup: true, floorName: "Tầng G", floorNumber: 0, zoneCode: "KHU-G", zoneName: "Khu vé tháng", slotPrefix: "G", slotCount: 0 });
@@ -487,17 +488,19 @@ function Content() {
     }
   };
 
-  const handleDeleteLot = async () => {
+  const handleDeleteLot = () => {
     if (!lot) return;
-    const confirmed = window.confirm(
-      `Xóa bãi "${lot.name}" cùng tầng, khu vực, ô đỗ và chính sách cấu hình? Bãi có lịch sử phiên xe, đặt chỗ, điều phối hoặc phân công sẽ được giữ lại.`,
-    );
-    if (!confirmed) return;
     setLotModalError("");
     setLotActionMessage("");
+    setShowDeleteLotModal(true);
+  };
+
+  const confirmDeleteLot = async () => {
+    if (!lot) return;
     setLotModalBusy(true);
     try {
       await apiRequest(`/v1/parking-lots/${lot.id}`, { method: "DELETE" });
+      setShowDeleteLotModal(false);
       setSelectedAfterDelete();
       await lots.reload();
       setLotActionMessage(`Đã xóa bãi đỗ "${lot.name}".`);
@@ -508,13 +511,22 @@ function Content() {
     }
   };
 
+  useEffect(() => {
+    if (!showDeleteLotModal || lotModalBusy) return undefined;
+    const closeOnEscape = event => {
+      if (event.key === "Escape") setShowDeleteLotModal(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showDeleteLotModal, lotModalBusy]);
+
   const setSelectedAfterDelete = () => {
     const remaining = (lots.data || []).filter(l => l.id !== lot?.id);
     select(remaining[0] ? String(remaining[0].id) : "");
   };
 
   return <div className="staff-workspace operations-settings container">
-    <StaffError error={lots.error || (!showLotModal ? lotModalError : "")} />{lots.error && <button className="staff-button" onClick={lots.reload}>Tải lại bãi</button>}
+    <StaffError error={lots.error || (!showLotModal && !showDeleteLotModal ? lotModalError : "")} />{lots.error && <button className="staff-button" onClick={lots.reload}>Tải lại bãi</button>}
     {lotActionMessage && <Notice kind="success">{lotActionMessage}</Notice>}
     {lots.loading && <Notice>Đang tải bãi…</Notice>}
     {!lots.loading && !lots.error && !lots.data?.length && (
@@ -586,6 +598,34 @@ function Content() {
             </fieldset>
           </form>
         </div>
+      </div>
+    )}
+    {showDeleteLotModal && lot && (
+      <div
+        className="modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-lot-title"
+        aria-describedby="delete-lot-description"
+        onMouseDown={event => { if (event.target === event.currentTarget && !lotModalBusy) setShowDeleteLotModal(false); }}
+        style={{ position: "fixed", inset: 0, background: "rgba(16,36,59,0.6)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}
+      >
+        <section className="workspace-panel" style={{ width: "100%", maxWidth: "500px", background: "#fff", borderRadius: "14px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
+          <h2 id="delete-lot-title" style={{ marginTop: 0 }}>Xóa bãi đỗ?</h2>
+          <p id="delete-lot-description" style={{ marginBottom: "14px" }}>
+            Bạn sắp xóa bãi <strong>{lot.name}</strong> cùng toàn bộ tầng, khu vực, ô đỗ và chính sách cấu hình.
+          </p>
+          <div style={{ padding: "12px 14px", borderRadius: "10px", background: "#fff7ed", color: "#9a3412", border: "1px solid #fed7aa", lineHeight: 1.55 }}>
+            Bãi có lịch sử phiên xe, đặt chỗ, ô đang có xe/giữ chỗ, điều phối hoặc phân công nhân viên sẽ được giữ lại để bảo toàn dữ liệu.
+          </div>
+          {lotModalError && <p className="feedback feedback--error" role="alert" style={{ color: "#b91c1c", margin: "12px 0 0" }}>{lotModalError}</p>}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
+            <button type="button" className="btn btn--outline" autoFocus disabled={lotModalBusy} onClick={() => setShowDeleteLotModal(false)}>Hủy</button>
+            <button type="button" className="btn" disabled={lotModalBusy} onClick={confirmDeleteLot} style={{ background: "#dc2626", borderColor: "#dc2626", color: "#fff" }}>
+              {lotModalBusy ? "Đang xóa…" : "Xóa bãi"}
+            </button>
+          </div>
+        </section>
       </div>
     )}
   </div>;
