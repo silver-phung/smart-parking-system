@@ -34,14 +34,13 @@ public static class ParkingLotCapacityHelper
         CancellationToken ct = default,
         int? zoneId = null)
     {
-        // Legacy floors without a zone remain transient until backfilled. Fixed zones never sell walk-in capacity.
+        // Fixed zones never sell walk-in capacity.
         var slots = context.ParkingSlots.Where(s => s.Floor.LotId == lotId &&
-            (!zoneId.HasValue || s.Floor.ZoneId == zoneId) &&
-            (s.Floor.Zone == null || s.Floor.Zone.Type == "TRANSIENT"));
+            (!zoneId.HasValue || s.ZoneId == zoneId) && s.Zone.Type == "TRANSIENT");
         var sessions = context.ParkingSessions.Where(s => s.LotId == lotId &&
-            (!zoneId.HasValue || s.ZoneId == zoneId || (s.ZoneId == null && s.CurrentSlot != null && s.CurrentSlot.Floor.ZoneId == zoneId)) &&
+            (!zoneId.HasValue || s.ZoneId == zoneId || (s.ZoneId == null && s.CurrentSlot != null && s.CurrentSlot.ZoneId == zoneId)) &&
             (s.Zone == null || s.Zone.Type == "TRANSIENT") &&
-            (s.CurrentSlot == null || s.CurrentSlot.Floor.Zone == null || s.CurrentSlot.Floor.Zone.Type == "TRANSIENT"));
+            (s.CurrentSlot == null || s.CurrentSlot.Zone.Type == "TRANSIENT"));
         // 1. Check if lot has configured ParkingSlot records
         var hasConfiguredSlots = await slots
             .AnyAsync(s => s.Floor.LotId == lotId, ct);
@@ -58,7 +57,7 @@ public static class ParkingLotCapacityHelper
             // When all slots are maintenance/unavailable, totalCapacity is 0 (NO fallback to lot.TotalCapacity).
             totalCapacity = await slots
                 .CountAsync(s => s.Floor.LotId == lotId && s.IsActive && s.Floor.IsActive &&
-                                 (s.Floor.Zone == null || s.Floor.Zone.IsActive) &&
+                                 s.Zone.IsActive &&
                                  s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
                                  s.PhysicalStatus != SlotPhysicalStatuses.Reserved &&
                                  s.PhysicalStatus != SlotPhysicalStatuses.Unavailable, ct);
@@ -67,7 +66,7 @@ public static class ParkingLotCapacityHelper
                 .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Occupied, ct);
 
             physicalEmptySlots = await slots
-                .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Empty && s.IsActive && s.Floor.IsActive && (s.Floor.Zone == null || s.Floor.Zone.IsActive), ct);
+                .CountAsync(s => s.Floor.LotId == lotId && s.PhysicalStatus == SlotPhysicalStatuses.Empty && s.IsActive && s.Floor.IsActive && s.Zone.IsActive, ct);
 
             // Ô đỗ có cảm biến báo OCCUPIED nhưng chưa có phiên đỗ xe ACTIVE/PAID gắn vào
             unmatchedPhysicalOccupiedCount = await slots

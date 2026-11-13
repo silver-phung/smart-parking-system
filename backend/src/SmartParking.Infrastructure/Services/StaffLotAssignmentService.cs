@@ -124,11 +124,12 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
 
         if (request.FloorId is not > 0)
             return (false, "Chọn tầng được phân công.", null);
-        var floor = await _context.ParkingFloors.Include(f => f.Zone).FirstOrDefaultAsync(f => f.Id == request.FloorId && f.LotId == request.LotId, ct);
+        var floor = await _context.ParkingFloors.FirstOrDefaultAsync(f => f.Id == request.FloorId && f.LotId == request.LotId, ct);
         if (floor == null || !floor.IsActive)
             return (false, "Tầng phải đang hoạt động và thuộc đúng bãi được phân công.", null);
         var isArea = duty == StaffDuties.SlotVerifier;
-        if (isArea && (request.ZoneId is not > 0 || floor.ZoneId != request.ZoneId || floor.Zone is not { IsActive: true } || floor.Zone.LotId != request.LotId))
+        var zone = isArea ? await _context.ParkingZones.FirstOrDefaultAsync(z => z.Id == request.ZoneId && z.FloorId == floor.Id && z.LotId == request.LotId && z.IsActive, ct) : null;
+        if (isArea && zone == null)
             return (false, "Tầng và khu vực phải đang hoạt động, thuộc đúng bãi và đúng quan hệ tầng–khu.", null);
         if (!isArea && request.ZoneId.HasValue)
             return (false, "Phân công trực cổng chỉ chọn tầng, không chọn khu vực.", null);
@@ -151,9 +152,9 @@ public class StaffLotAssignmentService : IStaffLotAssignmentService
                 UserId = targetUser.Id,
                 LotId = targetLot.Id,
                 FloorId = floor.Id,
-                ZoneId = isArea ? floor.ZoneId : null,
+                ZoneId = isArea ? zone!.Id : null,
                 Floor = floor,
-                Zone = isArea ? floor.Zone : null,
+                Zone = zone,
                 Duty = duty,
                 AssignedBy = actorId,
                 AssignedAt = DateTime.UtcNow,

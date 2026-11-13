@@ -19,7 +19,7 @@ public sealed class ParkingSlotAdministrationService(IApplicationDbContext db, I
 
     private async Task<ParkingSlot> Load(long id, long? actorId, CancellationToken ct)
     {
-        var slot = await db.ParkingSlots.AsNoTracking().Include(s => s.Floor).ThenInclude(f => f.Zone).FirstOrDefaultAsync(s => s.Id == id, ct)
+        var slot = await db.ParkingSlots.AsNoTracking().Include(s => s.Floor).Include(s => s.Zone).FirstOrDefaultAsync(s => s.Id == id, ct)
             ?? throw new ParkingOperationException(404, "NOT_FOUND", "Không tìm thấy ô đỗ.");
         await Access(slot.Floor.LotId, actorId, ct);
         return slot;
@@ -31,7 +31,7 @@ public sealed class ParkingSlotAdministrationService(IApplicationDbContext db, I
             await db.ParkingDispatches.AnyAsync(d => d.AssignedSlotId == slot.Id && d.Status == DispatchStatuses.Assigned, ct))
             throw new ParkingOperationException(409, "SLOT_PROTECTED", "Ô đang có xe hoặc đã được giữ chỗ/điều phối. Không thể sửa, xóa hoặc đổi trạng thái.");
         if (reducesCapacity && slot.IsActive && slot.Floor.IsActive && slot.PhysicalStatus == SlotPhysicalStatuses.Empty &&
-            (slot.Floor.Zone == null || slot.Floor.Zone.Type == "TRANSIENT"))
+            slot.Zone.Type == "TRANSIENT")
         {
             // Bookings currently reserve capacity rather than a specific slot.
             var capacity = await ParkingLotCapacityHelper.CalculateAsync(db, slot.Floor.LotId, ct: ct);

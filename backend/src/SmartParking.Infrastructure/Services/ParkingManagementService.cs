@@ -334,10 +334,6 @@ public class ParkingManagementService : IParkingManagementService
             }
 
             var now = DateTime.UtcNow;
-            var transientZoneId = await _context.ParkingZones.Where(z => z.LotId == lotId && z.Type == "TRANSIENT" && z.IsActive)
-                .OrderBy(z => z.Id).Select(z => (int?)z.Id).FirstOrDefaultAsync(ct);
-            if (!transientZoneId.HasValue && await _context.ParkingZones.AnyAsync(z => z.LotId == lotId, ct))
-                return (false, "Cần một khu vãng lai đang hoạt động trước khi tạo bố cục chuẩn.", null);
             int floorsCreated = 0, slotsCreated = 0, slotsExisting = 0;
 
             foreach (var (number, letter) in layout)
@@ -347,20 +343,27 @@ public class ParkingManagementService : IParkingManagementService
                             ?? lot.Floors.FirstOrDefault(f => string.Equals(f.Name, floorName, StringComparison.OrdinalIgnoreCase));
                 if (floor == null)
                 {
-                    floor = new ParkingFloor { LotId = lotId, ZoneId = transientZoneId, FloorNumber = number, Name = floorName, IsActive = true, CreatedAt = now, UpdatedAt = now };
+                    floor = new ParkingFloor { LotId = lotId, FloorNumber = number, Name = floorName, IsActive = true, CreatedAt = now, UpdatedAt = now };
                     lot.Floors.Add(floor);
+                    await _context.SaveChangesAsync(ct);
                     floorsCreated++;
                 }
-                if (floor.ZoneId.HasValue && floor.ZoneId != transientZoneId)
-                    return (false, "Tầng thuộc khu khác; không tự đổi khu để tạo bố cục chuẩn.", null);
-                floor.ZoneId ??= transientZoneId;
+                var transientZone = await _context.ParkingZones.Where(z => z.LotId == lotId && z.FloorId == floor.Id && z.Type == "TRANSIENT")
+                    .OrderBy(z => z.Id).FirstOrDefaultAsync(ct);
+                if (transientZone == null)
+                {
+                    transientZone = new ParkingZone { LotId = lotId, FloorId = floor.Id,
+                        Code = $"AUTO-{number}", Name = $"Khu thường {floor.Name}", Type = "TRANSIENT", Layout = "INSIDE", IsActive = true, UpdatedAt = now };
+                    _context.ParkingZones.Add(transientZone);
+                    await _context.SaveChangesAsync(ct);
+                }
 
                 var existingCodes = floor.Slots.Select(s => s.SlotCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 for (var i = 1; i <= slotsPerFloor; i++)
                 {
                     var code = $"{letter}{i:D3}";
                     if (existingCodes.Contains(code)) { slotsExisting++; continue; }
-                    floor.Slots.Add(new ParkingSlot { SlotCode = code, PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true, CreatedAt = now, UpdatedAt = now });
+                    floor.Slots.Add(new ParkingSlot { ZoneId = transientZone.Id, SlotCode = code, PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true, CreatedAt = now, UpdatedAt = now });
                     slotsCreated++;
                 }
                 floor.TotalSlots = floor.Slots.Count;
@@ -515,42 +518,9 @@ public class ParkingManagementService : IParkingManagementService
             return (false, $"Tên tầng '{trimmedName}' đã tồn tại trong bãi xe này.", null);
         }
 
-        var zoneId = request.ZoneId;
-        if (zoneId.HasValue && !await _context.ParkingZones.AnyAsync(z => z.Id == zoneId && z.LotId == lotId && z.IsActive, ct))
-            return (false, "Khu phải hoạt động và thuộc đúng bãi.", null);
-        if (!zoneId.HasValue)
-        {
-            var defaultZone = await _context.ParkingZones
-                .Where(z => z.LotId == lotId && z.IsActive)
-                .OrderBy(z => z.Id)
-                .FirstOrDefaultAsync(ct)
-                ?? await _context.ParkingZones
-                .Where(z => z.LotId == lotId)
-                .OrderBy(z => z.Id)
-                .FirstOrDefaultAsync(ct);
-
-            if (defaultZone == null)
-            {
-                defaultZone = new ParkingZone
-                {
-                    LotId = lotId,
-                    Code = "KHU-A",
-                    Name = "Khu vực bình thường",
-                    Type = "TRANSIENT",
-                    Layout = "INSIDE",
-                    IsActive = true,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _context.ParkingZones.Add(defaultZone);
-                await _context.SaveChangesAsync(ct);
-            }
-            zoneId = defaultZone.Id;
-        }
-
         var floor = new ParkingFloor
         {
             LotId = lotId,
-            ZoneId = zoneId,
             FloorNumber = request.FloorNumber,
             Name = trimmedName,
             TotalSlots = request.TotalSlots,
@@ -700,6 +670,7 @@ public class ParkingManagementService : IParkingManagementService
         var query = _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .Where(s => s.FloorId == floorId)
             .AsNoTracking()
@@ -740,6 +711,8 @@ public class ParkingManagementService : IParkingManagementService
             Id = s.Id,
             FloorId = s.FloorId,
             FloorName = s.Floor.Name,
+            ZoneId = s.ZoneId,
+            ZoneName = s.Zone.Name,
             LotId = s.Floor.LotId,
             LotName = s.Floor.Lot.Name,
             SlotCode = s.SlotCode,
@@ -762,6 +735,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = await _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == id, ct);
@@ -803,6 +777,8 @@ public class ParkingManagementService : IParkingManagementService
             Id = slot.Id,
             FloorId = slot.FloorId,
             FloorName = slot.Floor.Name,
+            ZoneId = slot.ZoneId,
+            ZoneName = slot.Zone.Name,
             LotId = slot.Floor.LotId,
             LotName = slot.Floor.Lot.Name,
             SlotCode = slot.SlotCode,
@@ -830,6 +806,10 @@ public class ParkingManagementService : IParkingManagementService
             return (false, "Tầng chỉ định không tồn tại.", null);
         }
 
+        var zone = await _context.ParkingZones.FirstOrDefaultAsync(z => z.Id == request.ZoneId && z.LotId == floor.LotId && z.FloorId == floorId, ct);
+        if (zone == null)
+            return (false, "Phải chọn khu vực thuộc đúng tầng trước khi thêm ô đỗ.", null);
+
         var trimmedCode = request.SlotCode.Trim().ToUpperInvariant();
         var exists = await _context.ParkingSlots
             .AnyAsync(s => s.FloorId == floorId && s.SlotCode == trimmedCode, ct);
@@ -848,6 +828,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = new ParkingSlot
         {
             FloorId = floorId,
+            ZoneId = zone.Id,
             SlotCode = trimmedCode,
             PhysicalStatus = physicalStatus,
             PositionX = request.PositionX,
@@ -868,6 +849,8 @@ public class ParkingManagementService : IParkingManagementService
         {
             Id = slot.Id,
             FloorId = slot.FloorId,
+            ZoneId = slot.ZoneId,
+            ZoneName = zone.Name,
             FloorName = floor.Name,
             LotId = floor.LotId,
             LotName = floor.Lot.Name,
@@ -891,6 +874,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = await _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
@@ -945,6 +929,8 @@ public class ParkingManagementService : IParkingManagementService
             Id = slot.Id,
             FloorId = slot.FloorId,
             FloorName = slot.Floor.Name,
+            ZoneId = slot.ZoneId,
+            ZoneName = slot.Zone.Name,
             LotId = slot.Floor.LotId,
             LotName = slot.Floor.Lot.Name,
             SlotCode = slot.SlotCode,
@@ -968,6 +954,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = await _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
@@ -1031,6 +1018,8 @@ public class ParkingManagementService : IParkingManagementService
             Id = slot.Id,
             FloorId = slot.FloorId,
             FloorName = slot.Floor.Name,
+            ZoneId = slot.ZoneId,
+            ZoneName = slot.Zone.Name,
             LotId = slot.Floor.LotId,
             LotName = slot.Floor.Lot.Name,
             SlotCode = slot.SlotCode,

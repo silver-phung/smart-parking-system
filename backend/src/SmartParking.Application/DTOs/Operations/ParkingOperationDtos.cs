@@ -1,7 +1,7 @@
 namespace SmartParking.Application.DTOs.Operations;
 
 public record ZoneRequest(string Code, string Name, string Type, string Layout, bool IsActive,
-    int[]? FloorIds = null, ZoneFloorRequest? NewFloor = null);
+    int[]? FloorIds = null, ZoneFloorRequest? NewFloor = null, int? FloorId = null);
 public record ZoneFloorRequest(string Name, int FloorNumber);
 public record FloorZoneRequest(int ZoneId);
 public record SlotFuelRequest(string AllowedFuelType);

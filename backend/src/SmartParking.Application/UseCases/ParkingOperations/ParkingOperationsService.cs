@@ -41,17 +41,17 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
         await Access(lotId, actor, role, "READ", ct);
         return await db.ParkingZones.AsNoTracking().Where(z => z.LotId == lotId).OrderBy(z => z.Id)
             .Select(z => new { z.Id, z.LotId, z.Code, z.Name, z.Type, z.Layout, z.IsActive, z.UpdatedAt,
-                FloorIds = db.ParkingFloors.Where(f => f.ZoneId == z.Id).Select(f => f.Id).ToList() }).ToListAsync(ct);
+                z.FloorId, FloorName = z.Floor.Name }).ToListAsync(ct);
     }
     public async Task<object> Layout(int lotId, long actor, string role, CancellationToken ct)
     {
         await Access(lotId, actor, role, "READ", ct);
         return new {
             Floors = await db.ParkingFloors.AsNoTracking().Where(f => f.LotId == lotId).OrderBy(f => f.FloorNumber)
-                .Select(f => new { f.Id, f.LotId, f.ZoneId, f.Name, f.FloorNumber, f.IsActive }).ToListAsync(ct),
+                .Select(f => new { f.Id, f.LotId, f.Name, f.FloorNumber, f.IsActive }).ToListAsync(ct),
             Slots = await db.ParkingSlots.AsNoTracking().Where(s => s.Floor.LotId == lotId).OrderBy(s => s.Id)
-                .Select(s => new { s.Id, s.FloorId, s.Floor.ZoneId, FloorName = s.Floor.Name, FloorActive = s.Floor.IsActive,
-                    ZoneActive = s.Floor.Zone != null && s.Floor.Zone.IsActive, s.SlotCode, s.PhysicalStatus, s.AllowedFuelType,
+                .Select(s => new { s.Id, s.FloorId, s.ZoneId, ZoneName = s.Zone.Name, ZoneType = s.Zone.Type, FloorName = s.Floor.Name, FloorActive = s.Floor.IsActive,
+                    ZoneActive = s.Zone.IsActive, s.SlotCode, s.PhysicalStatus, s.AllowedFuelType,
                     s.IsActive, s.PositionX, s.PositionY, s.PositionZ, s.UpdatedAt }).ToListAsync(ct)
         };
     }
@@ -69,77 +69,31 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
             !string.IsNullOrWhiteSpace(r.Name) && r.Name.Trim().Length <= 100 &&
             r.Type is "TRANSIENT" or "FIXED" && r.Layout is "INSIDE" or "EXTERNAL",
             "Cần mã/tên khu và loại/bố cục hợp lệ.", status: 400);
-        var floorIds = r.FloorIds ?? [];
-        Require(floorIds.All(f => f > 0) && floorIds.Distinct().Count() == floorIds.Length,
-            "Danh sách tầng không hợp lệ.", "INVALID_FLOORS", 400);
-        if (id == null || r.FloorIds != null)
-            Require(floorIds.Length > 0 || r.NewFloor != null,
-                "Chọn ít nhất một tầng hoặc nhập tầng mới cho khu.", "FLOOR_REQUIRED", 400);
-        if (r.NewFloor is { } newFloor)
-            Require(!string.IsNullOrWhiteSpace(newFloor.Name) && newFloor.Name.Trim().Length <= 50 &&
-                newFloor.FloorNumber is >= -10 and <= 100,
-                "Tầng mới cần tên tối đa 50 ký tự và số tầng từ -10 đến 100.", "INVALID_FLOOR", 400);
+        Require(r.FloorId is > 0, "Phải chọn tầng trước khi tạo khu vực.", "FLOOR_REQUIRED", 400);
         return await writer.ExecuteAsync<object>(lotId, async () => {
             var z = id == null ? new ParkingZone { LotId = lotId } :
                 await db.ParkingZones.FirstOrDefaultAsync(z => z.Id == id && z.LotId == lotId, ct)
                     ?? throw Error(404, "NOT_FOUND", "Không tìm thấy khu.");
-            var currentFloorIds = id == null ? [] : await db.ParkingFloors.Where(f => f.ZoneId == id && f.LotId == lotId).Select(f => f.Id).ToArrayAsync(ct);
-            var before = new { z.Code, z.Name, z.Type, z.Layout, z.IsActive, FloorIds = currentFloorIds };
-            if (r.FloorIds != null)
-                Require(currentFloorIds.All(floorIds.Contains),
-                    "Không bỏ tầng đã gắn khi sửa khu. Dùng mục Tầng để chuyển khu theo điều kiện lịch sử.", "FLOOR_REMOVAL_NOT_ALLOWED");
-            var floors = await db.ParkingFloors.Where(f => floorIds.Contains(f.Id) && f.LotId == lotId).ToListAsync(ct);
-            Require(floors.Count == floorIds.Length, "Tầng đã chọn phải thuộc đúng bãi.", "INVALID_FLOORS", 400);
-            foreach (var floor in floors)
-            {
-                Require(floor.ZoneId == null || (id.HasValue && floor.ZoneId == id),
-                    $"Tầng '{floor.Name}' đã thuộc khu khác. Chọn tầng chưa gắn khu hoặc thêm tầng mới.", "FLOOR_ALREADY_ASSIGNED");
-                if (!id.HasValue || floor.ZoneId != id)
-                    await RequireFloorReassignmentSafe(lotId, floor, ct);
-            }
-            if (r.NewFloor is { } draft)
-                Require(!await db.ParkingFloors.AnyAsync(f => f.LotId == lotId &&
-                    (f.FloorNumber == draft.FloorNumber || f.Name.ToLower() == draft.Name.Trim().ToLower()), ct),
-                    "Tên hoặc số tầng đã tồn tại trong bãi. Chọn tầng hiện có hoặc nhập tầng mới khác.", "DUPLICATE_FLOOR");
+            var floor = await db.ParkingFloors.FirstOrDefaultAsync(f => f.Id == r.FloorId && f.LotId == lotId, ct);
+            Require(floor != null, "Tầng đã chọn không thuộc bãi này.", "INVALID_FLOOR", 400);
+            Require(floor!.FloorNumber != 0 && !floor.Name.Contains("tầng g", StringComparison.OrdinalIgnoreCase) || r.Type == "FIXED",
+                "Tầng G chỉ dành cho khu và xe vé tháng.", "GROUND_FLOOR_MONTHLY_ONLY", 400);
+            var before = new { z.Code, z.Name, z.Type, z.Layout, z.IsActive, z.FloorId };
             if (id != null && z.Type != r.Type)
-                Require(!await db.ParkingFloors.AnyAsync(f => f.ZoneId == id, ct) &&
+                Require(!await db.ParkingSlots.AnyAsync(s => s.ZoneId == id, ct) &&
                     !await db.ParkingSessions.AnyAsync(s => s.ZoneId == id, ct) &&
                     !await db.ParkingPolicies.AnyAsync(p => p.ZoneId == id, ct),
-                    "Khu đã có tầng hoặc lịch sử không được đổi loại. Tạo khu mới.");
+                    "Khu đã có ô đỗ hoặc lịch sử không được đổi loại. Tạo khu mới.");
             Require(!await db.ParkingZones.AnyAsync(x => x.LotId == lotId && x.Id != z.Id && x.Code == r.Code.Trim().ToUpper(), ct), "Mã khu đã tồn tại.");
-            z.Code = r.Code.Trim().ToUpperInvariant(); z.Name = r.Name.Trim();
+            z.Code = r.Code.Trim().ToUpperInvariant(); z.Name = r.Name.Trim(); z.FloorId = floor.Id;
             z.Type = r.Type; z.Layout = r.Layout; z.IsActive = r.IsActive; z.UpdatedAt = DateTime.UtcNow;
             if (id == null) db.ParkingZones.Add(z);
             await db.SaveChangesAsync(ct);
-            foreach (var floor in floors.Where(f => f.ZoneId != z.Id))
-            {
-                var previousZoneId = floor.ZoneId;
-                floor.ZoneId = z.Id; floor.UpdatedAt = DateTime.UtcNow;
-                Audit("ASSIGN_FLOOR_ZONE", "parking_floors", floor.Id, actor,
-                    new { ZoneId = previousZoneId }, new { ZoneId = z.Id });
-            }
-            if (r.NewFloor is { } create)
-            {
-                var floor = new ParkingFloor { LotId = lotId, ZoneId = z.Id,
-                    Name = create.Name.Trim(), FloorNumber = create.FloorNumber, IsActive = true };
-                db.ParkingFloors.Add(floor);
-                await db.SaveChangesAsync(ct);
-                Audit("CREATE_PARKING_FLOOR", "parking_floors", floor.Id, actor, null,
-                    new { floor.LotId, floor.ZoneId, floor.Name, floor.FloorNumber });
-            }
             await db.SaveChangesAsync(ct);
-            var savedFloorIds = await db.ParkingFloors.Where(f => f.ZoneId == z.Id && f.LotId == lotId).Select(f => f.Id).ToArrayAsync(ct);
             Audit("SAVE_ZONE", "parking_zones", z.Id, actor, id == null ? null : before,
-                new { z.Code, z.Name, z.Type, z.Layout, z.IsActive, FloorIds = savedFloorIds });
-            return new { z.Id, z.LotId, z.Code, z.Name, z.Type, z.Layout, z.IsActive, FloorIds = savedFloorIds };
+                new { z.Code, z.Name, z.Type, z.Layout, z.IsActive, z.FloorId });
+            return new { z.Id, z.LotId, z.Code, z.Name, z.Type, z.Layout, z.IsActive, z.FloorId };
         }, ct);
-    }
-    private async Task RequireFloorReassignmentSafe(int lotId, ParkingFloor floor, CancellationToken ct)
-    {
-        Require(!await db.ParkingSessions.AnyAsync(s => s.CurrentSlot != null && s.CurrentSlot.FloorId == floor.Id, ct) &&
-            !await db.ParkingSessions.AnyAsync(s => s.ZoneId == floor.ZoneId && s.LotId == lotId && (s.Status == "ACTIVE" || s.Status == "PAID"), ct) &&
-            !await db.ParkingSlots.AnyAsync(s => s.FloorId == floor.Id && s.PhysicalStatus == "OCCUPIED", ct),
-            "Tầng có xe hoặc lịch sử phiên không thể chuyển khu. Giữ nguyên quan hệ lịch sử.");
     }
     public async Task<object> AssignFloor(int lotId, int floorId, int zoneId, long actor, string role, CancellationToken ct)
     {
@@ -147,12 +101,17 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
         return await writer.ExecuteAsync<object>(lotId, async () => {
             var floor = await db.ParkingFloors.FirstOrDefaultAsync(f => f.Id == floorId && f.LotId == lotId, ct)
                 ?? throw Error(404, "NOT_FOUND", "Không tìm thấy tầng tại bãi.");
-            Require(await db.ParkingZones.AnyAsync(z => z.Id == zoneId && z.LotId == lotId && z.IsActive, ct), "Khu phải hoạt động và thuộc cùng bãi.");
-            if (floor.ZoneId != zoneId)
-                await RequireFloorReassignmentSafe(lotId, floor, ct);
-            var old = floor.ZoneId; floor.ZoneId = zoneId; floor.UpdatedAt = DateTime.UtcNow;
-            Audit("ASSIGN_FLOOR_ZONE", "parking_floors", floorId, actor, new { ZoneId = old }, new { ZoneId = zoneId });
-            return new { floor.Id, floor.LotId, floor.ZoneId };
+            var zone = await db.ParkingZones.FirstOrDefaultAsync(z => z.Id == zoneId && z.LotId == lotId && z.IsActive, ct)
+                ?? throw Error(404, "NOT_FOUND", "Khu phải hoạt động và thuộc cùng bãi.");
+            Require((floor.FloorNumber != 0 && !floor.Name.Contains("tầng g", StringComparison.OrdinalIgnoreCase)) || zone.Type == "FIXED",
+                "Tầng G chỉ dành cho khu và xe vé tháng.", "GROUND_FLOOR_MONTHLY_ONLY", 400);
+            Require(!await db.ParkingSlots.AnyAsync(s => s.ZoneId == zoneId, ct) &&
+                !await db.ParkingSessions.AnyAsync(s => s.ZoneId == zoneId, ct) &&
+                !await db.ParkingPolicies.AnyAsync(p => p.ZoneId == zoneId, ct),
+                "Khu đã có ô đỗ hoặc lịch sử, không thể chuyển sang tầng khác.");
+            var old = zone.FloorId; zone.FloorId = floorId; zone.UpdatedAt = DateTime.UtcNow;
+            Audit("ASSIGN_ZONE_FLOOR", "parking_zones", zoneId, actor, new { FloorId = old }, new { FloorId = floorId });
+            return new { zone.Id, zone.LotId, zone.FloorId };
         }, ct);
     }
     public async Task<object> ConfigureFuel(int lotId, long slotId, SlotFuelRequest r, long actor, string role, CancellationToken ct)
@@ -388,9 +347,9 @@ public sealed class ParkingOperationsService(IApplicationDbContext db,
     }
     private async Task<ParkingSlot> EligibleSlot(int lotId, ParkingSession session, long id, string fuel, CancellationToken ct)
     {
-        var slot = await db.ParkingSlots.Include(s => s.Floor).ThenInclude(f => f.Zone).FirstOrDefaultAsync(s => s.Id == id, ct)
+        var slot = await db.ParkingSlots.Include(s => s.Floor).Include(s => s.Zone).FirstOrDefaultAsync(s => s.Id == id, ct)
             ?? throw Error(404, "NOT_FOUND", "Không tìm thấy ô.");
-        Require(slot.Floor.LotId == lotId && slot.Floor.ZoneId == session.ZoneId && slot.Floor.Zone is { Type: "TRANSIENT" }, "Ô phải ở cùng khu vãng lai. Khu đóng vẫn xử lý xe đã tiếp nhận.");
+        Require(slot.Floor.LotId == lotId && slot.ZoneId == session.ZoneId && slot.Zone is { Type: "TRANSIENT" }, "Ô phải ở cùng khu vãng lai. Khu đóng vẫn xử lý xe đã tiếp nhận.");
         Require(slot.IsActive && slot.Floor.IsActive && slot.PhysicalStatus == "EMPTY", "Ô/tầng ngừng dùng, bảo trì hoặc đã có xe.", "SLOT_UNAVAILABLE");
         Require(slot.AllowedFuelType == "ANY" || slot.AllowedFuelType == fuel, "Nhiên liệu không tương thích với ô.", "INCOMPATIBLE_FUEL");
         Require(!await db.ParkingSessions.AnyAsync(s => s.Id != session.Id && s.CurrentSlotId == id && (s.Status == "ACTIVE" || s.Status == "PAID"), ct) &&

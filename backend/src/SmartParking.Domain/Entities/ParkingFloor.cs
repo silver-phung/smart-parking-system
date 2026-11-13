@@ -15,4 +15,5 @@ public class ParkingFloor
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<ParkingSlot> Slots { get; set; } = new List<ParkingSlot>();
+    public ICollection<ParkingZone> Zones { get; set; } = new List<ParkingZone>();
 }

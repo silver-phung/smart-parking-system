@@ -8,8 +8,10 @@ export function sceneToDefinition(scene) {
     id: String(scene.id), name: scene.name, type: under ? "underground" : "multistorey",
     ids: floors.map(f => f.name),
     counts: floors.map(f => [0, 1, 2, 3].map(i => Math.floor(f.slots.length / 4) + (i < f.slots.length % 4 ? 1 : 0))),
-    liveFloors: floors.map(f => ({ ...f, zoneName: f.zone?.name || "Chưa gắn khu",
-      kind: f.zone?.type === "FIXED" ? "MONTHLY" : f.zone?.type === "TRANSIENT" ? "VISITOR" : "UNASSIGNED",
-      slots: f.slots.map(s => ({ ...s, floorId: f.id })) })),
+    liveFloors: floors.map(f => ({ ...f,
+      zones: f.zones || (f.zone ? [f.zone] : []),
+      zoneName: (f.zones || (f.zone ? [f.zone] : [])).map(z => z.name).join(", ") || "Chưa có khu vực",
+      kind: (f.zones || [f.zone]).some(z => z?.type === "FIXED") ? "MONTHLY" : (f.zones || [f.zone]).some(z => z?.type === "TRANSIENT") ? "VISITOR" : "UNASSIGNED",
+      slots: f.slots.map(s => ({ ...s, floorId: f.id, zoneName: s.zoneName || (f.zones || []).find(z => z.id === s.zoneId)?.name || f.zone?.name || "Chưa có khu vực" })) })),
   };
 }

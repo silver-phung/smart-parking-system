@@ -327,6 +327,8 @@ namespace SmartParking.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_parking_floors");
 
+                    b.HasAlternateKey("Id", "LotId");
+
                     b.HasIndex("LotId", "FloorNumber")
                         .IsUnique()
                         .HasDatabaseName("uq_parking_floors_lot_floor_number");
@@ -685,6 +687,10 @@ namespace SmartParking.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("floor_id");
 
+                    b.Property<int>("ZoneId")
+                        .HasColumnType("integer")
+                        .HasColumnName("zone_id");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -733,6 +739,8 @@ namespace SmartParking.Persistence.Migrations
                     b.HasIndex("FloorId", "SlotCode")
                         .IsUnique()
                         .HasDatabaseName("uq_parking_slots_floor_slot_code");
+
+                    b.HasIndex("ZoneId", "FloorId");
 
                     b.HasIndex("PhysicalStatus", "IsActive")
                         .HasDatabaseName("ix_parking_slots_status_active");
@@ -825,6 +833,9 @@ namespace SmartParking.Persistence.Migrations
                     b.Property<int>("LotId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("FloorId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -839,6 +850,10 @@ namespace SmartParking.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "FloorId");
+
+                    b.HasIndex("FloorId", "LotId");
 
                     b.HasIndex("LotId", "Code")
                         .IsUnique();
@@ -1634,6 +1649,14 @@ namespace SmartParking.Persistence.Migrations
 
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingSlot", b =>
                 {
+                    b.HasOne("SmartParking.Domain.Entities.ParkingZone", "Zone")
+                        .WithMany("Slots")
+                        .HasForeignKey("ZoneId", "FloorId")
+                        .HasPrincipalKey("Id", "FloorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_parking_slots_zone_floor");
+
                     b.HasOne("SmartParking.Domain.Entities.ParkingFloor", "Floor")
                         .WithMany("Slots")
                         .HasForeignKey("FloorId")
@@ -1642,6 +1665,8 @@ namespace SmartParking.Persistence.Migrations
                         .HasConstraintName("fk_parking_slots_floor");
 
                     b.Navigation("Floor");
+
+                    b.Navigation("Zone");
                 });
 
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingTicket", b =>
@@ -1658,6 +1683,13 @@ namespace SmartParking.Persistence.Migrations
 
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingZone", b =>
                 {
+                    b.HasOne("SmartParking.Domain.Entities.ParkingFloor", "Floor")
+                        .WithMany("Zones")
+                        .HasForeignKey("FloorId", "LotId")
+                        .HasPrincipalKey("Id", "LotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("SmartParking.Domain.Entities.ParkingLot", "Lot")
                         .WithMany()
                         .HasForeignKey("LotId")
@@ -1665,6 +1697,10 @@ namespace SmartParking.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Lot");
+
+                    b.Navigation("Floor");
+
+                    b.Navigation("Slots");
                 });
 
             modelBuilder.Entity("SmartParking.Domain.Entities.RefreshToken", b =>
@@ -1808,6 +1844,8 @@ namespace SmartParking.Persistence.Migrations
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingFloor", b =>
                 {
                     b.Navigation("Slots");
+
+                    b.Navigation("Zones");
                 });
 
             modelBuilder.Entity("SmartParking.Domain.Entities.ParkingLot", b =>

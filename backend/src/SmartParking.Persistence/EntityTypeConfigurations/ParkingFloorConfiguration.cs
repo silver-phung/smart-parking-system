@@ -15,6 +15,7 @@ public class ParkingFloorConfiguration : IEntityTypeConfiguration<ParkingFloor>
 
         builder.HasKey(f => f.Id)
             .HasName("pk_parking_floors");
+        builder.HasAlternateKey(f => new { f.Id, f.LotId });
 
         builder.Property(f => f.Id)
             .HasColumnName("id")

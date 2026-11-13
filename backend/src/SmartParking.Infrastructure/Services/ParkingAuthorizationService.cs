@@ -25,7 +25,7 @@ public class ParkingAuthorizationService : IParkingAuthorizationService
                 (a.Duty == duty || a.Duty == StaffDuties.Both ||
                     ((duty == StaffDuties.GateIn || duty == StaffDuties.GateOut) && a.Duty == StaffDuties.Gate)) &&
                 (a.FloorId == null || (floorId != null ? a.FloorId == floorId : zoneId == null ||
-                    _context.ParkingFloors.Any(f => f.Id == a.FloorId && f.LotId == lotId && f.ZoneId == zoneId))) &&
+                    _context.ParkingZones.Any(z => z.Id == zoneId && z.FloorId == a.FloorId && z.LotId == lotId))) &&
                 (a.ZoneId == null || (zoneId != null && a.ZoneId == zoneId)), ct);
         }
         catch (Exception ex) when (

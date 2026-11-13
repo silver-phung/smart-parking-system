@@ -12,6 +12,7 @@ export const roleNavigation = {
     ["/admin/people", "Tài khoản"],
     ["/admin/people?view=assignments", "Phân công"],
     ["/parking", "3D"],
+    ["/admin/parking-settings?view=tickets", "Xử lý vé"],
     ["/admin/policies", "Chính sách"],
   ],
   MANAGER: [
@@ -60,5 +61,7 @@ export function navIsActive(target, pathname, search) {
     return (current || "overview") === (expected || "overview");
   if (path === "/admin/people")
     return (current || "users") === (expected || "users");
+  if (path === "/admin/parking-settings")
+    return (current || "floors") === (expected || "floors");
   return true;
 }

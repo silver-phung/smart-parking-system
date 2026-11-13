@@ -343,7 +343,7 @@ public class ParkingSessionService : IParkingSessionService
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng ra (GATE) tại bãi đỗ xe này.", null);
         }
         if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, session.LotId, StaffDuties.GateOut,
-            session.CurrentSlot?.FloorId, session.ZoneId ?? session.CurrentSlot?.Floor.ZoneId, ct))
+            session.CurrentSlot?.FloorId, session.ZoneId ?? session.CurrentSlot?.ZoneId, ct))
             return (false, "Phiên xe nằm ngoài tầng hoặc khu vực được phân công.", null);
         if (request.ExitRecognitionId.HasValue)
         {
@@ -946,7 +946,7 @@ public class ParkingSessionService : IParkingSessionService
                 }
 
                 if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, booking.LotId,
-                    StaffDuties.SlotVerifier, slot.FloorId, slot.Floor.ZoneId, ct))
+                    StaffDuties.SlotVerifier, slot.FloorId, slot.ZoneId, ct))
                 {
                     await transaction.RollbackAsync(ct);
                     return (false, "Ô nằm ngoài tầng hoặc khu vực được phân công.", null);
@@ -985,7 +985,7 @@ public class ParkingSessionService : IParkingSessionService
                     VehicleId = vehicle.Id,
                     BookingId = booking.Id,
                     PolicyId = booking.PolicyId,
-                    ZoneId = slot.Floor.ZoneId,
+                    ZoneId = slot.ZoneId,
                     VerificationStatus = "VERIFIED",
                     VerifiedBy = actorId,
                     VerifiedAt = now,

@@ -8,6 +8,8 @@ public class ParkingSlotDto
     public long Id { get; set; }
     public int FloorId { get; set; }
     public string FloorName { get; set; } = null!;
+    public int ZoneId { get; set; }
+    public string ZoneName { get; set; } = null!;
     public int LotId { get; set; }
     public string LotName { get; set; } = null!;
     public string SlotCode { get; set; } = null!;
@@ -37,6 +39,8 @@ public class ParkingSlotDetailDto : ParkingSlotDto
 
 public class CreateParkingSlotRequestDto
 {
+    [Range(1, int.MaxValue, ErrorMessage = "Khu vực là bắt buộc.")]
+    public int ZoneId { get; set; }
     [Required(ErrorMessage = "Mã ô đỗ là bắt buộc.")]
     [StringLength(20, MinimumLength = 1, ErrorMessage = "Mã ô đỗ phải từ 1 đến 20 ký tự.")]
     public string SlotCode { get; set; } = null!;

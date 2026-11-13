@@ -5,6 +5,8 @@ public class ParkingSlot
     public long Id { get; set; }
     public int FloorId { get; set; }
     public ParkingFloor Floor { get; set; } = null!;
+    public int ZoneId { get; set; }
+    public ParkingZone Zone { get; set; } = null!;
     public string SlotCode { get; set; } = null!;
     public string PhysicalStatus { get; set; } = "EMPTY"; // EMPTY, OCCUPIED, MAINTENANCE, UNAVAILABLE
     public decimal? PositionX { get; set; }

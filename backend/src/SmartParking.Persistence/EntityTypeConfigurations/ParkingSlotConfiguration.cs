@@ -30,6 +30,13 @@ public class ParkingSlotConfiguration : IEntityTypeConfiguration<ParkingSlot>
             .OnDelete(DeleteBehavior.Cascade)
             .HasConstraintName("fk_parking_slots_floor");
 
+        builder.Property(s => s.ZoneId).HasColumnName("zone_id").IsRequired();
+        builder.HasOne(s => s.Zone).WithMany(z => z.Slots)
+            .HasForeignKey(s => new { s.ZoneId, s.FloorId })
+            .HasPrincipalKey(z => new { z.Id, z.FloorId })
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_parking_slots_zone_floor");
+
         builder.Property(s => s.SlotCode)
             .HasColumnName("slot_code")
             .HasMaxLength(20)

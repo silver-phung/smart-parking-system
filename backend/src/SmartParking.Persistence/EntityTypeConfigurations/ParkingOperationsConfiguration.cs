@@ -14,12 +14,17 @@ public class ParkingZoneConfiguration : IEntityTypeConfiguration<ParkingZone>
         });
         b.HasKey(x => x.Id);
         b.HasAlternateKey(x => new { x.Id, x.LotId });
+        b.HasAlternateKey(x => new { x.Id, x.FloorId });
         b.HasIndex(x => new { x.LotId, x.Code }).IsUnique();
         b.Property(x => x.Code).HasMaxLength(30);
         b.Property(x => x.Name).HasMaxLength(100);
         b.Property(x => x.Type).HasMaxLength(20);
         b.Property(x => x.Layout).HasMaxLength(20);
         b.HasOne(x => x.Lot).WithMany().HasForeignKey(x => x.LotId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne(x => x.Floor).WithMany(f => f.Zones)
+            .HasForeignKey(x => new { x.FloorId, x.LotId })
+            .HasPrincipalKey(f => new { f.Id, f.LotId })
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 

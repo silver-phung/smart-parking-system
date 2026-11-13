@@ -20,17 +20,19 @@ public sealed class ParkingSceneService(IApplicationDbContext db, IParkingAuthor
             await auth.HasLotAccessAsync(actor.Value, role, lotId, ct);
         // Public/customer callers must not see lots that are closed.
         if (!lot.IsActive && !internalAccess) return null;
-        var floors = await db.ParkingFloors.AsNoTracking().Include(f => f.Zone)
+        var floors = await db.ParkingFloors.AsNoTracking().Include(f => f.Zones)
             .Where(f => f.LotId == lotId).OrderBy(f => f.FloorNumber).ThenBy(f => f.Id).ToListAsync(ct);
         // Plate/session visibility per floor: Admin/Manager lot-wide, Staff only inside their verifier floor/zone scope.
-        var privateFloors = new HashSet<int>();
+        var privateZones = new HashSet<int>();
         foreach (var f in floors)
         {
             if (!internalAccess) continue;
-            if (role != Roles.Staff || await auth.CanOperateAreaAsync(actor!.Value, role, lotId, StaffDuties.SlotVerifier, f.Id, f.ZoneId, ct))
-                privateFloors.Add(f.Id);
+            foreach (var zone in f.Zones)
+                if (role != Roles.Staff || await auth.CanOperateAreaAsync(actor!.Value, role, lotId, StaffDuties.SlotVerifier, f.Id, zone.Id, ct))
+                    privateZones.Add(zone.Id);
         }
         var slots = await db.ParkingSlots.AsNoTracking().Where(s => s.Floor.LotId == lotId)
+            .Include(s => s.Zone)
             .OrderBy(s => s.SlotCode).ThenBy(s => s.Id).ToListAsync(ct);
         var sessions = await db.ParkingSessions.AsNoTracking()
             .Where(s => s.LotId == lotId && s.CurrentSlotId != null && (s.Status == "ACTIVE" || s.Status == "PAID"))
@@ -49,16 +51,16 @@ public sealed class ParkingSceneService(IApplicationDbContext db, IParkingAuthor
             CanExit = actor.HasValue && await auth.CanOperateGateOutAsync(actor.Value, role, lotId, ct),
             CanVerify = actor.HasValue && await auth.CanOperateSlotVerificationAsync(actor.Value, role, lotId, ct),
             Floors = floors.Select(f => new {
-                f.Id, f.Name, f.FloorNumber, f.IsActive, CanVerify = privateFloors.Contains(f.Id),
-                Zone = f.Zone == null ? null : new { f.Zone.Id, f.Zone.Name, f.Zone.Code, f.Zone.Type, f.Zone.IsActive },
+                f.Id, f.Name, f.FloorNumber, f.IsActive, CanVerify = f.Zones.Any(z => privateZones.Contains(z.Id)),
+                Zones = f.Zones.Select(z => new { z.Id, z.Name, z.Code, z.Type, z.IsActive }),
                 Slots = slots.Where(s => s.FloorId == f.Id).Select(s => {
                     occupied.TryGetValue(s.Id, out var session);
                     var status = session != null ? "OCCUPIED" : held.Contains(s.Id) ? "RESERVED" : !s.IsActive || !f.IsActive ? "UNAVAILABLE" : s.PhysicalStatus;
-                    return new { s.Id, Code = s.SlotCode, Status = status, s.PhysicalStatus, s.IsActive,
-                        IsAvailable = lot.IsActive && f.IsActive && s.IsActive && status == "EMPTY" && (f.Zone == null || f.Zone.IsActive),
+                    return new { s.Id, Code = s.SlotCode, s.ZoneId, ZoneName = s.Zone.Name, ZoneType = s.Zone.Type, Status = status, s.PhysicalStatus, s.IsActive,
+                        IsAvailable = lot.IsActive && f.IsActive && s.IsActive && status == "EMPTY" && s.Zone.IsActive,
                         IsProtected = session != null || held.Contains(s.Id),
-                        Plate = session != null && (privateFloors.Contains(f.Id) || session.IsMine) ? session.PlateNumber : null,
-                        SessionId = session != null && (privateFloors.Contains(f.Id) || session.IsMine) ? (long?)session.Id : null,
+                        Plate = session != null && (privateZones.Contains(s.ZoneId) || session.IsMine) ? session.PlateNumber : null,
+                        SessionId = session != null && (privateZones.Contains(s.ZoneId) || session.IsMine) ? (long?)session.Id : null,
                         IsMine = session?.IsMine == true, s.PositionX, s.PositionY, s.PositionZ };
                 }).ToList()
             }).ToList()
