@@ -53,28 +53,17 @@ function Sessions() {
     }).format(value || 0);
   return (
     <section className="workspace container">
-      <header className="workspace-heading">
-        <div>
-          <span className="tag">Khách hàng</span>
-          <h1>Phiên gửi xe của tôi</h1>
-          <p>Theo dõi xe đang gửi và lịch sử ra vào của bạn.</p>
-        </div>
-        <button
-          className="btn btn--outline"
-          disabled={list.loading}
-          onClick={() => refresh((n) => n + 1)}
-        >
-          Làm mới
-        </button>
-      </header>
-      <nav className="workspace-tabs">
-        <Link to="/customer">Bãi đỗ</Link>
-        <Link className="active" to="/customer/sessions">
-          Phiên gửi xe
-        </Link>
-        <Link to="/customer/profile">Hồ sơ</Link>
-      </nav>
       <section className="workspace-panel">
+        <div className="workspace-heading">
+          <h2>Phiên gửi xe</h2>
+          <button
+            className="btn btn--outline"
+            disabled={list.loading}
+            onClick={() => refresh((n) => n + 1)}
+          >
+            Làm mới
+          </button>
+        </div>
         <div className="workspace-filters">
           <label>
             Trạng thái

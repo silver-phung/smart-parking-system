@@ -15,18 +15,12 @@ body {
   padding-top: 32px;
   padding-bottom: 48px;
 }
-.workspace-heading,
-.customer-page__heading,
-.staff-workspace-heading,
-.admin-dashboard__header {
+.workspace-heading {
   align-items: center;
   min-height: 90px;
   gap: 24px;
 }
-.workspace-heading h1,
-.customer-page__heading h1,
-.staff-workspace-heading h1,
-.admin-dashboard__header h1 {
+.workspace-heading h1 {
   font-size: 34px;
   line-height: 1.25;
   margin: 6px 0;
@@ -201,9 +195,6 @@ body {
 .header__nav a.is-active {
   border-bottom-color: var(--blue);
   color: var(--blue);
-}
-.admin-dashboard__header > div .btn {
-  margin-top: 12px;
 }
 .customer-select-grid {
   align-items: end;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import { apiRequest } from "../services/api.js";
 import { operationsApi } from "../services/operationsApi.js";
@@ -434,7 +434,7 @@ function Content() {
     select(remaining[0] ? String(remaining[0].id) : "");
   };
 
-  return <div className="staff-workspace operations-settings container"><header className="staff-workspace-heading"><div><Link className="operations-settings-back" to="/admin">← Tổng quan</Link><h1>Quản lý bãi xe</h1><p>Quản lý toàn diện bãi đỗ xe, khu vực, tầng và ô đỗ (slot).</p></div></header>
+  return <div className="staff-workspace operations-settings container">
     <StaffError error={lots.error || (!showLotModal ? lotModalError : "")} />{lots.error && <button className="staff-button" onClick={lots.reload}>Tải lại bãi</button>}
     {lotActionMessage && <Notice kind="success">{lotActionMessage}</Notice>}
     {lots.loading && <Notice>Đang tải bãi…</Notice>}

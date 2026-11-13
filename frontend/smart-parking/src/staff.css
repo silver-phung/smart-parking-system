@@ -5,28 +5,11 @@
   flex-direction: column;
   gap: 20px;
 }
-.staff-workspace-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
 .staff-eyebrow {
   color: #506783;
   font-size: 10px;
   letter-spacing: 0.12em;
   font-weight: 800;
-}
-.staff-workspace-heading h1 {
-  margin: 5px 0;
-  color: #152c47;
-  font-size: clamp(28px, 3vw, 37px);
-  letter-spacing: -0.035em;
-  line-height: 1.2;
-}
-.staff-workspace-heading p {
-  color: #617186;
-  font-size: 13px;
 }
 .staff-shift-label {
   display: flex;

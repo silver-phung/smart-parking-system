@@ -1,8 +1,4 @@
 .parking-scene-page { padding-top: 27px; padding-bottom: 30px; }
-.parking-page-heading { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 22px; }
-.page-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .12em; color: #7a8da4; }
-.parking-page-heading h1 { font-size: 27px; margin: 4px 0 7px; letter-spacing: -.8px; }
-.parking-page-heading p { color: #8290a2; font-size: 12px; }
 .parking-toolbar { display: flex; align-items: center; gap: 20px; padding: 17px 20px; border: 1px solid #e2e8f0; border-radius: 11px; background: white; margin-bottom: 18px; }
 .parking-toolbar label { display: grid; gap: 5px; flex: 1; color: #78889b; font-size: 11px; }
 .parking-toolbar select { padding: 9px 12px; min-width: 0; width: 100%; border: 1px solid #e0e6ee; border-radius: 7px; color: #18334e; background: #f9fbfd; font: inherit; font-size: 13px; }
@@ -65,4 +61,4 @@
 .parking-canvas .p3r-label .st.reserved { color: #78aaff; }
 @media (max-width: 1200px) { .parking-workbench { grid-template-columns: minmax(0,1fr) 260px; gap: 12px; } .parking-inspector { padding: 13px; } }
 @media (max-width: 950px) { .parking-workbench { grid-template-columns: 1fr; } .parking-inspector { padding: 18px; } .parking-slot-list { grid-template-columns: repeat(3,1fr); max-height: 260px; } .parking-slot-detail { max-width: none; } .parking-quick-actions { flex-wrap: wrap; } }
-@media (max-width: 600px) { .parking-toolbar { flex-wrap: wrap; padding: 13px; gap: 12px; } .parking-toolbar label { flex: 1 1 40%; } .parking-sync { width: 100%; } .parking-summary { grid-template-columns: repeat(3,1fr); gap: 8px; } .parking-stat { padding: 10px 12px; } .parking-stat strong { font-size: 22px; } .parking-stat span { font-size: 9px; } .parking-canvas-wrap { height: 480px; } .parking-slot-list { grid-template-columns: repeat(2,1fr); } .parking-page-heading { gap: 10px; } .parking-page-heading p { font-size: 11px; } .parking-live-badge { display: none; } }
+@media (max-width: 600px) { .parking-toolbar { flex-wrap: wrap; padding: 13px; gap: 12px; } .parking-toolbar label { flex: 1 1 40%; } .parking-sync { width: 100%; } .parking-summary { grid-template-columns: repeat(3,1fr); gap: 8px; } .parking-stat { padding: 10px 12px; } .parking-stat strong { font-size: 22px; } .parking-stat span { font-size: 9px; } .parking-canvas-wrap { height: 480px; } .parking-slot-list { grid-template-columns: repeat(2,1fr); } .parking-live-badge { display: none; } }

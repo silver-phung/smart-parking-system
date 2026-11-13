@@ -150,16 +150,9 @@ function DashboardContent({ role }) {
   const totalCapacity = lots.reduce((total, lot) => total + (lot.totalCapacity || 0), 0);
   const availableSlots = lots.reduce((total, lot) => total + (lot.availableSlotsCount || 0), 0);
   const occupiedSlots = lots.reduce((total, lot) => total + (lot.occupiedSlotsCount || 0), 0);
-  const roleLabel = role === "ADMIN" ? "Quản trị viên" : role === "MANAGER" ? "Quản lý bãi" : "Nhân viên bãi";
-
   return (
     <section className="customer-page container">
-      <div className="customer-page__heading role-dashboard__heading">
-        <div>
-          <span className="tag">{roleLabel} · {details.scope}</span>
-          <h1>{details.title}</h1>
-          <p className="muted">{details.subtitle}</p>
-        </div>
+      <div className="role-dashboard__actions">
         <button
           type="button"
           className="btn btn--outline"

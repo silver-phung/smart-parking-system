@@ -294,25 +294,16 @@ function PoliciesContent() {
 
   return (
     <section className="workspace container">
-      <header className="workspace-heading">
-        <div>
-          <span className="tag">Quản trị hệ thống</span>
-          <h1>Chính sách bãi đỗ xe</h1>
-          <p>
-            Thiết lập các quy định vận hành, thời lượng đặt trước, mức phí dịch vụ, chế tài vi phạm nội quy và tuân thủ pháp luật hiện hành.
-          </p>
-        </div>
-        <div className="workspace-actions">
-          <button
-            type="button"
-            className="btn btn--outline"
-            disabled={saving || policyLoading}
-            onClick={handleRestoreDefaults}
-          >
-            ↺ Khôi phục mặc định chuẩn
-          </button>
-        </div>
-      </header>
+      <div className="workspace-actions" style={{ justifyContent: "flex-end", marginBottom: 12 }}>
+        <button
+          type="button"
+          className="btn btn--outline"
+          disabled={saving || policyLoading}
+          onClick={handleRestoreDefaults}
+        >
+          ↺ Khôi phục mặc định chuẩn
+        </button>
+      </div>
 
       {(lotsError || policyError) && (
         <p className="workspace-error" role="alert">

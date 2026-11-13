@@ -254,11 +254,10 @@ section[id] { scroll-margin-top: 16px; }
 
 /* ----- Customer pages ----- */
 .customer-page { padding-top: 48px; padding-bottom: 80px; display: flex; flex-direction: column; gap: 24px; }
-.customer-page__heading, .customer-card__heading {
+.customer-card__heading {
   display: flex; align-items: center; justify-content: space-between; gap: 18px;
 }
-.customer-page__heading h1 { margin-top: 12px; font-size: 40px; line-height: 1.2; font-weight: 800; }
-.customer-page__heading p { margin-top: 8px; }
+.customer-page__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .customer-card {
   min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 20px;
   border: 1px solid var(--line); border-radius: 18px; background: #fff;
@@ -397,7 +396,6 @@ section[id] { scroll-margin-top: 16px; }
 .customer-add-vehicle .customer-form--compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 /* ----- Role dashboards ----- */
-.role-dashboard__heading { align-items: flex-end; }
 .role-dashboard__stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
@@ -500,16 +498,13 @@ section[id] { scroll-margin-top: 16px; }
   flex-direction: column;
   gap: 20px;
 }
-.admin-dashboard__header, .admin-dashboard__panel-heading {
+.admin-dashboard__panel-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
 }
-.admin-dashboard__header { align-items: center; }
-.admin-dashboard__eyebrow { color: var(--blue); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
-.admin-dashboard__header h1 { margin-top: 5px; font-size: 34px; line-height: 1.2; }
-.admin-dashboard__header p, .admin-dashboard__panel-heading p { margin-top: 6px; color: var(--muted); font-size: 13px; }
+.admin-dashboard__panel-heading p { margin-top: 6px; color: var(--muted); font-size: 13px; }
 .admin-dashboard__meta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
 .admin-dashboard__metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .admin-dashboard__metric, .admin-dashboard__panel {

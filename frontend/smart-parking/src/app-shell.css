@@ -23,7 +23,7 @@
 .app-frame--workspace h1 { font-size: 26px; line-height: 1.35; letter-spacing: -.7px; margin: 4px 0 8px; }
 .app-frame--workspace h2 { font-size: 17px; letter-spacing: -.3px; }
 .app-frame--workspace h3 { font-size: 15px; }
-.app-frame--workspace .workspace-heading p, .app-frame--workspace .staff-workspace-heading p, .app-frame--workspace .admin-dashboard__header p { font-size: 12px; color: #77859a; margin-top: 7px; }
+.app-frame--workspace .workspace-heading p { font-size: 12px; color: #77859a; margin-top: 7px; }
 .app-frame--workspace .workspace-panel, .app-frame--workspace .staff-panel, .app-frame--workspace .customer-card, .app-frame--workspace .admin-dashboard__panel { padding: 22px; border: 1px solid #e1e7ef; border-radius: 12px; box-shadow: 0 3px 14px #172d4b04; }
 .app-frame--workspace .btn, .app-frame--workspace .staff-button { min-height: 38px; padding: 8px 15px; font-size: 12px; border-radius: 8px; border-width: 1px; }
 .app-frame--workspace .btn--outline { border-color: #d6dfed; color: #315982; background: white; }
@@ -50,7 +50,6 @@
 .app-frame--workspace .staff-text-button { display: inline; padding: 0; min-height: 0; border: 0; background: none; color: #2468dc; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .app-frame--workspace .staff-text-button:hover:not(:disabled) { color: #174aa6; }
 .app-frame--workspace .staff-text-button:disabled { opacity: .55; cursor: not-allowed; }
-.app-frame--workspace .staff-workspace-heading { margin-bottom: 16px; }
 .app-frame--workspace .admin-dashboard__metrics { gap: 12px; }
 .app-frame--workspace .admin-dashboard__metric { border-radius: 11px; padding: 17px; }
 .app-frame--workspace .admin-dashboard__metric strong { font-size: 28px; }
@@ -73,8 +72,6 @@
 .app-frame--workspace .workspace-panel, .app-frame--workspace .staff-panel, .app-frame--workspace .customer-card, .app-frame--workspace .admin-dashboard__panel, .app-frame--workspace .parking-toolbar, .app-frame--workspace .parking-stat, .app-frame--workspace .parking-inspector, .app-frame--workspace .parking-viewport-panel, .app-frame--workspace .parking-quick-actions { border-radius: 12px; }
 .app-frame--workspace .parking-toolbar, .app-frame--workspace .parking-summary, .app-frame--workspace .parking-workbench, .app-frame--workspace .parking-quick-actions { margin-top: 0; margin-bottom: 18px; }
 .app-frame--workspace .parking-quick-actions { margin-bottom: 0; }
-.app-frame--workspace .parking-page-heading { margin-bottom: 18px; }
-.app-frame--workspace .parking-page-heading h1 { margin-top: 2px; }
 .app-frame--workspace .parking-toolbar label { align-self: stretch; justify-content: end; }
 .app-frame--workspace .parking-workbench { align-items: stretch; }
 .app-frame--workspace .parking-inspector { display: flex; flex-direction: column; min-height: 0; }

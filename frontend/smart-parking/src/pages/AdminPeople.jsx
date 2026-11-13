@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import {
   Feedback,
@@ -137,16 +137,6 @@ export function People({ assignmentsOnly = false }) {
   }
   return (
     <section className="workspace container">
-      <header className="workspace-heading">
-        <div>
-          <span className="tag">{assignmentsOnly ? "Quản lý bãi" : "Quản trị nhân sự"}</span>
-          <h1>{view === "assignments" ? "Phân công nhân viên" : "Quản lý tài khoản"}</h1>
-          <p>{view === "assignments" ? assignmentsOnly ? "Phân công Staff tại các bãi bạn đang quản lý." : "Phân công Staff theo bãi, tầng, khu vực và nhiệm vụ." : "Tạo và quản lý tài khoản nội bộ cho Manager và Staff."}</p>
-        </div>
-        <Link className="btn btn--outline" to={assignmentsOnly ? "/manager" : "/admin"}>
-          Tổng quan
-        </Link>
-      </header>
       <Feedback error={action.error} message={action.message} />
       {view === "users" ? (
         <section className="workspace-panel">

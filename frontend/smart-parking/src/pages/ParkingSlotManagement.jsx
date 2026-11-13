@@ -77,7 +77,7 @@ export default function ParkingSlotManagement({ role }) {
   const floorList = itemsOf(floors.data);
   const floor = floorList.find(f => String(f.id) === floorId) || floorList[0];
   const refresh = () => setRevision(r => r + 1);
-  return <section className="workspace container"><header className="workspace-heading"><div><span className="tag">{role === "ADMIN" ? "Quản trị bãi" : "Quản lý bãi"}</span><h1>Quản lý ô đỗ</h1><p>Thêm, sửa, xóa và cập nhật trạng thái ô tại bãi được phép quản lý.</p></div></header>
+  return <section className="workspace container">
     <Feedback loading={lots.loading || floors.loading} error={lots.error || floors.error || action.error} message={action.message} />
     {!lots.loading && !lots.error && !availableLots.length && <section className="workspace-panel">Chưa có bãi được phép quản lý.</section>}
     {lot && <section className="workspace-panel">

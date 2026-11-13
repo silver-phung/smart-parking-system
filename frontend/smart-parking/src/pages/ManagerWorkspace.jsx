@@ -409,15 +409,7 @@ function ManagerContent() {
     assigned.find((l) => String(l.lotId) === selectedLot) || assigned[0];
   return (
     <section className="workspace container">
-      <header className="workspace-heading">
-        <div>
-          <span className="tag">Quản lý bãi</span>
-          <h1>Điều hành bãi đỗ</h1>
-          <p>
-            {assigned.length} bãi được phân công · Theo dõi xe và quản lý trạng
-            thái tiếp nhận.
-          </p>
-        </div>
+      <div className="workspace-actions" style={{ justifyContent: "flex-end", marginBottom: 12 }}>
         <button
           className="btn btn--outline"
           disabled={action.busy || lots.loading}
@@ -425,7 +417,7 @@ function ManagerContent() {
         >
           Làm mới dữ liệu
         </button>
-      </header>
+      </div>
       <Feedback
         loading={lots.loading}
         error={lots.error || action.error}

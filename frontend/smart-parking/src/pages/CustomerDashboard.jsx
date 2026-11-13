@@ -430,27 +430,6 @@ function DashboardContent({ publicView = false }) {
 
   return (
     <section className="customer-page container">
-      <div className="customer-page__heading">
-        <div>
-          <span className="tag">
-            {publicView ? "Bãi đỗ công khai" : "Khu vực khách hàng"}
-          </span>
-          <h1>Bãi đỗ xe</h1>
-          {selectedLotId && selectedFloorId && <a className="btn btn--outline" href={`/app/parking?lotId=${encodeURIComponent(selectedLotId)}&floorId=${encodeURIComponent(selectedFloorId)}`}>Xem tầng này bằng 3D</a>}
-          <p className="muted">
-            Xem sức chứa và trạng thái từng vị trí từ dữ liệu hệ thống.
-          </p>
-        </div>
-        <Link
-          to={publicView ? "/login" : "/customer/sessions"}
-          className="btn btn--primary"
-        >
-          {publicView
-            ? "Đăng nhập để xem phiên của tôi"
-            : "Phiên gửi xe của tôi"}
-        </Link>
-      </div>
-
       <div className="customer-card">
         <div className="customer-card__heading">
           <div>
@@ -459,17 +438,23 @@ function DashboardContent({ publicView = false }) {
               Danh sách chỉ bao gồm các bãi đang hoạt động.
             </p>
           </div>
-          <button
-            type="button"
-            className="btn btn--outline"
-            onClick={() => {
-              void loadLots();
-              setRevision((n) => n + 1);
-            }}
-            disabled={lotsLoading || floorsLoading || slotsLoading}
-          >
-            {lotsLoading ? "Đang tải..." : "Làm mới"}
-          </button>
+          <div className="customer-page__actions">
+            {selectedLotId && selectedFloorId && <a className="btn btn--outline" href={`/app/parking?lotId=${encodeURIComponent(selectedLotId)}&floorId=${encodeURIComponent(selectedFloorId)}`}>Xem tầng này bằng 3D</a>}
+            <Link to={publicView ? "/login" : "/customer/sessions"} className="btn btn--primary">
+              {publicView ? "Đăng nhập để xem phiên của tôi" : "Phiên gửi xe của tôi"}
+            </Link>
+            <button
+              type="button"
+              className="btn btn--outline"
+              onClick={() => {
+                void loadLots();
+                setRevision((n) => n + 1);
+              }}
+              disabled={lotsLoading || floorsLoading || slotsLoading}
+            >
+              {lotsLoading ? "Đang tải..." : "Làm mới"}
+            </button>
+          </div>
         </div>
 
         {lotsError && (

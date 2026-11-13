@@ -65,12 +65,11 @@ export default function ParkingScene() {
   const counts = (floor?.slots || []).reduce((out, s) => ({ ...out, [s.status]: (out[s.status] || 0) + 1 }), {});
   const context = `lotId=${lot?.id || ""}&floorId=${floor?.id || ""}`;
   return <section className="parking-scene-page container">
-    <header className="parking-page-heading"><div><span className="page-eyebrow">KHÔNG GIAN BÃI ĐỖ</span><h1>Bãi đỗ 3D</h1><p>Khám phá bãi, theo dõi ô đỗ và mở các thao tác ngay tại vị trí cần xử lý.</p></div>
-      <button className="btn btn--outline" disabled={state.loading || action.busy} onClick={refresh}>↻ Làm mới</button></header>
     <div className="parking-toolbar"><label>Bãi đỗ<select aria-label="Bãi đỗ" disabled={action.busy || lots.loading} value={lot?.id || ""} onChange={e => { setLotChoice(e.target.value); setFloorChoice(""); setSelectedId(null); setNextStatus(""); setParams({ lotId: e.target.value }, { replace: true }); }}>
       {!choices.length && <option value="">Chưa có bãi</option>}{choices.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
       <label>Tầng<select aria-label="Tầng" disabled={action.busy || !floor} value={floor?.id || ""} onChange={e => selectFloor(e.target.value)}>{!floor && <option value="">Chưa có tầng</option>}{floors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
       <div className="parking-sync"><i className={state.error ? "is-stale" : ""} /><div><strong>{state.error ? "Chưa đồng bộ" : state.loading ? "Đang đồng bộ…" : scene ? "Dữ liệu hệ thống" : "Đang tải bãi"}</strong><small>{scene ? `Cập nhật ${new Date(scene.generatedAtUtc).toLocaleTimeString("vi-VN")}` : "Tự cập nhật mỗi 15 giây"}</small></div></div>
+      <button className="btn btn--outline" disabled={state.loading || action.busy} onClick={refresh}>↻ Làm mới</button>
     </div>
     <Feedback error={lots.error || state.error || action.error} message={action.message} />
     {!lots.loading && !lots.error && !choices.length && <div className="workspace-panel workspace-empty">{assigned ? "Bạn chưa được phân công bãi đỗ. Liên hệ người quản lý để được phân công." : "Hệ thống chưa có bãi đỗ đang hoạt động."}</div>}

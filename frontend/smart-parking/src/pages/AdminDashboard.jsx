@@ -85,17 +85,11 @@ function AdminDashboardContent() {
 
   return (
     <section className="admin-dashboard container" id="overview">
-      <header className="admin-dashboard__header">
-        <div>
-          <span className="admin-dashboard__eyebrow">
-            BẢNG ĐIỀU KHIỂN ADMIN
-          </span>
-          <h1>Tổng quan vận hành</h1>
-          <p>
-            Theo dõi tình trạng các bãi đỗ và hoạt động đang diễn ra trên toàn
-            hệ thống.
-          </p>
-        </div>
+      <header className="admin-dashboard__meta">
+        <span>Phạm vi: toàn hệ thống</span>
+        {lastUpdated && (
+          <span>Cập nhật lúc {lastUpdated.toLocaleTimeString("vi-VN")}</span>
+        )}
         <button
           type="button"
           className="btn btn--outline"
@@ -105,13 +99,6 @@ function AdminDashboardContent() {
           {loading ? "Đang cập nhật..." : "Làm mới dữ liệu"}
         </button>
       </header>
-
-      <div className="admin-dashboard__meta">
-        <span>Phạm vi: toàn hệ thống</span>
-        {lastUpdated && (
-          <span>Cập nhật lúc {lastUpdated.toLocaleTimeString("vi-VN")}</span>
-        )}
-      </div>
 
       {lotsError && (
         <p className="customer-message customer-message--error" role="alert">
