@@ -75,24 +75,35 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
         <div className="operations-settings-columns">
         <div><h3>Danh sách khu</h3>
           {!query.loading && !query.error && !query.data?.zones.length && <Notice>Chưa có khu. Thêm khu bình thường hoặc khu vé tháng để bắt đầu.</Notice>}
-          <div className="operations-session-list">{query.data?.zones.map(z => <button type="button" className={`operations-session ${editId === z.id ? "is-selected" : ""}`} aria-pressed={editId === z.id} disabled={action.busy} key={z.id} onClick={() => { setEdit(z.id); setZone({ code: z.code, name: z.name, type: z.type, layout: z.layout || "INSIDE", isActive: z.isActive, floorId: String(z.floorId || "") }); }}>
-            <strong>{z.code} · {z.name}</strong><span>{zoneTypes[z.type] || z.type} · {z.isActive ? "Đang khai thác" : "Đã đóng"}</span><small>{query.data.layout.floors.find(f => f.id === z.floorId)?.name || "Chưa gắn tầng"} · Chọn để chỉnh sửa</small>
-          </button>)}</div>
+          <div className="operations-session-list">{query.data?.zones.map(z => {
+            const assignedFloorId = z.floorId ?? z.floorIds?.[0] ?? "";
+            return <button type="button" className={`operations-session ${editId === z.id ? "is-selected" : ""}`} aria-pressed={editId === z.id} disabled={action.busy} key={z.id} onClick={() => { setEdit(z.id); setZone({ code: z.code, name: z.name, type: z.type, layout: z.layout || "INSIDE", isActive: z.isActive, floorId: String(assignedFloorId) }); }}>
+            <strong>{z.code} · {z.name}</strong><span>{zoneTypes[z.type] || z.type} · {z.isActive ? "Đang khai thác" : "Đã đóng"}</span><small>{query.data.layout.floors.find(f => String(f.id) === String(assignedFloorId))?.name || "Chưa gắn tầng"} · Chọn để chỉnh sửa</small>
+          </button>;
+          })}</div>
         </div>
         <form onSubmit={e => { e.preventDefault(); perform(async () => {
-          await operationsApi(lot.id, `zones${editId ? `/${editId}` : ""}`, { ...zone, floorId: Number(zone.floorId) }, editId ? "PUT" : "POST");
+          const selectedFloorId = Number(zone.floorId);
+          await operationsApi(lot.id, `zones${editId ? `/${editId}` : ""}`, {
+            ...zone,
+            floorId: selectedFloorId,
+            // Keep the former API contract compatible while the local API process is restarted on s4/demo.
+            floorIds: [selectedFloorId],
+          }, editId ? "PUT" : "POST");
           setEdit(null); setZone(emptyZone());
         }); }}><fieldset className="operations-fields" disabled={busy}>
           <h3>{editId ? `Sửa khu #${editId}` : "Thêm khu"}</h3>
+          <Field label="Tầng"><select required value={zone.floorId} onChange={e => { const selectedFloor = allFloors.find(f => String(f.id) === e.target.value); setZone({ ...zone, floorId: e.target.value, type: selectedFloor && (selectedFloor.floorNumber === 0 || selectedFloor.name?.toLocaleLowerCase().includes("tầng g")) ? "FIXED" : zone.type }); }}><option value="">Chọn tầng trước</option>{allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
+          {zone.floorId ? <>
           <div className="operations-form-grid">
             <Field label="Mã khu"><input required maxLength={30} value={zone.code} onChange={e => setZone({ ...zone, code: e.target.value })} /></Field>
             <Field label="Tên khu"><input required maxLength={100} value={zone.name} onChange={e => setZone({ ...zone, name: e.target.value })} /></Field>
           </div>
           <Field label="Loại khu"><select value={zone.type} onChange={e => setZone({ ...zone, type: e.target.value })}><option value="TRANSIENT" disabled={allFloors.find(f => String(f.id) === String(zone.floorId))?.floorNumber === 0 || allFloors.find(f => String(f.id) === String(zone.floorId))?.name?.toLocaleLowerCase().includes("tầng g")}>Bình thường</option><option value="FIXED">Vé tháng</option></select></Field>
-          <Field label="Tầng"><select required value={zone.floorId} onChange={e => { const selectedFloor = allFloors.find(f => String(f.id) === e.target.value); setZone({ ...zone, floorId: e.target.value, type: selectedFloor && (selectedFloor.floorNumber === 0 || selectedFloor.name?.toLocaleLowerCase().includes("tầng g")) ? "FIXED" : zone.type }); }}><option value="">Chọn tầng</option>{allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
           <label className="staff-check"><input type="checkbox" checked={zone.isActive} onChange={e => setZone({ ...zone, isActive: e.target.checked })} />Đang khai thác</label>
-          <div className="operations-settings-actions"><button className="staff-button staff-button--primary" disabled={!zone.floorId}>Lưu khu</button>
+          <div className="operations-settings-actions"><button className="staff-button staff-button--primary">Lưu khu</button>
           {editId && <button type="button" className="staff-button staff-button--secondary" onClick={() => { setEdit(null); setZone(emptyZone()); }}>Chuyển sang thêm khu</button>}</div>
+          </> : <Notice>Chọn tầng trước, rồi nhập thông tin khu vực.</Notice>}
         </fieldset></form>
         </div>
       </section>}
