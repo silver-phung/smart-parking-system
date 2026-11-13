@@ -16,7 +16,6 @@ const canArea = (duty) => ["SLOT_VERIFIER", "BOTH"].includes(duty);
 const viewRules = {
   entry: canEnter,
   exit: canExit,
-  tickets: (duty) => canEnter(duty) || canExit(duty),
   bookings: canArea,
   verify: canArea,
   sessions: canArea,
@@ -41,7 +40,6 @@ export const dutyKinds = (duties) => {
 const staffNavItems = [
   ["entry", "/staff?view=entry", "Xe vào vãng lai"],
   ["exit", "/staff?view=exit", "Xe ra"],
-  ["tickets", "/staff?view=tickets", "Tra vé"],
   ["bookings", "/staff?view=bookings", "Xe đặt qua web"],
   ["verify", "/staff?view=verify", "Xác minh ô"],
   ["sessions", "/staff?view=sessions", "Xe đang gửi"],

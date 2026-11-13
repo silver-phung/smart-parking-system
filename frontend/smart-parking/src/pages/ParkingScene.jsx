@@ -119,7 +119,6 @@ export default function ParkingScene() {
           {role === "STAFF" && canGate && <>
             <Link className="btn btn--primary" to={`/staff?view=entry&${context}`}>Tiếp nhận xe vào</Link>
             <Link className="btn btn--outline" to={`/staff?view=exit&${context}`}>Đối chiếu xe ra</Link>
-            <Link className="btn btn--outline" to={`/staff?view=tickets&${context}`}>Tra cứu vé</Link>
           </>}
           {role === "STAFF" && canArea && <>
             <Link className="btn btn--primary" to={`/staff?view=verify&${context}`}>Xác minh ô thực tế</Link>

@@ -65,7 +65,7 @@ export function TicketEntry({ lot, onChanged, onBusyChange }) {
       <button type="submit" className="staff-button staff-button--primary" disabled={action.busy || !lot.isActive || zones.loading || Boolean(zones.error)}>
         {action.busy ? "Đang tiếp nhận…" : request.current ? "Gửi lại cùng lượt xe" : "Cấp vé và đưa vào hàng chờ"}
       </button>
-      {request.current && <Notice kind="warning">Yêu cầu đã gửi. Tra vé để đối chiếu; gửi lại sử dụng cùng mã sự kiện và nội dung.</Notice>}
+      {request.current && <Notice kind="warning">Yêu cầu đã gửi. Kiểm tra trạng thái lượt xe trước khi gửi lại; lần gửi lại sẽ dùng cùng mã sự kiện và nội dung.</Notice>}
       {request.current && <button className="staff-button" type="button" disabled={action.busy} onClick={reset}>Đã đối chiếu vé, nhập lượt khác</button>}
     </form>}
   </section>;
@@ -135,23 +135,3 @@ export function TicketVerification({ lot, revision, onChanged, onBusyChange, ini
   </>;
 }
 
-export function TicketLookup({ lot, onBusyChange }) {
-  const [code, setCode] = useState("");
-  const [result, setResult] = useState(null);
-  const [reason, setReason] = useState("");
-  const action = useStaffAction(onBusyChange);
-  return <section className="staff-panel"><h2>Tra vé và báo mất</h2>
-    <StaffError error={action.error} />
-    <form onSubmit={e => { e.preventDefault(); setResult(null); action.run(async () => setResult(await operationsApi(lot.lotId, `tickets/${encodeURIComponent(code.trim())}`))); }}>
-      <Field label="Mã vé"><input required disabled={action.busy} value={code} onChange={e => { setCode(e.target.value); setResult(null); }} /></Field>
-      <button className="staff-button" disabled={action.busy}>Tra vé</button>
-    </form>
-    {result && <><p>Vé {result.ticketCode} · {result.ticketStatus} · Lượt #{result.id}</p><p>{result.plateNumber || result.temporaryPlateNumber || "Chưa xác minh biển số"} · {result.verificationStatus} · {result.status}</p>
-      <Notice>Vé mất/thu hồi không cho xe ra. Quản lý hoặc Admin cần đối chiếu và xử lý thay vé.</Notice>
-      <Field label="Lý do báo mất vé"><textarea value={reason} maxLength={500} onChange={e => setReason(e.target.value)} disabled={action.busy} /></Field>
-      <button className="staff-button" disabled={action.busy || result.ticketStatus !== "ISSUED" || !reason.trim()} onClick={() => action.run(async () => {
-        await operationsApi(lot.lotId, `tickets/${encodeURIComponent(result.ticketCode)}/change`, { action: "LOST", reason });
-        setResult(await operationsApi(lot.lotId, `tickets/${encodeURIComponent(result.ticketCode)}`));
-      })}>Ghi nhận mất vé</button></>}
-  </section>;
-}

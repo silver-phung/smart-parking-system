@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import StaffBookings from "../components/staff/StaffBookings.jsx";
@@ -7,7 +7,7 @@ import {
   StaffDispatches,
   StaffSessions,
 } from "../components/staff/StaffLists.jsx";
-import { TicketEntry, TicketVerification, TicketLookup } from "../components/staff/TicketOperations.jsx";
+import { TicketEntry, TicketVerification } from "../components/staff/TicketOperations.jsx";
 import "../operations.css";
 import {
   Notice,
@@ -23,7 +23,6 @@ const views = [
   { id: "bookings", name: "Xe đặt qua web", description: "Xác nhận xe đã đặt và vị trí thực tế" },
   { id: "entry", name: "Xe vào", description: "Tiếp nhận xe vào khu bình thường" },
   { id: "exit", name: "Xe ra", description: "Đối chiếu tại cổng ra" },
-  { id: "tickets", name: "Tra vé", description: "Tra cứu và báo mất vé" },
   {
     id: "verify",
     name: "Xác minh ô",
@@ -43,7 +42,6 @@ function StaffContent() {
   const [selectedLotId, setSelectedLotId] = useState(params.get("lotId") || "");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
-  const tabRefs = useRef({});
   const [newBookingsCount, setNewBookingsCount] = useState(0);
   const [confirmedSession, setConfirmedSession] = useState(null);
   const loadLots = useCallback(async (signal) => {
@@ -63,7 +61,6 @@ function StaffContent() {
   const duty = lot?.duty;
   const visibleViews = views.filter((item) => canUseStaffView(duty, item.id));
   // "Xe đặt qua web" mở từ sidebar/thông báo, không có tab riêng trong dãy tab.
-  const tabViews = visibleViews.filter((item) => item.id !== "bookings");
   const view =
     visibleViews.find((item) => item.id === selectedView) ||
     visibleViews[0] ||
@@ -208,47 +205,7 @@ function StaffContent() {
               <StaffBookings key={lotId} lotId={lotId} lotIsActive={lot.isActive} revision={revision} onChanged={refresh} onBusyChange={setBusy} onNewBookingsChange={setNewBookingsCount} onConfirmed={session => { setConfirmedSession(session); open("exit", session.id); }} />
             </section>
           )}
-          <div
-            className="staff-tabs"
-            role="tablist"
-            aria-label="Nghiệp vụ Staff"
-          >
-            {tabViews.map((item, index) => (
-              <button
-                ref={(node) => {
-                  tabRefs.current[item.id] = node;
-                }}
-                type="button"
-                role="tab"
-                id={`staff-tab-${item.id}`}
-                aria-controls={`staff-panel-${item.id}`}
-                aria-selected={view.id === item.id}
-                tabIndex={view.id === item.id || (view.id === "bookings" && index === 0) ? 0 : -1}
-                key={item.id}
-                disabled={busy}
-                onClick={() => open(item.id)}
-                onKeyDown={(event) => {
-                  const nextIndex =
-                    event.key === "ArrowRight"
-                      ? (index + 1) % tabViews.length
-                      : event.key === "ArrowLeft"
-                        ? (index + tabViews.length - 1) % tabViews.length
-                        : event.key === "Home"
-                          ? 0
-                          : event.key === "End"
-                            ? tabViews.length - 1
-                            : null;
-                  if (nextIndex === null || busy) return;
-                  event.preventDefault();
-                  open(tabViews[nextIndex].id);
-                  tabRefs.current[tabViews[nextIndex].id]?.focus();
-                }}
-              >
-                <StaffIcon name={item.id} />
-                <span>{item.name}</span>
-              </button>
-            ))}
-          </div>
+
           <div className="staff-workspace-meta">
             <span>{view.description}</span>
             <span>
@@ -259,9 +216,8 @@ function StaffContent() {
           </div>
           {view.id !== "bookings" && <section
             className="staff-view"
-            role="tabpanel"
             id={`staff-panel-${view.id}`}
-            aria-labelledby={`staff-tab-${view.id}`}
+            aria-label={view.name}
             key={`${lotId}-${view.id}`}
           >
             {view.id === "exit" && confirmedSession?.id === Number(params.get("sessionId")) && <Notice kind="success">Đã xác nhận xe {confirmedSession.plateNumber} đỗ tại ô {confirmedSession.slotCode}. Phiên #{confirmedSession.id} đang hoạt động.</Notice>}
@@ -280,7 +236,6 @@ function StaffContent() {
                 initialSessionId={params.get("sessionId")}
               />
             )}
-            {view.id === "tickets" && <TicketLookup {...props} />}
             {view.id === "sessions" && (
               <StaffSessions {...props} onOpen={open} />
             )}
