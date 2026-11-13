@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import { apiRequest } from "../services/api.js";
 import { staffApi } from "../services/staffApi.js";
@@ -457,24 +457,6 @@ function ManagerContent() {
                 </select>
               </label>
             </div>
-            <nav className="workspace-tabs" aria-label="Điều hành bãi">
-              <Link className="btn btn--outline" to="/manager/assignments">Phân công</Link>
-              {[
-                ["overview", "Tổng quan"],
-                ["slots", "Ô đỗ / bảo trì"],
-                ["sessions", "Xe đang gửi"],
-              ].map(([key, label]) => (
-                <button
-                  className="btn btn--outline"
-                  key={key}
-                  disabled={action.busy}
-                  aria-pressed={view === key}
-                  onClick={() => setParams({ view: key })}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
           </div>
           <LotWorkspace
             key={`${lot.lotId}-${view}`}
