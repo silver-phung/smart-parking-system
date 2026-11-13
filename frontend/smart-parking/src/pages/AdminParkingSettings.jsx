@@ -21,13 +21,36 @@ const emptyZone = () => ({ code: "", name: "", type: "TRANSIENT", layout: "INSID
 const emptySlotDraft = (defaultFloorId = "", zoneId = "") => ({
   floorId: defaultFloorId,
   zoneId,
+  quantity: 1,
   slotCode: "",
   physicalStatus: "EMPTY",
-  positionX: "",
-  positionY: "",
-  positionZ: "",
   isActive: true,
 });
+
+function generateSlotCodes(slots, zone, quantity) {
+  const zoneSlots = slots.filter(slot => String(slot.zoneId) === String(zone.id));
+  const numberedCodes = zoneSlots.map(slot => {
+    const match = String(slot.slotCode || "").match(/^(.*?)(\d+)$/);
+    return match ? { prefix: match[1], sequence: Number(match[2]), width: match[2].length } : null;
+  }).filter(Boolean);
+  const family = numberedCodes.reduce((best, code) => !best || code.sequence > best.sequence ? code : best, null);
+  const prefix = family?.prefix || `${String(zone.code || "ZONE").trim().toUpperCase()}-`;
+  const width = family?.width || 3;
+  const nextSequence = family
+    ? Math.max(0, ...numberedCodes.filter(code => code.prefix === prefix).map(code => code.sequence)) + 1
+    : 1;
+  const usedCodes = new Set(slots.map(slot => String(slot.slotCode || "").toUpperCase()));
+  const generated = [];
+  let sequence = nextSequence;
+  while (generated.length < quantity) {
+    const candidate = `${prefix}${String(sequence).padStart(width, "0")}`;
+    sequence += 1;
+    if (usedCodes.has(candidate.toUpperCase())) continue;
+    usedCodes.add(candidate.toUpperCase());
+    generated.push(candidate);
+  }
+  return generated;
+}
 
 function LotSettings({ lot, view: selectedView, onBusyChange }) {
   const view = selectedView.id === "tickets" ? ticketView : selectedView;
@@ -49,17 +72,27 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
   const [editingSlot, setEditingSlot] = useState(null);
   const [slotFloorFilter, setSlotFloorFilter] = useState("");
   const [slotZoneFilter, setSlotZoneFilter] = useState("");
+  const [zoneFloorFilter, setZoneFloorFilter] = useState("");
 
   useEffect(() => { setMessage(""); action.setError(null); }, [view.id, action.setError]);
+  useEffect(() => {
+    setZoneFloorFilter("");
+    setEdit(null);
+    setZone(emptyZone());
+    setSlotFloorFilter("");
+    setSlotZoneFilter("");
+    setSlotDraft(emptySlotDraft(""));
+    setEditingSlot(null);
+  }, [lot.id]);
   const busy = action.busy || query.loading || Boolean(query.error);
-  const perform = work => action.run(async () => { setMessage(""); await work(); setMessage("Đã lưu vào máy chủ."); query.reload(); });
+  const perform = work => action.run(async () => { setMessage(""); const result = await work(); setMessage(typeof result === "string" ? result : "Đã lưu vào máy chủ."); query.reload(); });
 
   const allFloors = query.data?.layout?.floors || [];
   const allSlots = query.data?.layout?.slots || [];
-  const filteredSlots = slotFloorFilter
-    ? allSlots.filter(s => String(s.floorId) === String(slotFloorFilter))
-    : allSlots;
-  const visibleSlots = slotZoneFilter ? filteredSlots.filter(s => String(s.zoneId) === String(slotZoneFilter)) : filteredSlots;
+  const visibleZones = (query.data?.zones || []).filter(z => String(z.floorId ?? z.floorIds?.[0] ?? "") === String(zoneFloorFilter));
+  const visibleSlots = slotFloorFilter && slotZoneFilter
+    ? allSlots.filter(s => String(s.floorId) === String(slotFloorFilter) && String(s.zoneId) === String(slotZoneFilter))
+    : [];
 
   return <>
     <div className="operations-settings-toolbar">
@@ -74,27 +107,34 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
       {view.id === "zones" && <section className="staff-panel"><div><h2>Khu bãi</h2><p className="operations-settings-hint">Đóng khu để ngừng nhận xe mới. Các lượt xe đang gửi vẫn được giữ nguyên.</p></div>
         <div className="operations-settings-columns">
         <div><h3>Danh sách khu</h3>
-          {!query.loading && !query.error && !query.data?.zones.length && <Notice>Chưa có khu. Thêm khu bình thường hoặc khu vé tháng để bắt đầu.</Notice>}
-          <div className="operations-session-list">{query.data?.zones.map(z => {
+          <Field label="Tầng"><select value={zoneFloorFilter} onChange={e => {
+            const floorId = e.target.value;
+            const floor = allFloors.find(item => String(item.id) === floorId);
+            setZoneFloorFilter(floorId);
+            setEdit(null);
+            setZone({ ...emptyZone(), floorId, type: floor && (floor.floorNumber === 0 || floor.name?.toLocaleLowerCase().includes("tầng g")) ? "FIXED" : "TRANSIENT" });
+          }}><option value="">Chọn tầng để xem khu vực</option>{allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
+          {zoneFloorFilter && !query.loading && !query.error && !visibleZones.length && <Notice>Chưa có khu vực thuộc tầng này. Có thể thêm khu ở khung bên phải.</Notice>}
+          {!zoneFloorFilter && <Notice>Chọn tầng để xem các khu vực đang thuộc tầng đó.</Notice>}
+          <div className="operations-session-list">{visibleZones.map(z => {
             const assignedFloorId = z.floorId ?? z.floorIds?.[0] ?? "";
-            return <button type="button" className={`operations-session ${editId === z.id ? "is-selected" : ""}`} aria-pressed={editId === z.id} disabled={action.busy} key={z.id} onClick={() => { setEdit(z.id); setZone({ code: z.code, name: z.name, type: z.type, layout: z.layout || "INSIDE", isActive: z.isActive, floorId: String(assignedFloorId) }); }}>
+            return <button type="button" className={`operations-session ${editId === z.id ? "is-selected" : ""}`} aria-pressed={editId === z.id} disabled={action.busy} key={z.id} onClick={() => { setZoneFloorFilter(String(assignedFloorId)); setEdit(z.id); setZone({ code: z.code, name: z.name, type: z.type, layout: z.layout || "INSIDE", isActive: z.isActive, floorId: String(assignedFloorId) }); }}>
             <strong>{z.code} · {z.name}</strong><span>{zoneTypes[z.type] || z.type} · {z.isActive ? "Đang khai thác" : "Đã đóng"}</span><small>{query.data.layout.floors.find(f => String(f.id) === String(assignedFloorId))?.name || "Chưa gắn tầng"} · Chọn để chỉnh sửa</small>
           </button>;
           })}</div>
         </div>
         <form onSubmit={e => { e.preventDefault(); perform(async () => {
-          const selectedFloorId = Number(zone.floorId);
+          const selectedFloorId = Number(zoneFloorFilter);
           await operationsApi(lot.id, `zones${editId ? `/${editId}` : ""}`, {
             ...zone,
             floorId: selectedFloorId,
             // Keep the former API contract compatible while the local API process is restarted on s4/demo.
             floorIds: [selectedFloorId],
           }, editId ? "PUT" : "POST");
-          setEdit(null); setZone(emptyZone());
+          setEdit(null); setZone({ ...emptyZone(), floorId: String(selectedFloorId) });
         }); }}><fieldset className="operations-fields" disabled={busy}>
           <h3>{editId ? `Sửa khu #${editId}` : "Thêm khu"}</h3>
-          <Field label="Tầng"><select required value={zone.floorId} onChange={e => { const selectedFloor = allFloors.find(f => String(f.id) === e.target.value); setZone({ ...zone, floorId: e.target.value, type: selectedFloor && (selectedFloor.floorNumber === 0 || selectedFloor.name?.toLocaleLowerCase().includes("tầng g")) ? "FIXED" : zone.type }); }}><option value="">Chọn tầng trước</option>{allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
-          {zone.floorId ? <>
+          {zoneFloorFilter ? <>
           <div className="operations-form-grid">
             <Field label="Mã khu"><input required maxLength={30} value={zone.code} onChange={e => setZone({ ...zone, code: e.target.value })} /></Field>
             <Field label="Tên khu"><input required maxLength={100} value={zone.name} onChange={e => setZone({ ...zone, name: e.target.value })} /></Field>
@@ -102,8 +142,8 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
           <Field label="Loại khu"><select value={zone.type} onChange={e => setZone({ ...zone, type: e.target.value })}><option value="TRANSIENT" disabled={allFloors.find(f => String(f.id) === String(zone.floorId))?.floorNumber === 0 || allFloors.find(f => String(f.id) === String(zone.floorId))?.name?.toLocaleLowerCase().includes("tầng g")}>Bình thường</option><option value="FIXED">Vé tháng</option></select></Field>
           <label className="staff-check"><input type="checkbox" checked={zone.isActive} onChange={e => setZone({ ...zone, isActive: e.target.checked })} />Đang khai thác</label>
           <div className="operations-settings-actions"><button className="staff-button staff-button--primary">Lưu khu</button>
-          {editId && <button type="button" className="staff-button staff-button--secondary" onClick={() => { setEdit(null); setZone(emptyZone()); }}>Chuyển sang thêm khu</button>}</div>
-          </> : <Notice>Chọn tầng trước, rồi nhập thông tin khu vực.</Notice>}
+          {editId && <button type="button" className="staff-button staff-button--secondary" onClick={() => { setEdit(null); setZone({ ...emptyZone(), floorId: zoneFloorFilter }); }}>Chuyển sang thêm khu</button>}</div>
+          </> : <Notice>Chọn tầng ở danh sách bên trái trước khi thêm khu vực.</Notice>}
         </fieldset></form>
         </div>
       </section>}
@@ -176,15 +216,12 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
       {view.id === "slots" && <section className="staff-panel"><div><h2>Quản lý ô đỗ</h2><p className="operations-settings-hint">Thêm, sửa, xóa ô đỗ (slot), cập nhật trạng thái vật lý và cấu hình loại nhiên liệu phù hợp.</p></div>
         <div className="operations-settings-columns">
         <form onSubmit={e => { e.preventDefault(); perform(async () => {
-          const body = {
-            slotCode: slotDraft.slotCode.trim(),
-            zoneId: Number(slotDraft.zoneId),
-            isActive: slotDraft.isActive !== false,
-          };
-          for (const key of ["positionX", "positionY", "positionZ"]) {
-            body[key] = slotDraft[key] === "" || slotDraft[key] == null ? null : Number(slotDraft[key]);
-          }
           if (editingSlot) {
+            const body = {
+              slotCode: slotDraft.slotCode.trim(),
+              zoneId: Number(slotDraft.zoneId),
+              isActive: slotDraft.isActive !== false,
+            };
             await apiRequest(`/v1/parking-slots/${editingSlot.id}`, {
               method: "PUT",
               body: JSON.stringify(body),
@@ -192,21 +229,49 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
             setEditingSlot(null);
             setSlotDraft(emptySlotDraft(slotDraft.floorId, slotDraft.zoneId));
           } else {
-            body.physicalStatus = slotDraft.physicalStatus || "EMPTY";
-            await apiRequest(`/v1/parking-floors/${slotDraft.floorId}/slots`, {
-              method: "POST",
-              body: JSON.stringify(body),
-            });
-            setSlotDraft({ ...emptySlotDraft(slotDraft.floorId, slotDraft.zoneId), floorId: slotDraft.floorId });
+            const selectedZone = query.data?.zones.find(zone => String(zone.id) === String(slotDraft.zoneId));
+            const quantity = Math.max(1, Math.min(500, Number(slotDraft.quantity) || 1));
+            if (!selectedZone) throw new Error("Không tìm thấy khu vực đã chọn trong tầng này.");
+            const codes = generateSlotCodes(allSlots, selectedZone, quantity);
+            let createdCount = 0;
+            try {
+              for (const slotCode of codes) {
+                await apiRequest(`/v1/parking-floors/${slotDraft.floorId}/slots`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    slotCode,
+                    zoneId: Number(slotDraft.zoneId),
+                    isActive: slotDraft.isActive !== false,
+                    physicalStatus: slotDraft.physicalStatus || "EMPTY",
+                  }),
+                });
+                createdCount += 1;
+              }
+            } catch (error) {
+              throw new Error(`Đã tạo ${createdCount}/${quantity} ô. Lỗi khi tạo mã ${codes[createdCount] || "tiếp theo"}: ${error.message}`);
+            }
+            setSlotDraft({ ...emptySlotDraft(slotDraft.floorId, slotDraft.zoneId), quantity: 1 });
+            return `Đã tạo ${quantity} ô (${codes[0]}–${codes[codes.length - 1]}).`;
           }
         }); }}><fieldset disabled={busy} className="operations-fields"><h3>{editingSlot ? `Sửa ô ${editingSlot.slotCode}` : "Thêm ô"}</h3>
           {!editingSlot && (
             <>
-            <Field label="Tầng"><select required value={slotDraft.floorId} onChange={e => setSlotDraft({ ...slotDraft, floorId: e.target.value, zoneId: "" })}><option value="">Chọn tầng</option>{allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
-            <Field label="Khu vực"><select required disabled={!slotDraft.floorId} value={slotDraft.zoneId} onChange={e => setSlotDraft({ ...slotDraft, zoneId: e.target.value })}><option value="">Chọn khu vực</option>{query.data?.zones.filter(z => String(z.floorId) === String(slotDraft.floorId)).map(z => <option key={z.id} value={z.id}>{z.code} · {z.name}</option>)}</select></Field>
+            <Field label="Tầng"><select required value={slotDraft.floorId} onChange={e => {
+              const floorId = e.target.value;
+              setSlotDraft({ ...slotDraft, floorId, zoneId: "" });
+              setSlotFloorFilter(floorId);
+              setSlotZoneFilter("");
+            }}><option value="">Chọn tầng</option>{allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
+            <Field label="Khu vực"><select required disabled={!slotDraft.floorId} value={slotDraft.zoneId} onChange={e => {
+              setSlotDraft({ ...slotDraft, zoneId: e.target.value });
+              setSlotFloorFilter(slotDraft.floorId);
+              setSlotZoneFilter(e.target.value);
+            }}><option value="">Chọn khu vực</option>{query.data?.zones.filter(z => String(z.floorId ?? z.floorIds?.[0] ?? "") === String(slotDraft.floorId)).map(z => <option key={z.id} value={z.id}>{z.code} · {z.name}</option>)}</select></Field>
             </>
           )}
-          <Field label="Mã ô"><input required maxLength={20} value={slotDraft.slotCode} onChange={e => setSlotDraft({ ...slotDraft, slotCode: e.target.value })} /></Field>
+          {editingSlot
+            ? <Field label="Mã ô"><input required maxLength={20} value={slotDraft.slotCode} onChange={e => setSlotDraft({ ...slotDraft, slotCode: e.target.value })} /></Field>
+            : <Field label="Số ô cần tạo"><input type="number" min="1" max="500" required value={slotDraft.quantity} onChange={e => setSlotDraft({ ...slotDraft, quantity: e.target.value })} /></Field>}
           {!editingSlot && (
             <Field label="Trạng thái ban đầu">
               <select value={slotDraft.physicalStatus || "EMPTY"} onChange={e => setSlotDraft({ ...slotDraft, physicalStatus: e.target.value })}>
@@ -214,7 +279,6 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
               </select>
             </Field>
           )}
-          <div className="operations-form-grid">{["X", "Y", "Z"].map(axis => <Field key={axis} label={`Tọa độ ${axis}`}><input type="number" step="0.01" value={slotDraft[`position${axis}`] ?? ""} onChange={e => setSlotDraft({ ...slotDraft, [`position${axis}`]: e.target.value })} /></Field>)}</div>
           <label className="staff-check"><input type="checkbox" checked={slotDraft.isActive !== false} onChange={e => setSlotDraft({ ...slotDraft, isActive: e.target.checked })} />Đang sử dụng</label>
           <div className="operations-settings-actions">
             <button className="staff-button staff-button--primary" disabled={!editingSlot && (!slotDraft.floorId || !slotDraft.zoneId)}>{editingSlot ? "Lưu ô đỗ" : "Tạo ô"}</button>
@@ -224,15 +288,17 @@ function LotSettings({ lot, view: selectedView, onBusyChange }) {
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
             <h3 style={{ margin: 0 }}>Danh sách ô đỗ ({visibleSlots.length})</h3>
-            <select aria-label="Lọc theo tầng" value={slotFloorFilter} onChange={e => setSlotFloorFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
-              <option value="">Tất cả các tầng</option>
+            <select aria-label="Chọn tầng để xem ô đỗ" value={slotFloorFilter} onChange={e => { setSlotFloorFilter(e.target.value); setSlotZoneFilter(""); }} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
+              <option value="">Chọn tầng</option>
               {allFloors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
-            <select aria-label="Lọc theo khu vực" value={slotZoneFilter} onChange={e => setSlotZoneFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
-              <option value="">Tất cả khu vực</option>{query.data?.zones.filter(z => !slotFloorFilter || String(z.floorId) === String(slotFloorFilter)).map(z => <option key={z.id} value={z.id}>{z.code} · {z.name}</option>)}
+            <select aria-label="Chọn khu vực để xem ô đỗ" value={slotZoneFilter} disabled={!slotFloorFilter} onChange={e => setSlotZoneFilter(e.target.value)} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
+              <option value="">Chọn khu vực</option>{query.data?.zones.filter(z => String(z.floorId ?? z.floorIds?.[0] ?? "") === String(slotFloorFilter)).map(z => <option key={z.id} value={z.id}>{z.code} · {z.name}</option>)}
             </select>
           </div>
-          {!query.loading && !query.error && !visibleSlots.length && <Notice>Chưa có ô đỗ trong bãi/tầng/khu vực này.</Notice>}
+          {!slotFloorFilter || !slotZoneFilter
+            ? <Notice>Chọn tầng, sau đó chọn khu vực để xem danh sách ô đỗ.</Notice>
+            : !query.loading && !query.error && !visibleSlots.length && <Notice>Chưa có ô đỗ trong khu vực này.</Notice>}
           <div className="operations-slot-grid" style={{ display: "grid", gap: "10px", maxHeight: "480px", overflowY: "auto" }}>
             {visibleSlots.map(s => (
               <div key={s.id} style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", background: "#fff", display: "grid", gap: "8px" }}>
