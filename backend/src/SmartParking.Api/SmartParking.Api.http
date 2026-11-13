@@ -16,6 +16,17 @@ Accept: application/json
 GET {{SmartParking.Api_HostAddress}}/swagger/v1/swagger.json
 Accept: application/json
 
+### Confirm a pending booking at the actual parked slot (replace token, booking ID, slot ID, and image URL)
+POST {{SmartParking.Api_HostAddress}}/api/v1/parking-sessions/bookings/1/confirm-parked
+Authorization: ******
+Content-Type: application/json
+
+{
+  "plateNumber": "51F-123.45",
+  "slotId": 101,
+  "checkInImageUrl": "https://example.com/verified-plate.jpg"
+}
+
 ### Upload an image (replace the bearer token and local file path)
 POST {{SmartParking.Api_HostAddress}}/api/v1/images
 Authorization: Bearer {{accessToken}}

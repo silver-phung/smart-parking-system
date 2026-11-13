@@ -1,12 +1,14 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
-import { StaffEntry, StaffExit } from "../components/staff/StaffGate.jsx";
+import StaffBookings from "../components/staff/StaffBookings.jsx";
+import { StaffExit } from "../components/staff/StaffExit.jsx";
 import {
   StaffDispatches,
   StaffSessions,
 } from "../components/staff/StaffLists.jsx";
-import StaffVerification from "../components/staff/StaffVerification.jsx";
+import { TicketEntry, TicketVerification } from "../components/staff/TicketOperations.jsx";
+import "../operations.css";
 import {
   Notice,
   StaffError,
@@ -14,10 +16,12 @@ import {
   useStaffQuery,
 } from "../components/staff/StaffUI.jsx";
 import { staffApi } from "../services/staffApi.js";
+import { canUseStaffView } from "../services/staffDuty.js";
 import "../staff.css";
 
 const views = [
-  { id: "entry", name: "Xe vào", description: "Tiếp nhận xe vãng lai" },
+  { id: "bookings", name: "Xe đặt qua web", description: "Xác nhận xe đã đặt và vị trí thực tế" },
+  { id: "entry", name: "Xe vào", description: "Tiếp nhận xe vào khu bình thường" },
   { id: "exit", name: "Xe ra", description: "Đối chiếu tại cổng ra" },
   {
     id: "verify",
@@ -35,11 +39,11 @@ const views = [
 function StaffContent() {
   const [params, setParams] = useSearchParams();
   const selectedView = params.get("view") || "entry";
-  const view = views.find((item) => item.id === selectedView) || views[0];
-  const [selectedLotId, setSelectedLotId] = useState("");
+  const [selectedLotId, setSelectedLotId] = useState(params.get("lotId") || "");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
-  const tabRefs = useRef({});
+  const [newBookingsCount, setNewBookingsCount] = useState(0);
+  const [confirmedSession, setConfirmedSession] = useState(null);
   const loadLots = useCallback(async (signal) => {
     const result = await staffApi.assignedLots(signal);
     if (!Array.isArray(result))
@@ -53,6 +57,17 @@ function StaffContent() {
     lots.data?.find((item) => String(item.lotId) === selectedLotId) ||
     lots.data?.[0];
   const lotId = lot?.lotId;
+  // Mỗi Staff chỉ thấy chức năng của loại phân công tại bãi đang chọn (trực cổng hoặc trực khu vực).
+  const duty = lot?.duty;
+  const visibleViews = views.filter((item) => canUseStaffView(duty, item.id));
+  // "Xe đặt qua web" mở từ sidebar/thông báo, không có tab riêng trong dãy tab.
+  const view =
+    visibleViews.find((item) => item.id === selectedView) ||
+    visibleViews[0] ||
+    views.find((item) => item.id === "entry");
+  useEffect(() => {
+    if (lot && view.id !== selectedView) setParams({ view: view.id }, { replace: true });
+  }, [lot, view.id, selectedView, setParams]);
   const loadCapacity = useCallback(
     async (signal) =>
       lotId
@@ -80,16 +95,6 @@ function StaffContent() {
 
   return (
     <div className="staff-workspace container">
-      <header className="staff-workspace-heading">
-        <div>
-          <span className="staff-eyebrow">SMART PARKING / NHÂN VIÊN</span>
-          <h1>Trạm vận hành</h1>
-          <p>Tiếp nhận tại cổng. Xác minh tại ô. Theo dõi cùng một lượt xe.</p>
-        </div>
-        <span className="staff-shift-label">
-          <i /> Vận hành tại bãi
-        </span>
-      </header>
       <StaffError error={lots.error} />
       {lots.error && (
         <button
@@ -129,6 +134,7 @@ function StaffContent() {
                   {lots.data.map((item) => (
                     <option key={item.lotId} value={item.lotId}>
                       {item.lotName}
+                      {item.duty ? ` (${item.duty === "GATE" || item.duty === "GATE_IN" || item.duty === "GATE_OUT" ? "Trực cổng" : item.duty === "SLOT_VERIFIER" ? "Trực khu vực" : "Toàn quyền"})` : ""}
                       {!item.isActive ? " · Đóng nhận xe" : ""}
                     </option>
                   ))}
@@ -154,7 +160,7 @@ function StaffContent() {
           </section>
           <div className="staff-metrics" aria-label="Tình trạng bãi">
             <article>
-              <span>Nhận thêm xe vãng lai</span>
+              <span>Chỗ trống khu bình thường</span>
               <strong>
                 {count("availableForWalkIn")}
                 <small>chỗ</small>
@@ -183,47 +189,13 @@ function StaffContent() {
             </article>
           </div>
           <StaffError error={capacity.error} />
-          <div
-            className="staff-tabs"
-            role="tablist"
-            aria-label="Nghiệp vụ Staff"
-          >
-            {views.map((item, index) => (
-              <button
-                ref={(node) => {
-                  tabRefs.current[item.id] = node;
-                }}
-                type="button"
-                role="tab"
-                id={`staff-tab-${item.id}`}
-                aria-controls={`staff-panel-${item.id}`}
-                aria-selected={view.id === item.id}
-                tabIndex={view.id === item.id ? 0 : -1}
-                key={item.id}
-                disabled={busy}
-                onClick={() => open(item.id)}
-                onKeyDown={(event) => {
-                  const nextIndex =
-                    event.key === "ArrowRight"
-                      ? (index + 1) % views.length
-                      : event.key === "ArrowLeft"
-                        ? (index + views.length - 1) % views.length
-                        : event.key === "Home"
-                          ? 0
-                          : event.key === "End"
-                            ? views.length - 1
-                            : null;
-                  if (nextIndex === null || busy) return;
-                  event.preventDefault();
-                  open(views[nextIndex].id);
-                  tabRefs.current[views[nextIndex].id]?.focus();
-                }}
-              >
-                <StaffIcon name={item.id} />
-                <span>{item.name}</span>
-              </button>
-            ))}
-          </div>
+          {canUseStaffView(duty, "bookings") && newBookingsCount > 0 && view.id !== "bookings" && <Notice kind="success">Có {newBookingsCount} đặt chỗ mới. <button className="staff-text-button" disabled={busy} onClick={() => open("bookings")}>Xem xe đặt qua web</button></Notice>}
+          {canUseStaffView(duty, "bookings") && (
+            <section hidden={view.id !== "bookings"} aria-label="Xe đặt qua web">
+              <StaffBookings key={lotId} lotId={lotId} lotIsActive={lot.isActive} revision={revision} onChanged={refresh} onBusyChange={setBusy} onNewBookingsChange={setNewBookingsCount} onConfirmed={session => { setConfirmedSession(session); open("exit", session.id); }} />
+            </section>
+          )}
+
           <div className="staff-workspace-meta">
             <span>{view.description}</span>
             <span>
@@ -232,15 +204,15 @@ function StaffContent() {
                 : "Đang kiểm tra dữ liệu bãi"}
             </span>
           </div>
-          <section
+          {view.id !== "bookings" && <section
             className="staff-view"
-            role="tabpanel"
             id={`staff-panel-${view.id}`}
-            aria-labelledby={`staff-tab-${view.id}`}
+            aria-label={view.name}
             key={`${lotId}-${view.id}`}
           >
+            {view.id === "exit" && confirmedSession?.id === Number(params.get("sessionId")) && <Notice kind="success">Đã xác nhận xe {confirmedSession.plateNumber} đỗ tại ô {confirmedSession.slotCode}. Phiên #{confirmedSession.id} đang hoạt động.</Notice>}
             {view.id === "entry" && (
-              <StaffEntry {...props} capacity={currentCapacity?.value} />
+              <TicketEntry {...props} />
             )}
             {view.id === "exit" && (
               <StaffExit
@@ -249,7 +221,7 @@ function StaffContent() {
               />
             )}
             {view.id === "verify" && (
-              <StaffVerification
+              <TicketVerification
                 {...props}
                 initialSessionId={params.get("sessionId")}
               />
@@ -260,7 +232,7 @@ function StaffContent() {
             {view.id === "dispatches" && (
               <StaffDispatches {...props} onOpen={open} />
             )}
-          </section>
+          </section>}
           <p className="staff-permission-note">
             Thao tác được kiểm tra theo nhiệm vụ và bãi được phân công. Nếu bị
             từ chối quyền, liên hệ quản lý để kiểm tra phân công.

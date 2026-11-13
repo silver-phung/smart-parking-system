@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import RequireCustomer from "../components/RequireCustomer.jsx";
+import { useImageUrl } from "../services/useImageUrl.js";
 import {
   Feedback,
   Pager,
@@ -10,6 +11,13 @@ import {
   statusLabel,
   useResource,
 } from "../components/WorkspaceUI.jsx";
+
+function SessionPhoto({ url, label }) {
+  const image = useImageUrl(url);
+  if (!url) return <p>Chưa có ảnh.</p>;
+  if (!image.source) return <p>{image.error ? "Không tải được ảnh." : "Đang tải ảnh…"}</p>;
+  return <img src={image.source} alt={label} loading="lazy" referrerPolicy="no-referrer" />;
+}
 
 function Sessions() {
   const [page, setPage] = useState(1);
@@ -45,28 +53,17 @@ function Sessions() {
     }).format(value || 0);
   return (
     <section className="workspace container">
-      <header className="workspace-heading">
-        <div>
-          <span className="tag">Khách hàng</span>
-          <h1>Phiên gửi xe của tôi</h1>
-          <p>Theo dõi xe đang gửi và lịch sử ra vào của bạn.</p>
-        </div>
-        <button
-          className="btn btn--outline"
-          disabled={list.loading}
-          onClick={() => refresh((n) => n + 1)}
-        >
-          Làm mới
-        </button>
-      </header>
-      <nav className="workspace-tabs">
-        <Link to="/customer">Bãi đỗ</Link>
-        <Link className="active" to="/customer/sessions">
-          Phiên gửi xe
-        </Link>
-        <Link to="/customer/profile">Hồ sơ</Link>
-      </nav>
       <section className="workspace-panel">
+        <div className="workspace-heading">
+          <h2>Phiên gửi xe</h2>
+          <button
+            className="btn btn--outline"
+            disabled={list.loading}
+            onClick={() => refresh((n) => n + 1)}
+          >
+            Làm mới
+          </button>
+        </div>
         <div className="workspace-filters">
           <label>
             Trạng thái
@@ -210,16 +207,7 @@ function Sessions() {
                 ].map(([label, url]) => (
                   <div key={label}>
                     <h3>{label}</h3>
-                    {url ? (
-                      <img
-                        src={url}
-                        alt={label}
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <p>Chưa có ảnh.</p>
-                    )}
+                    <SessionPhoto url={url} label={label} />
                   </div>
                 ))}
               </div>

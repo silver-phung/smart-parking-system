@@ -23,8 +23,7 @@ public class ParkingSessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Check-in xe vào bãi: Tạo phiên đỗ mới, gán ô đỗ (nếu có), tăng occupancy và kích hoạt chống quay vòng (Anti-Passback).
-    /// Dành cho ADMIN hoặc MANAGER/STAFF được phân công tại bãi đỗ xe này.
+    /// Nhận xe vãng lai tại cổng. Xe có booking phải được xác minh trực tiếp tại ô đỗ.
     /// </summary>
     [HttpPost("check-in")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
@@ -45,6 +44,11 @@ public class ParkingSessionsController : ControllerBase
         var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
+        if (request.EntryRecognitionId.HasValue
+            && !await HttpContext.RequestServices.GetRequiredService<IParkingAuthorizationService>()
+                .CanOperateGateAsync(actorId ?? 0, actorRole, request.LotId, ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "You are not assigned to gate duty at this parking lot." });
+
         var (success, message, session) = await _sessionService.CheckInAsync(request, actorId, actorRole, clientIp, ct);
         if (!success)
         {
@@ -56,7 +60,11 @@ public class ParkingSessionsController : ControllerBase
             {
                 return NotFound(new { message });
             }
-            if (message.Contains("chưa kết thúc (ACTIVE/PAID)") || message.Contains("hiện đang được phân công") || message.Contains("hết chỗ khả dụng") || message.Contains("đã hết chỗ"))
+            if (message.Contains("chưa kết thúc (ACTIVE/PAID)")
+                || message.Contains("hiện đang được phân công")
+                || message.Contains("hết chỗ khả dụng")
+                || message.Contains("đã hết chỗ")
+                || message.Contains("booking đang chờ"))
             {
                 return Conflict(new { message });
             }
@@ -71,7 +79,54 @@ public class ParkingSessionsController : ControllerBase
     }
 
     /// <summary>
-    /// Check-out xe rời bãi: Xác nhận thủ công từ nhân viên/quản trị viên khi xe rời bãi (chưa tích hợp cảm biến IoT cổng ra).
+    /// Staff xác minh booking, biển số, ảnh và ô xe đã đỗ; tạo phiên và cập nhật ô sang OCCUPIED trong cùng giao dịch.
+    /// </summary>
+    [HttpPost("bookings/{bookingId:long}/confirm-parked")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
+    [ProducesResponseType(typeof(ParkingSessionDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmBookingParked(
+        long bookingId,
+        [FromBody] ConfirmBookingParkedRequestDto request,
+        CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var actorId = GetCurrentUserId();
+        var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var (success, message, session) = await _sessionService.ConfirmBookingParkedAsync(
+            bookingId, request, actorId, actorRole, clientIp, ct);
+
+        if (!success)
+        {
+            if (message.Contains("không có quyền"))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message });
+            if (message.Contains("Không tìm thấy"))
+                return NotFound(new { message });
+            if (message.Contains("không còn chờ")
+                || message.Contains("đã hết hạn")
+                || message.Contains("đang hoạt động")
+                || message.Contains("đang được xe")
+                || message.Contains("đã được phân"))
+                return Conflict(new { message });
+            return BadRequest(new { message });
+        }
+
+        return CreatedAtAction(nameof(GetSessionById), new { id = session!.Id }, new
+        {
+            message,
+            data = session
+        });
+    }
+
+    /// <summary>
+    /// Check-out xe rời bãi sau khi AI nhận diện và staff xác nhận biển số tại cổng.
     /// Chuyển trạng thái phiên sang COMPLETED và giải phóng ô đỗ về EMPTY nếu trước đó có xe đỗ.
     /// Dành cho ADMIN hoặc MANAGER/STAFF được phân công tại bãi đỗ xe này.
     /// </summary>
@@ -93,6 +148,16 @@ public class ParkingSessionsController : ControllerBase
         var actorRole = User.FindFirst(ClaimTypes.Role)?.Value ?? Roles.Admin;
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
+        if (!request.ExitRecognitionId.HasValue && string.IsNullOrWhiteSpace(request.TicketCode)
+            && actorId.HasValue)
+        {
+            var candidate = await _sessionService.GetSessionByIdAsync(id, actorId, actorRole, ct);
+            if (candidate is not null
+                && !await HttpContext.RequestServices.GetRequiredService<IParkingAuthorizationService>()
+                    .CanOperateGateAsync(actorId.Value, actorRole, candidate.LotId, ct))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "You are not assigned to gate duty at this parking lot." });
+        }
+
         var (success, message, session) = await _sessionService.CheckOutAsync(id, request, actorId, actorRole, clientIp, ct);
         if (!success)
         {
@@ -112,6 +177,25 @@ public class ParkingSessionsController : ControllerBase
             message,
             data = session
         });
+    }
+
+    /// <summary>
+    /// Thống kê lưu lượng xe theo ngày trong tháng (chỉ ADMIN).
+    /// </summary>
+    [HttpGet("monthly-stats")]
+    [Authorize(Roles = Roles.Admin)]
+    [ProducesResponseType(typeof(MonthlyTrafficStatsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMonthlyStats([FromQuery] int? year, [FromQuery] int? month, [FromQuery] int? lotId, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow.AddHours(7);
+        var y = year ?? now.Year;
+        var m = month ?? now.Month;
+        if (y < 2000 || y > 2100 || m < 1 || m > 12)
+        {
+            return BadRequest(new { message = "Năm hoặc tháng không hợp lệ." });
+        }
+
+        return Ok(await _sessionService.GetMonthlyTrafficStatsAsync(y, m, lotId, ct));
     }
 
     /// <summary>

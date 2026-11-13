@@ -1,4 +1,5 @@
 import { apiRequest } from "./api.js";
+import { operationsApi } from "./operationsApi.js";
 
 export const normalizePlate = (value = "") =>
   value.trim().toUpperCase().replace(/\s+/g, " ");
@@ -130,6 +131,23 @@ export const staffApi = {
         { signal },
       ),
     ),
+  pendingBookings: async (lotId, signal) => {
+    const loadPage = (pageNumber) =>
+      data(
+        `/v1/bookings?${query({ lotId, status: "PENDING", pageNumber, pageSize: 100 })}`,
+        { signal },
+      );
+    const firstPage = readPage(await loadPage(1));
+    const items = [...firstPage.items];
+    for (let pageNumber = 2; pageNumber <= firstPage.totalPages; pageNumber += 1) {
+      items.push(...readPage(await loadPage(pageNumber)).items);
+    }
+
+    return {
+      ...firstPage,
+      items: [...new Map(items.map((booking) => [String(booking.id), booking])).values()],
+    };
+  },
   dispatchPage: async (lotId, page = 1, status = "", signal) =>
     readPage(
       await data(
@@ -184,7 +202,11 @@ export const staffApi = {
   },
   async findSession(lotId, value, mode = "plate", signal) {
     let session;
-    if (mode === "id") {
+    if (mode === "ticket") {
+      const match = await operationsApi(lotId, `tickets/${encodeURIComponent(value.trim())}`, null, null, signal);
+      if (match.ticketStatus !== "ISSUED") throw new Error("Vé mất, đã thay hoặc thu hồi. Cần quản lý đối chiếu và xử lý vé.");
+      session = { ...await staffApi.session(match.id, signal), ticketCode: match.ticketCode };
+    } else if (mode === "id") {
       if (!/^\d+$/.test(value.trim()) || Number(value) < 1)
         throw new Error("Nhập mã phiên là số nguyên dương.");
       session = await staffApi.session(value.trim(), signal);
@@ -206,35 +228,51 @@ export const staffApi = {
       throw new Error("Không tìm thấy phiên xe tại bãi đang chọn.");
     return session;
   },
-  detect(file) {
+  detect(file, lotId, purpose = "ENTRY") {
     validatePhoto(file);
     const body = new FormData();
     body.append("file", file);
-    return data("/v1/staff/detect", { method: "POST", body });
+    return data(`/v1/staff/detect?${query({ lotId, purpose })}`, { method: "POST", body });
   },
   async upload(file) {
     validatePhoto(file);
     const body = new FormData();
     body.append("file", file);
     const image = await data("/v1/images", { method: "POST", body });
-    if (!image?.url || !/^https?:\/\//i.test(image.url))
+    if (!image?.url || !(/^https?:\/\//i.test(image.url) ||
+      /^\/api\/v1\/images\/content\/[a-f0-9]{32}$/.test(image.url)))
       throw new Error(
         "Chưa lưu được ảnh xe. Hãy thử lại hoặc bỏ ảnh để nhập tay.",
       );
     return image.url;
   },
-  confirmDetection: (id, plateNumber, note) =>
+  confirmDetection: (id, plateNumber, note, lotId) =>
     post(`/v1/staff/detections/${id}/confirm`, {
       plateNumber: validatePlate(plateNumber),
       note,
+      ...(lotId ? { lotId: Number(lotId) } : {}),
     }),
-  checkIn: (lotId, plateNumber, imageUrl) =>
+  confirmExitDetection: (id, sessionId, plateNumber, note, lotId) =>
+    post(`/v1/staff/detections/${id}/confirm-exit`, {
+      sessionId: Number(sessionId),
+      plateNumber: validatePlate(plateNumber),
+      note,
+      ...(lotId ? { lotId: Number(lotId) } : {}),
+    }),
+  checkIn: (lotId, plateNumber, imageUrl, entryRecognitionId) =>
     post("/v1/parking-sessions/check-in", {
       lotId: Number(lotId),
       plateNumber: validatePlate(plateNumber),
+      ...(entryRecognitionId ? { entryRecognitionId: Number(entryRecognitionId) } : {}),
       ...(imageUrl ? { checkInImageUrl: imageUrl } : {}),
     }),
-  async checkOut(sessionId, lotId, plateNumber, imageUrl) {
+  confirmBookingParked: (bookingId, plateNumber, slotId, imageUrl) =>
+    post(`/v1/parking-sessions/bookings/${bookingId}/confirm-parked`, {
+      plateNumber: validatePlate(plateNumber),
+      slotId: Number(slotId),
+      checkInImageUrl: imageUrl,
+    }),
+  async checkOut(sessionId, lotId, plateNumber, imageUrl, ticketCode, exitRecognitionId, note) {
     const fresh = await staffApi.session(sessionId);
     if (!fresh || fresh.lotId !== Number(lotId))
       throw new Error("Phiên xe không thuộc bãi đang chọn.");
@@ -249,10 +287,12 @@ export const staffApi = {
       );
     return post(`/v1/parking-sessions/${sessionId}/check-out`, {
       confirmedPlateNumber: plate,
+      ...(ticketCode ? { ticketCode: ticketCode.trim().toUpperCase() } : {}),
+      ...(exitRecognitionId ? { exitRecognitionId: Number(exitRecognitionId) } : {}),
       ...(imageUrl ? { checkOutImageUrl: imageUrl } : {}),
     });
   },
-  async slotAction({ mode, session, slotId, notes, dispatch }) {
+  async slotAction({ mode, session, slotId, notes, dispatch, observedPlate }) {
     const [freshSession, slot, sessions] = await Promise.all([
       staffApi.session(session.id),
       staffApi.slot(slotId),
@@ -267,6 +307,11 @@ export const staffApi = {
         "Ô hoặc phiên xe đã thay đổi, đang được xe khác sử dụng hoặc không còn khả dụng. Hãy làm mới và chọn lại.",
       );
     }
+    if (
+      mode !== "assign" &&
+      !platesMatch(validatePlate(observedPlate), freshSession.plateNumber)
+    )
+      throw new Error("Biển số thực tế không khớp với phiên xe vào cổng.");
     if (mode === "assign") {
       return dispatch
         ? post(`/v1/parking-dispatches/${dispatch.id}/assign`, {

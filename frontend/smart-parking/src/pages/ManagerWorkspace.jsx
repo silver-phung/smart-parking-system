@@ -104,7 +104,7 @@ function LotWorkspace({ lotId, revision, refresh, busy, action, view }) {
           </strong>
         </article>
         <article>
-          <span>Chỗ nhận xe vãng lai</span>
+          <span>Chỗ trống khu bình thường</span>
           <strong>{c?.availableForWalkIn ?? "—"}</strong>
         </article>
         <article>
@@ -409,15 +409,7 @@ function ManagerContent() {
     assigned.find((l) => String(l.lotId) === selectedLot) || assigned[0];
   return (
     <section className="workspace container">
-      <header className="workspace-heading">
-        <div>
-          <span className="tag">Quản lý bãi</span>
-          <h1>Điều hành bãi đỗ</h1>
-          <p>
-            {assigned.length} bãi được phân công · Theo dõi xe và quản lý trạng
-            thái tiếp nhận.
-          </p>
-        </div>
+      <div className="workspace-actions" style={{ justifyContent: "flex-end", marginBottom: 12 }}>
         <button
           className="btn btn--outline"
           disabled={action.busy || lots.loading}
@@ -425,7 +417,7 @@ function ManagerContent() {
         >
           Làm mới dữ liệu
         </button>
-      </header>
+      </div>
       <Feedback
         loading={lots.loading}
         error={lots.error || action.error}
@@ -465,23 +457,6 @@ function ManagerContent() {
                 </select>
               </label>
             </div>
-            <nav className="workspace-tabs" aria-label="Điều hành bãi">
-              {[
-                ["overview", "Tổng quan"],
-                ["slots", "Ô đỗ / bảo trì"],
-                ["sessions", "Xe đang gửi"],
-              ].map(([key, label]) => (
-                <button
-                  className="btn btn--outline"
-                  key={key}
-                  disabled={action.busy}
-                  aria-pressed={view === key}
-                  onClick={() => setParams({ view: key })}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
           </div>
           <LotWorkspace
             key={`${lot.lotId}-${view}`}

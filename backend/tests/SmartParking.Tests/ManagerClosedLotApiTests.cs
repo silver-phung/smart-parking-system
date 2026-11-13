@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Data;
+using SmartParking.Persistence.Data;
 using Xunit;
 
 namespace SmartParking.Tests;

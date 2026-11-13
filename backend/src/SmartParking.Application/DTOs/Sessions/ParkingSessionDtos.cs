@@ -10,6 +10,10 @@ public class ParkingSessionDto
     public long? VehicleId { get; set; }
     public long? BookingId { get; set; }
     public string PlateNumber { get; set; } = string.Empty;
+    public string VerificationStatus { get; set; } = "LEGACY";
+    public int? ZoneId { get; set; }
+    public long? PolicyId { get; set; }
+    public long Revision { get; set; }
     public DateTime CheckInTime { get; set; }
     public DateTime? CheckOutTime { get; set; }
     public long? CurrentSlotId { get; set; }
@@ -38,15 +42,35 @@ public class CheckInRequestDto
 
     [MaxLength(500, ErrorMessage = "URL hình ảnh check-in không được vượt quá 500 ký tự.")]
     public string? CheckInImageUrl { get; set; }
+
+    public long? EntryRecognitionId { get; set; }
+}
+
+public class ConfirmBookingParkedRequestDto
+{
+    [Required(ErrorMessage = "Biển số xe không được để trống.")]
+    [StringLength(20, MinimumLength = 3, ErrorMessage = "Biển số xe phải từ 3 đến 20 ký tự.")]
+    public string PlateNumber { get; set; } = string.Empty;
+
+    [Range(1, long.MaxValue, ErrorMessage = "ID ô đỗ không hợp lệ.")]
+    public long SlotId { get; set; }
+
+    [Required(ErrorMessage = "Ảnh biển số xe là bắt buộc.")]
+    [MaxLength(500, ErrorMessage = "URL hình ảnh không được vượt quá 500 ký tự.")]
+    public string CheckInImageUrl { get; set; } = string.Empty;
 }
 
 public class CheckOutRequestDto
 {
+    [MaxLength(40)]
+    public string? TicketCode { get; set; }
     [MaxLength(500, ErrorMessage = "URL hình ảnh check-out không được vượt quá 500 ký tự.")]
     public string? CheckOutImageUrl { get; set; }
 
     [MaxLength(20, ErrorMessage = "Biển số xe xác nhận xuất bãi không được vượt quá 20 ký tự.")]
     public string? ConfirmedPlateNumber { get; set; }
+
+    public long? ExitRecognitionId { get; set; }
 
     public bool? AllowExitWithoutPayment { get; set; }
 

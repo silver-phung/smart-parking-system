@@ -17,8 +17,18 @@ public sealed record StaffDetectionDto(
     string? ConfirmedPlateNumber = null,
     long? ConfirmedByStaffUserId = null,
     DateTime? ConfirmedAt = null,
-    string? ConfirmationNote = null);
+    string? ConfirmationNote = null,
+    int? ParkingLotId = null,
+    string? Purpose = null,
+    long? MatchedParkingSessionId = null);
 
 public sealed record ConfirmStaffDetectionRequestDto(
     string PlateNumber,
-    string? Note);
+    string? Note,
+    int LotId = 0);
+
+public sealed record ConfirmExitStaffDetectionRequestDto(
+    string PlateNumber,
+    string? Note,
+    int LotId,
+    long SessionId);

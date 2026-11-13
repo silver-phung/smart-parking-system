@@ -15,7 +15,7 @@ Smart Parking là hệ thống OJT gồm backend ASP.NET Core/.NET 10, PostgreSQ
 - Auth hỗ trợ đăng nhập, refresh và logout; dùng JWT, lưu hash refresh token trong DB, giới hạn tốc độ đăng nhập và khóa tạm khi nhập sai nhiều lần.
 - Các role hiện có: `ADMIN`, `MANAGER`, `STAFF`, `USER`. Quyền vận hành được giới hạn theo bãi được phân công.
 - Nghiệp vụ gồm quản lý bãi/tầng/ô, phương tiện, phiên gửi xe, đặt chỗ, điều phối ô và phân công nhân viên vào bãi.
-- Booking giữ sức chứa thay vì giữ cứng một ô. Check-in kiểm tra booking/công suất; dispatch tách riêng phân công ô và xác nhận xe đã đỗ.
+- Booking giữ sức chứa thay vì giữ cứng một ô. Xe booking bỏ qua check-in cổng; Staff có quyền SLOT_VERIFIER xác minh booking/biển số/ảnh tại ô thực tế, tạo phiên và cập nhật ô OCCUPIED nguyên tử.
 - EF Core/PostgreSQL có migration cho Accounts, parking core, staff assignments và booking/capacity. Chưa xác minh module thanh toán/biểu phí trong backend tại mốc tài liệu.
 
 ### Event, IoT và AI

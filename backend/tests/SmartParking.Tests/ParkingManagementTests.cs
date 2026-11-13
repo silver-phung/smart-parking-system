@@ -1,3 +1,4 @@
+using SmartParking.Application.Common.Helpers;
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -479,12 +480,12 @@ public class ParkingManagementTests
         var createMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.CreateSlot));
         var createAuth = createMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(createAuth);
-        Assert.Equal(Roles.Admin, createAuth.Roles);
+        Assert.Equal($"{Roles.Admin},{Roles.Manager}", createAuth.Roles);
 
         var updateMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.UpdateSlot));
         var updateAuth = updateMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(updateAuth);
-        Assert.Equal(Roles.Admin, updateAuth.Roles);
+        Assert.Equal($"{Roles.Admin},{Roles.Manager}", updateAuth.Roles);
 
         var patchStatusMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.UpdateSlotPhysicalStatus));
         var patchAuth = patchStatusMethod?.GetCustomAttribute<AuthorizeAttribute>();
@@ -495,7 +496,7 @@ public class ParkingManagementTests
         var deleteMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.DeleteSlot));
         var deleteAuth = deleteMethod?.GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(deleteAuth);
-        Assert.Equal(Roles.Admin, deleteAuth.Roles);
+        Assert.Equal($"{Roles.Admin},{Roles.Manager}", deleteAuth.Roles);
 
         var getByFloorMethod = typeof(ParkingSlotsController).GetMethod(nameof(ParkingSlotsController.GetSlotsByFloorId));
         var getByFloorAllowAnon = getByFloorMethod?.GetCustomAttribute<AllowAnonymousAttribute>();
@@ -674,11 +675,11 @@ public class ParkingManagementTests
         Assert.Equal(1, deployedAvailableSlots);         // Available deployed spots = 1
 
         // Verify mathematical consistency with Booking/Check-in capacity engine
-        var calc1 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot1.Id, lot1);
+        var calc1 = await ParkingLotCapacityHelper.CalculateAsync(context, lot1.Id, lot1);
         Assert.Equal(lot1Dto.TotalCapacity, calc1.TotalCapacity);
         Assert.Equal(lot1Dto.AvailableSlotsCount, calc1.AvailableCapacity);
 
-        var calc2 = await SmartParking.Infrastructure.Common.ParkingLotCapacityHelper.CalculateAsync(context, lot2.Id, lot2);
+        var calc2 = await ParkingLotCapacityHelper.CalculateAsync(context, lot2.Id, lot2);
         Assert.Equal(lot2Dto.TotalCapacity, calc2.TotalCapacity);
         Assert.Equal(lot2Dto.AvailableSlotsCount, calc2.AvailableCapacity);
         Assert.Equal(100000, calc2.ConfiguredCapacity);

@@ -8,7 +8,6 @@ namespace SmartParking.Infrastructure.Repositories;
 /// In-memory repository cho ParkingEventLog.
 ///
 /// Sprint 3 note: Dùng in-memory để unblock phát triển khi chưa có DB schema chính thức.
-/// Khi Trí hoàn thành migration PostgreSQL/Neon, thay bằng EfParkingEventLogRepository.
 /// Đảm bảo ràng buộc UNIQUE(event_id) được giữ bằng ConcurrentDictionary.
 /// </summary>
 public class InMemoryParkingEventLogRepository : IParkingEventLogRepository

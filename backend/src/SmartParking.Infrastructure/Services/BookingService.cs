@@ -1,3 +1,4 @@
+using SmartParking.Persistence.Data;
 using System.Collections.Concurrent;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -10,7 +11,6 @@ using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Bookings;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Common;
 
 namespace SmartParking.Infrastructure.Services;
 
@@ -54,8 +54,14 @@ public class BookingService : IBookingService
             return (false, 400, $"Bãi đỗ xe '{lot.Name}' hiện đang đóng cửa hoặc tạm ngừng hoạt động.", null);
         }
 
+        var bookingPolicy = await ParkingPolicyResolver.ResolveAsync(_context, lot.Id, null, DateTime.UtcNow, ct);
+        if (bookingPolicy == null && await _context.ParkingZones.AnyAsync(z => z.LotId == lot.Id, ct))
+            return (false, 409, "Chưa có chính sách đặt chỗ được duyệt có hiệu lực cho bãi.", null);
+
         var startTime = request.StartTime == default ? DateTime.UtcNow : request.StartTime;
-        if (request.StartTime != default && request.StartTime < DateTime.UtcNow.AddMinutes(-15))
+        // Existing unzoned data retains its legacy tolerance. Configured sites read the approved source.
+        var pastTolerance = bookingPolicy == null ? 15 : 0;
+        if (request.StartTime != default && (DateTime.UtcNow - request.StartTime).TotalMinutes > pastTolerance)
         {
             return (false, 400, "Thời gian bắt đầu đặt chỗ không được ở quá khứ.", null);
         }
@@ -64,6 +70,8 @@ public class BookingService : IBookingService
         {
             return (false, 400, "Thời gian kết thúc đặt chỗ phải sau thời gian bắt đầu.", null);
         }
+
+        await ExpireNoShowBookingsAsync(request.LotId, ct);
 
         // 1. Resolve vehicle and validate ownership
         Vehicle? vehicle = null;
@@ -171,11 +179,10 @@ public class BookingService : IBookingService
                 }
 
                 var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-                var username = user?.Username ?? "user";
-
                 var booking = new Booking
                 {
                     LotId = lot.Id,
+                    PolicyId = bookingPolicy?.Id,
                     UserId = userId,
                     VehicleId = vehicle.Id,
                     PlateNumber = normalizedPlate,
@@ -219,7 +226,7 @@ public class BookingService : IBookingService
                 _logger.LogInformation("User {UserId} reserved capacity at lot {LotId} for vehicle {PlateNumber}. Booking ID: {BookingId}",
                     userId, lot.Id, normalizedPlate, booking.Id);
 
-                var dto = MapToDto(booking, lot.Name, lot.Address, username);
+                var dto = MapToDto(booking, lot.Name, lot.Address, user);
                 return (true, 201, "Đặt chỗ giữ sức chứa thành công.", dto);
             }
             catch (DbUpdateException ex)
@@ -243,6 +250,44 @@ public class BookingService : IBookingService
         {
             lotLock.Release();
         }
+    }
+
+    public async Task<int> ExpireNoShowBookingsAsync(int? lotId = null, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var lots = await _context.Bookings.AsNoTracking()
+            .Where(b => b.Status == BookingStatuses.Pending && b.StartTime <= now && (!lotId.HasValue || b.LotId == lotId))
+            .Select(b => b.LotId).Distinct().OrderBy(id => id).ToListAsync(ct);
+        var expired = 0;
+        foreach (var id in lots)
+        {
+            var gate = ParkingLotLockHelper.GetSemaphore(id);
+            await gate.WaitAsync(ct);
+            try
+            {
+                await using var transaction = await _context.BeginTransactionAsync(ct);
+                if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
+                    await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { ParkingLotLockHelper.LotLockBase + id }, ct);
+                var pending = await _context.Bookings.Include(b => b.Policy)
+                    .Where(b => b.LotId == id && b.Status == BookingStatuses.Pending && b.StartTime <= now).ToListAsync(ct);
+                foreach (var booking in pending)
+                {
+                    var grace = booking.Policy?.LateArrivalMinutes ?? BookingStatuses.NoShowGracePeriodMinutes;
+                    if (booking.StartTime.AddMinutes(grace) > now) continue;
+                    booking.Status = BookingStatuses.Expired;
+                    booking.UpdatedAt = now;
+                    _context.AuditLogs.Add(new AuditLog { Action = "EXPIRE_BOOKING_NO_SHOW", TargetEntity = "bookings",
+                        TargetId = booking.Id.ToString(), CreatedAt = now,
+                        OldValues = JsonSerializer.Serialize(new { Status = BookingStatuses.Pending }, JsonOptions),
+                        NewValues = JsonSerializer.Serialize(new { Status = BookingStatuses.Expired, GraceMinutes = grace, booking.PolicyId }, JsonOptions) });
+                    expired++;
+                }
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            finally { gate.Release(); }
+        }
+        return expired;
     }
 
     public async Task<PagedResult<BookingDto>> GetMyBookingsAsync(
@@ -280,7 +325,7 @@ public class BookingService : IBookingService
             .Take(pageSize)
             .ToListAsync(ct);
 
-        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User.Username)).ToList();
+        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User)).ToList();
         return PagedResult<BookingDto>.Create(dtos, totalCount, page, pageSize);
     }
 
@@ -408,6 +453,14 @@ public class BookingService : IBookingService
                     ? (currentUserRole == Roles.User ? "Người dùng yêu cầu hủy đặt chỗ." : "Nhân sự quản lý hủy đặt chỗ theo yêu cầu vận hành.")
                     : request.Reason.Trim();
 
+                if (lockedBooking.PolicyId.HasValue)
+                {
+                    var appliedPolicy = await _context.ParkingPolicies.AsNoTracking().FirstOrDefaultAsync(p => p.Id == lockedBooking.PolicyId, ct);
+                    if (appliedPolicy == null || appliedPolicy.CancellationAction == "DENY" ||
+                        (appliedPolicy.CancellationNoticeMinutes.HasValue && (lockedBooking.StartTime - DateTime.UtcNow).TotalMinutes < appliedPolicy.CancellationNoticeMinutes.Value))
+                        return (false, 409, "Không được hủy theo phiên bản chính sách đã áp dụng cho lượt đặt này.", null);
+                }
+
                 lockedBooking.Status = BookingStatuses.Cancelled;
                 lockedBooking.CancelledAt = DateTime.UtcNow;
                 lockedBooking.CancellationReason = reason;
@@ -439,7 +492,7 @@ public class BookingService : IBookingService
                 _logger.LogInformation("Booking {BookingId} for vehicle {PlateNumber} cancelled by user {UserId} ({UserRole})",
                     lockedBooking.Id, lockedBooking.PlateNumber, currentUserId, currentUserRole);
 
-                var dto = MapToDto(lockedBooking, lockedBooking.Lot.Name, lockedBooking.Lot.Address, lockedBooking.User.Username);
+                var dto = MapToDto(lockedBooking, lockedBooking.Lot.Name, lockedBooking.Lot.Address, lockedBooking.User);
                 return (true, 200, "Hủy lượt đặt chỗ thành công. Sức chứa giữ chỗ đã được giải phóng.", dto);
             }
             catch (Exception ex)
@@ -529,7 +582,7 @@ public class BookingService : IBookingService
             .Take(pageSize)
             .ToListAsync(ct);
 
-        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User.Username)).ToList();
+        var dtos = bookings.Select(b => MapToDto(b, b.Lot.Name, b.Lot.Address, b.User)).ToList();
         return PagedResult<BookingDto>.Create(dtos, totalCount, page, pageSize);
     }
 
@@ -539,6 +592,7 @@ public class BookingService : IBookingService
         string? currentUserRole = null,
         CancellationToken ct = default)
     {
+        await ExpireNoShowBookingsAsync(lotId, ct);
         var lot = await _context.ParkingLots.AsNoTracking().FirstOrDefaultAsync(l => l.Id == lotId, ct);
         if (lot == null)
         {
@@ -558,12 +612,16 @@ public class BookingService : IBookingService
 
         return new LotCapacityDto
         {
+            PolicyId = calc.PolicyId,
+            NearFullThreshold = calc.NearFullThreshold,
+            IsNearFull = calc.NearFullThreshold.HasValue ? availableCapacity <= calc.NearFullThreshold.Value : null,
             LotId = lot.Id,
             LotName = lot.Name,
             LotAddress = lot.Address,
             TotalCapacity = calc.TotalCapacity,
             AvailableForWalkIn = availableCapacity,
             AvailableForBooking = availableCapacity,
+            PendingBookingsCount = calc.PendingBookingsCount,
             IsFull = !lot.IsActive || availableCapacity <= 0,
             PhysicalSlotsCount = physicalSlotsCount,
             ConfiguredCapacity = lot.TotalCapacity,
@@ -596,16 +654,20 @@ public class BookingService : IBookingService
         return string.IsNullOrEmpty(constraintName) || innerMsg.Contains(constraintName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static BookingDto MapToDto(Booking b, string lotName, string? lotAddress, string username)
+    private static BookingDto MapToDto(Booking b, string lotName, string? lotAddress, User? user)
     {
         return new BookingDto
         {
             Id = b.Id,
+            PolicyId = b.PolicyId,
             LotId = b.LotId,
             LotName = lotName,
             LotAddress = lotAddress,
             UserId = b.UserId,
-            Username = username,
+            Username = user?.Username ?? "user",
+            FullName = user?.FullName,
+            Email = user?.Email,
+            PhoneNumber = user?.PhoneNumber,
             VehicleId = b.VehicleId,
             PlateNumber = b.PlateNumber,
             StartTime = b.StartTime,
@@ -626,11 +688,15 @@ public class BookingService : IBookingService
         return new BookingDetailDto
         {
             Id = b.Id,
+            PolicyId = b.PolicyId,
             LotId = b.LotId,
             LotName = b.Lot?.Name ?? string.Empty,
             LotAddress = b.Lot?.Address,
             UserId = b.UserId,
             Username = b.User?.Username ?? string.Empty,
+            FullName = b.User?.FullName,
+            Email = b.User?.Email,
+            PhoneNumber = b.User?.PhoneNumber,
             VehicleId = b.VehicleId,
             PlateNumber = b.PlateNumber,
             StartTime = b.StartTime,

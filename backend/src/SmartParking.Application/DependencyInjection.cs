@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Events;
 using SmartParking.Application.Services;
+using SmartParking.Application.UseCases.ParkingOperations;
 
 namespace SmartParking.Application;
 
@@ -11,6 +12,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ParkingLotService>();
         services.AddScoped<IoTService>();
+        services.AddScoped<ParkingOperationsService>();
 
         // Sprint 3 – Thức: Event Ingestion Pipeline
         // Use factory so DI resolves IVehicleCompatibilityChecker and IParkingEventBridge

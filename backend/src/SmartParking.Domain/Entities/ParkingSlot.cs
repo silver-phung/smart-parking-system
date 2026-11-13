@@ -5,12 +5,15 @@ public class ParkingSlot
     public long Id { get; set; }
     public int FloorId { get; set; }
     public ParkingFloor Floor { get; set; } = null!;
+    public int ZoneId { get; set; }
+    public ParkingZone Zone { get; set; } = null!;
     public string SlotCode { get; set; } = null!;
     public string PhysicalStatus { get; set; } = "EMPTY"; // EMPTY, OCCUPIED, MAINTENANCE, UNAVAILABLE
     public decimal? PositionX { get; set; }
     public decimal? PositionY { get; set; }
     public decimal? PositionZ { get; set; }
     public bool IsActive { get; set; } = true;
+    public string AllowedFuelType { get; set; } = "ANY"; // ANY, PETROL, ELECTRIC, HYBRID
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

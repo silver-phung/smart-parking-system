@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
+using SmartParking.Infrastructure.Services;
+using SmartParking.Application.DTOs.Operations;
 using SmartParking.Application.Common.Interfaces;
 using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Parking;
@@ -9,20 +12,23 @@ using SmartParking.Domain.Constants;
 namespace SmartParking.Api.Controllers;
 
 [ApiController]
+[TypeFilter(typeof(ParkingSlotExceptionFilter))]
 [Route("api/v1/parking-slots")]
 [Produces("application/json")]
 public class ParkingSlotsController : ControllerBase
 {
     private readonly IParkingManagementService _parkingService;
+    private readonly ParkingSlotAdministrationService _slotAdministration;
     private readonly IParkingAuthorizationService _authService;
     private readonly ILogger<ParkingSlotsController> _logger;
 
     public ParkingSlotsController(
         IParkingManagementService parkingService,
         IParkingAuthorizationService authService,
-        ILogger<ParkingSlotsController> logger)
+        ILogger<ParkingSlotsController> logger, ParkingSlotAdministrationService slotAdministration)
     {
         _parkingService = parkingService;
+        _slotAdministration = slotAdministration;
         _authService = authService;
         _logger = logger;
     }
@@ -82,11 +88,11 @@ public class ParkingSlotsController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo mới ô đỗ xe trong tầng (Chỉ dành cho ADMIN).
+    /// Tạo ô đỗ trong tầng. ADMIN quản lý toàn hệ thống; MANAGER chỉ quản lý bãi được phân công.
     /// </summary>
     [HttpPost("floor/{floorId:int}")]
     [HttpPost("/api/v1/parking-floors/{floorId:int}/slots")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(typeof(ParkingSlotDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -101,7 +107,7 @@ public class ParkingSlotsController : ControllerBase
         }
 
         var actorId = GetCurrentUserId();
-        var (success, message, slot) = await _parkingService.CreateSlotAsync(floorId, request, actorId, ct);
+        var (success, message, slot) = await _slotAdministration.Create(floorId, request, actorId, ct);
 
         if (!success)
         {
@@ -124,10 +130,11 @@ public class ParkingSlotsController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật thông tin ô đỗ (Mã ô, tọa độ, IsActive) (Chỉ dành cho ADMIN).
+    /// Cập nhật mã ô, tọa độ và IsActive trong phạm vi bãi được phép quản lý.
+    /// Từ chối khi ô đang gắn với phiên xe hoặc lượt điều phối đang hoạt động.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(typeof(ParkingSlotDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -142,7 +149,7 @@ public class ParkingSlotsController : ControllerBase
         }
 
         var actorId = GetCurrentUserId();
-        var (success, message, slot) = await _parkingService.UpdateSlotAsync(id, request, actorId, ct);
+        var (success, message, slot) = await _slotAdministration.Update(id, request, actorId, ct);
 
         if (!success)
         {
@@ -161,9 +168,9 @@ public class ParkingSlotsController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật trạng thái vật lý của ô đỗ xe (Bảo trì/Không khả dụng/Trống).
+    /// Cập nhật trạng thái ô đỗ: Trống, Có xe, Đang giữ chỗ hoặc Bảo trì.
     /// Dành cho ADMIN hoặc MANAGER được phân công tại bãi đỗ xe chứa ô này.
-    /// Tuân thủ quy tắc nghiêm ngặt: Tuyệt đối không cho phép chuyển ô OCCUPIED sang EMPTY khi xe chưa hoàn tất rời bãi.
+    /// Từ chối mọi thay đổi khi ô đang có phiên xe hoặc lượt điều phối; bảo toàn sức chứa đã đặt trước.
     /// </summary>
     [HttpPatch("{id:long}/status")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
@@ -194,7 +201,7 @@ public class ParkingSlotsController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Bạn không có quyền quản lý trạng thái ô đỗ tại bãi đỗ xe này." });
         }
 
-        var (success, message, slot) = await _parkingService.UpdateSlotPhysicalStatusAsync(id, request, actorId, actorRole, clientIp, ct);
+        var (success, message, slot) = await _slotAdministration.Status(id, request, actorId, actorRole, clientIp, ct);
 
         if (!success)
         {
@@ -213,10 +220,11 @@ public class ParkingSlotsController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa ô đỗ xe (Chỉ dành cho ADMIN; Từ chối nếu ô đỗ đã có lịch sử phiên hoặc điều phối).
+    /// Xóa ô đỗ trong phạm vi bãi ADMIN/MANAGER được phép quản lý.
+    /// Từ chối nếu ô đã có lịch sử phiên, điều phối hoặc làm thiếu sức chứa đã đặt trước.
     /// </summary>
     [HttpDelete("{id:long}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -225,7 +233,7 @@ public class ParkingSlotsController : ControllerBase
     public async Task<IActionResult> DeleteSlot(long id, CancellationToken ct)
     {
         var actorId = GetCurrentUserId();
-        var (success, message) = await _parkingService.DeleteSlotAsync(id, actorId, ct);
+        var (success, message) = await _slotAdministration.Delete(id, actorId, ct);
 
         if (!success)
         {
@@ -250,5 +258,15 @@ public class ParkingSlotsController : ControllerBase
         }
 
         return null;
+    }
+}
+
+public sealed class ParkingSlotExceptionFilter : IExceptionFilter
+{
+    public void OnException(ExceptionContext context)
+    {
+        if (context.Exception is not ParkingOperationException error) return;
+        context.Result = new ObjectResult(new { error.Code, message = error.Message }) { StatusCode = error.Status };
+        context.ExceptionHandled = true;
     }
 }

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import RequireRole from "../components/RequireRole.jsx";
 import {
   Feedback,
@@ -12,11 +12,17 @@ import {
   write,
 } from "../components/WorkspaceUI.jsx";
 
-const roles = ["USER", "STAFF", "MANAGER", "ADMIN"];
+const roles = ["STAFF", "MANAGER"];
+// Hai loại phân công khi tạo mới. Nhãn GATE_IN/GATE_OUT/BOTH chỉ để hiển thị dữ liệu cũ.
+const dutyOptions = {
+  GATE: "Trực cổng (xe vào và xe ra)",
+  SLOT_VERIFIER: "Trực khu vực (xác minh ô, điều phối)",
+};
 const duties = {
-  GATE: "Trực cổng",
-  SLOT_VERIFIER: "Xác minh ô",
-  BOTH: "Cổng và xác minh ô",
+  ...dutyOptions,
+  GATE_IN: "Trực cổng vào",
+  GATE_OUT: "Trực cổng ra",
+  BOTH: "Trực cổng và khu vực (phân công cũ)",
 };
 const emptyUser = {
   username: "",
@@ -27,9 +33,9 @@ const emptyUser = {
   role: "STAFF",
 };
 
-function People() {
-  const [params, setParams] = useSearchParams();
-  const view = params.get("view") === "assignments" ? "assignments" : "users";
+export function People({ assignmentsOnly = false }) {
+  const [params] = useSearchParams();
+  const view = assignmentsOnly || params.get("view") === "assignments" ? "assignments" : "users";
   const [revision, refresh] = useState(0);
   const action = useMutation();
   const [page, setPage] = useState(1);
@@ -39,17 +45,25 @@ function People() {
   const [user, setUser] = useState(emptyUser);
   const [selected, setSelected] = useState(null);
   const [change, setChange] = useState(null);
+  const [roleDrafts, setRoleDrafts] = useState({});
+  const confirmPanel = useRef(null);
+  useEffect(() => {
+    if (change) confirmPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [change]);
   const [reason, setReason] = useState("");
   const [assignment, setAssignment] = useState({
     userId: "",
     lotId: "",
+    floorId: "",
+    zoneId: "",
     duty: "",
     notes: "",
   });
   const [staffSearch, setStaffSearch] = useState("");
+  const [chosenStaff, setChosenStaff] = useState(null);
   const users = useResource(
     view === "users"
-      ? `/v1/admin/users?${query({ page, pageSize: 20, search, role, isActive: active })}`
+      ? `/v1/admin/users?${query({ page, pageSize: 20, search, role, isActive: active, internalOnly: true })}`
       : null,
     revision,
   );
@@ -60,15 +74,15 @@ function People() {
     revision,
   );
   const candidates = useResource(
-    view === "assignments"
-      ? `/v1/admin/users?${query({ search: staffSearch, page: 1, pageSize: 100, isActive: true })}`
+    view === "assignments" && !chosenStaff && staffSearch.trim()
+      ? `/v1/staff-assignments/candidates?${query({ search: staffSearch, page: 1, pageSize: 100 })}`
       : null,
     revision,
     { allPages: "page" },
   );
   const lots = useResource(
     view === "assignments"
-      ? "/v1/parking-lots?pageNumber=1&pageSize=100&isActive=true"
+      ? assignmentsOnly ? "/v1/staff-assignments/my-lots" : "/v1/parking-lots?pageNumber=1&pageSize=100&isActive=true"
       : null,
     revision,
     { allPages: "pageNumber" },
@@ -77,19 +91,27 @@ function People() {
     selected ? `/v1/admin/users/${selected}` : null,
     revision,
   );
-  const eligible = itemsOf(candidates.data).filter((u) =>
-    ["STAFF", "MANAGER"].includes(u.role),
+  const locations = useResource(
+    view === "assignments" && assignment.lotId ? `/v1/staff-assignments/locations/${assignment.lotId}` : null,
+    revision,
   );
-  const chosen = eligible.find((u) => String(u.id) === assignment.userId);
+  const floors = locations.data?.floors || [];
+  const selectedFloor = floors.find(f => String(f.id) === assignment.floorId);
+  const zones = selectedFloor?.zones || [];
+  const requiresZone = assignment.duty === "SLOT_VERIFIER";
+  const eligible = itemsOf(candidates.data).filter((u) => u.role === "STAFF");
+  const availableLots = assignmentsOnly
+    ? itemsOf(lots.data).filter(l => l.isActive).map(l => ({ id: l.lotId, name: l.lotName }))
+    : itemsOf(lots.data);
+  const chosen = chosenStaff;
   const updated = () => refresh((n) => n + 1);
   const list = view === "users" ? users : assignments;
-  function switchView(next) {
-    setParams({ view: next });
+  useEffect(() => {
     setPage(1);
     setActive("");
     setChange(null);
     setSelected(null);
-  }
+  }, [view]);
   function confirmChange(event) {
     event.preventDefault();
     action.run(
@@ -105,6 +127,9 @@ function People() {
               "PATCH",
             ),
       () => {
+        if (change.kind === "role") setRoleDrafts(drafts => {
+          const next = { ...drafts }; delete next[change.id]; return next;
+        });
         setChange(null);
         updated();
       },
@@ -112,41 +137,12 @@ function People() {
   }
   return (
     <section className="workspace container">
-      <header className="workspace-heading">
-        <div>
-          <span className="tag">Quản trị nhân sự</span>
-          <h1>Tài khoản & phân công</h1>
-          <p>Chuẩn bị tài khoản và quyền vận hành tại từng bãi đỗ.</p>
-        </div>
-        <Link className="btn btn--outline" to="/admin">
-          Tổng quan
-        </Link>
-      </header>
-      <nav className="workspace-tabs" aria-label="Quản trị nhân sự">
-        <button
-          disabled={action.busy}
-          className="btn btn--outline"
-          onClick={() => switchView("users")}
-          aria-pressed={view === "users"}
-        >
-          Tài khoản
-        </button>
-        <button
-          disabled={action.busy}
-          className="btn btn--outline"
-          onClick={() => switchView("assignments")}
-          aria-pressed={view === "assignments"}
-        >
-          Phân công bãi / duty
-        </button>
-      </nav>
       <Feedback error={action.error} message={action.message} />
       {view === "users" ? (
         <section className="workspace-panel">
           <h2>Tạo tài khoản nội bộ</h2>
           <p className="workspace-note">
-            Tài khoản nội bộ được xác minh và phê duyệt ngay. Khách hàng tự đăng
-            ký qua email OTP.
+            Admin tạo trực tiếp tài khoản Manager và Staff. Tài khoản có thể đăng nhập ngay sau khi tạo.
           </p>
           <form
             className="workspace-form"
@@ -237,8 +233,8 @@ function People() {
                   value={user.role}
                   onChange={(e) => setUser({ ...user, role: e.target.value })}
                 >
-                  <option>STAFF</option>
-                  <option>MANAGER</option>
+                  <option value="STAFF">Staff</option>
+                  <option value="MANAGER">Manager</option>
                 </select>
               </label>
               <button className="btn btn--primary" disabled={action.busy}>
@@ -251,25 +247,36 @@ function People() {
         <section className="workspace-panel">
           <h2>Phân công mới</h2>
           <p className="workspace-note">
-            Chọn nhiệm vụ cho Staff. Manager điều hành cả bãi. Để đổi duty, thu
-            hồi phân công cũ rồi tạo lại.
+            Chọn Staff, bãi, loại phân công và tầng. Quản lý khu vực cần chọn thêm Zone. Để đổi phân công, thu hồi phân công cũ rồi tạo lại.
           </p>
           <div className="workspace-filters">
             <label>
-              Tìm nhân sự theo tên/email
+              Tìm Staff theo tên/email
               <input
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="staff-search-results"
+                aria-expanded={Boolean(!chosenStaff && staffSearch.trim() && eligible.length)}
                 value={staffSearch}
                 onChange={(e) => {
                   setStaffSearch(e.target.value);
+                  setChosenStaff(null);
                   setAssignment((a) => ({ ...a, userId: "" }));
                 }}
                 disabled={action.busy}
               />
             </label>
           </div>
+          {!chosenStaff && staffSearch.trim() && <ul className="assignment-search-results" id="staff-search-results" role="listbox" aria-label="Kết quả tìm Staff">
+            {eligible.map(staff => <li key={staff.id} role="option" aria-selected="false"><button type="button" className="assignment-search-result" disabled={action.busy} onClick={() => {
+              setChosenStaff(staff); setStaffSearch(staff.fullName); setAssignment(a => ({ ...a, userId: String(staff.id) }));
+            }}><strong>{staff.fullName}</strong><span>{staff.username} · {staff.email}</span></button></li>)}
+            {!candidates.loading && !candidates.error && !eligible.length && <li>Không tìm thấy Staff phù hợp.</li>}
+          </ul>}
+          {chosenStaff && <div className="assignment-selected-staff"><div><strong>{chosenStaff.fullName}</strong><small>{chosenStaff.username} · {chosenStaff.email}</small></div><button type="button" className="btn assignment-cancel" disabled={action.busy} onClick={() => { setChosenStaff(null); setStaffSearch(""); setAssignment(a => ({ ...a, userId: "" })); }}>Hủy</button></div>}
           <Feedback
-            loading={candidates.loading || lots.loading}
-            error={candidates.error || lots.error}
+            loading={candidates.loading || lots.loading || locations.loading}
+            error={candidates.error || lots.error || locations.error}
           />
           <form
             className="workspace-form"
@@ -280,7 +287,9 @@ function People() {
                   write("/v1/staff-assignments", {
                     userId: Number(assignment.userId),
                     lotId: Number(assignment.lotId),
-                    duty: chosen?.role === "MANAGER" ? "BOTH" : assignment.duty,
+                    floorId: Number(assignment.floorId),
+                    zoneId: requiresZone ? Number(assignment.zoneId) : null,
+                    duty: assignment.duty,
                     notes: assignment.notes || null,
                   }),
                 () => {
@@ -292,38 +301,17 @@ function People() {
           >
             <fieldset disabled={action.busy}>
               <label>
-                Nhân sự
-                <select
-                  required
-                  value={assignment.userId}
-                  onChange={(e) =>
-                    setAssignment({
-                      ...assignment,
-                      userId: e.target.value,
-                      duty: "",
-                    })
-                  }
-                >
-                  <option value="">Chọn Staff / Manager</option>
-                  {eligible.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.fullName} · {u.username} · {u.role}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
                 Bãi đỗ
                 <select
                   required
                   value={assignment.lotId}
                   onChange={(e) => {
-                    setAssignment({ ...assignment, lotId: e.target.value });
+                    setAssignment({ ...assignment, lotId: e.target.value, floorId: "", zoneId: "" });
                     setPage(1);
                   }}
                 >
                   <option value="">Chọn bãi</option>
-                  {itemsOf(lots.data).map((l) => (
+                  {availableLots.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
                     </option>
@@ -331,23 +319,29 @@ function People() {
                 </select>
               </label>
               <label>
-                Nhiệm vụ
+                Phân công
                 <select
                   required
-                  disabled={chosen?.role === "MANAGER"}
-                  value={chosen?.role === "MANAGER" ? "BOTH" : assignment.duty}
+                  disabled={!assignment.lotId}
+                  value={assignment.duty}
                   onChange={(e) =>
-                    setAssignment({ ...assignment, duty: e.target.value })
+                    setAssignment({ ...assignment, duty: e.target.value, floorId: "", zoneId: "" })
                   }
                 >
-                  <option value="">Chọn nhiệm vụ</option>
-                  {Object.entries(duties).map(([key, label]) => (
+                  <option value="">Chọn phân công</option>
+                  {Object.entries(dutyOptions).map(([key, label]) => (
                     <option key={key} value={key}>
                       {label}
                     </option>
                   ))}
                 </select>
               </label>
+              {assignment.duty && <label>Tầng<select required value={assignment.floorId} disabled={!assignment.lotId || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, floorId: e.target.value, zoneId: "" })}>
+                <option value="">Chọn tầng</option>{floors.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select></label>}
+              {requiresZone && assignment.floorId && <label>Khu vực (Zone)<select required value={assignment.zoneId} disabled={!selectedFloor || locations.loading || Boolean(locations.error)} onChange={e => setAssignment({ ...assignment, zoneId: e.target.value })}>
+                <option value="">Chọn khu vực</option>{zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select></label>}
               <label>
                 Ghi chú
                 <textarea
@@ -364,6 +358,10 @@ function People() {
                   action.busy ||
                   !chosen ||
                   !assignment.lotId ||
+                  !selectedFloor || (requiresZone && !zones.some(z => String(z.id) === assignment.zoneId)) ||
+                  !assignment.duty ||
+                  Boolean(candidates.error || lots.error || locations.error) || locations.loading ||
+                  !availableLots.some(l => String(l.id) === assignment.lotId) ||
                   candidates.loading ||
                   lots.loading
                 }
@@ -375,8 +373,8 @@ function People() {
         </section>
       )}
       {change && (
-        <section className="workspace-panel workspace-confirm">
-          <h2>
+        <section ref={confirmPanel} role="region" aria-labelledby="account-change-title" className="workspace-panel workspace-confirm">
+          <h2 id="account-change-title">
             Xác nhận{" "}
             {change.kind === "role"
               ? "đổi vai trò"
@@ -395,13 +393,15 @@ function People() {
                 : ""}
           </p>
           <p className="workspace-note">
-            Thay đổi vai trò có thể thu hồi phân công hiện tại của tài khoản.
+            {change.kind === "revoke"
+              ? "Staff sẽ ngừng có quyền theo phân công này sau khi thu hồi."
+              : "Thay đổi vai trò có thể thu hồi phân công hiện tại của tài khoản."}
           </p>
           <form className="workspace-form" onSubmit={confirmChange}>
             <label>
-              Lý do
+              {change.kind === "revoke" ? "Lý do" : "Ghi chú thay đổi (không bắt buộc)"}
               <textarea
-                required
+                required={change.kind === "revoke"}
                 maxLength={change.kind === "revoke" ? 255 : 500}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -411,7 +411,7 @@ function People() {
             <div className="workspace-actions">
               <button
                 className="btn btn--primary"
-                disabled={action.busy || !reason.trim()}
+                disabled={action.busy || (change.kind === "revoke" && !reason.trim())}
               >
                 Xác nhận thay đổi
               </button>
@@ -465,7 +465,7 @@ function People() {
                   }}
                 >
                   <option value="">Tất cả vai trò</option>
-                  {roles.map((r) => (
+                  {[...roles, "ADMIN"].map((r) => (
                     <option key={r}>{r}</option>
                   ))}
                 </select>
@@ -498,7 +498,7 @@ function People() {
               <tr>
                 {(view === "users"
                   ? ["Tài khoản", "Vai trò", "Trạng thái", "Thao tác"]
-                  : ["Nhân sự", "Bãi / Nhiệm vụ", "Thời gian", "Thao tác"]
+                  : ["Nhân sự", "Bãi / Phân công", "Thời gian", "Thao tác"]
                 ).map((h) => (
                   <th key={h}>{h}</th>
                 ))}
@@ -521,33 +521,23 @@ function People() {
                         </small>
                       </td>
                       <td>
-                        <select
+                        {roles.includes(row.role) ? <div className="account-role-editor"><select
                           aria-label={`Vai trò ${row.username}`}
-                          value={row.role}
+                          value={roleDrafts[row.id] ?? row.role}
                           disabled={action.busy}
                           onChange={(e) => {
-                            setReason("");
-                            setChange({
-                              kind: "role",
-                              id: row.id,
-                              label: row.username,
-                              value: e.target.value,
-                            });
+                            setRoleDrafts(drafts => ({ ...drafts, [row.id]: e.target.value }));
                           }}
                         >
                           {roles.map((r) => (
                             <option key={r}>{r}</option>
                           ))}
-                        </select>
+                        </select><button type="button" className="btn btn--outline" aria-label={`Lưu vai trò ${row.username}`} disabled={action.busy || !roleDrafts[row.id] || roleDrafts[row.id] === row.role} onClick={() => {
+                          setReason(""); setChange({ kind: "role", id: row.id, label: row.username, value: roleDrafts[row.id] });
+                        }}>Lưu vai trò</button></div> : <strong>{row.role}</strong>}
                       </td>
                       <td>
                         {row.isActive ? "Hoạt động" : "Đã khóa"}
-                        <small>
-                          {row.isEmailVerified
-                            ? "Email đã xác minh"
-                            : "Chưa xác minh email"}{" "}
-                          · {row.approvalStatus}
-                        </small>
                       </td>
                       <td>
                         <button
@@ -577,7 +567,8 @@ function People() {
                       </td>
                       <td>
                         {row.lotName}
-                        <small>{duties[row.duty] || row.duty}</small>
+                        <small>{row.floorName || "Chưa chọn tầng"}{row.zoneName ? ` · ${row.zoneName}` : ""}</small>
+                        <small>{duties[row.duty] || (row.duty === "GATE" ? "Trực cổng (phân công cũ)" : "Cần chọn lại phân công")}</small>
                       </td>
                       <td>
                         {dateLabel(row.assignedAt)}
@@ -636,7 +627,6 @@ function People() {
                 "Họ tên": detail.data.fullName,
                 Email: detail.data.email,
                 "Vai trò": detail.data.role,
-                "Phê duyệt": detail.data.approvalStatus,
                 "Ngày tạo": dateLabel(detail.data.createdAt),
                 "Số phân công đang hoạt động":
                   detail.data.activeAssignmentsCount,

@@ -30,6 +30,7 @@ public class ParkingFloorSummaryDto
 
 public class CreateParkingFloorRequestDto
 {
+    public int? ZoneId { get; set; }
     [Required(ErrorMessage = "Số thứ tự tầng là bắt buộc.")]
     [Range(-10, 100, ErrorMessage = "Số thứ tự tầng phải từ -10 (tầng hầm) đến 100.")]
     public int FloorNumber { get; set; }

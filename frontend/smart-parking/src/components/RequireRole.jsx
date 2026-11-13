@@ -14,7 +14,7 @@ export default function RequireRole({ role, children }) {
   );
 
   if (!session) return <Navigate to="/login" replace />;
-  if (session.userProfile.role !== role)
+  if (!(Array.isArray(role) ? role : [role]).includes(session.userProfile.role))
     return <Navigate to={dashboardPath(session.userProfile.role)} replace />;
 
   return children;

@@ -33,12 +33,7 @@ public class ParkingManagementService : IParkingManagementService
 
     public async Task<PagedResult<ParkingLotDto>> GetLotsAsync(ParkingLotFilterDto filter, bool isAdminOrStaff, CancellationToken ct = default)
     {
-        var query = _context.ParkingLots
-            .Include(l => l.Floors)
-                .ThenInclude(f => f.Slots)
-                    .ThenInclude(s => s.AssignedDispatches)
-            .AsNoTracking()
-            .AsQueryable();
+        var query = _context.ParkingLots.AsNoTracking();
 
         // Guest / Public users can only view active lots
         if (!isAdminOrStaff)
@@ -57,98 +52,71 @@ public class ParkingManagementService : IParkingManagementService
         }
 
         var totalCount = await query.CountAsync(ct);
-
-        var lots = await query
+        var dtos = await query
             .OrderBy(l => l.Name)
             .Skip((filter.PageNumber - 1) * filter.PageSize)
             .Take(filter.PageSize)
-            .ToListAsync(ct);
-
-        var dtos = lots.Select(l =>
-        {
-            var allSlots = l.Floors.SelectMany(f => f.Slots).ToList();
-            var hasConfiguredSlots = allSlots.Any();
-            var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
-                                                  s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
-                                                  s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
-
-            var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
-            var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
-            var totalCapacity = usableSlots.Count;
-            var availableSlotsCount = (l.IsActive && hasConfiguredSlots) ? availableCount : 0;
-
-            return new ParkingLotDto
+            .Select(l => new ParkingLotDto
             {
                 Id = l.Id,
                 Name = l.Name,
                 Address = l.Address,
-                TotalCapacity = totalCapacity,
+                TotalCapacity = l.Floors.Where(f => f.IsActive).SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                        s.PhysicalStatus != SlotPhysicalStatuses.Unavailable),
                 TotalFloors = l.Floors.Count,
-                AvailableSlotsCount = availableSlotsCount,
-                OccupiedSlotsCount = occupiedCount,
+                AvailableSlotsCount = l.IsActive ? l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty &&
+                        !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)) : 0,
+                OccupiedSlotsCount = l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
                 IsActive = l.IsActive,
                 CreatedAt = l.CreatedAt,
                 UpdatedAt = l.UpdatedAt,
-                PhysicalSlotsCount = allSlots.Count,
+                PhysicalSlotsCount = l.Floors.SelectMany(f => f.Slots).Count(),
                 ConfiguredCapacity = l.TotalCapacity
-            };
-        }).ToList();
+            })
+            .ToListAsync(ct);
 
         return PagedResult<ParkingLotDto>.Create(dtos, totalCount, filter.PageNumber, filter.PageSize);
     }
 
     public async Task<ParkingLotDetailDto?> GetLotByIdAsync(int id, bool isAdminOrStaff, CancellationToken ct = default)
     {
-        var lot = await _context.ParkingLots
-            .Include(l => l.Floors)
-                .ThenInclude(f => f.Slots)
-                    .ThenInclude(s => s.AssignedDispatches)
+        return await _context.ParkingLots
             .AsNoTracking()
-            .FirstOrDefaultAsync(l => l.Id == id, ct);
-
-        if (lot == null) return null;
-        if (!isAdminOrStaff && !lot.IsActive) return null;
-
-        var allSlots = lot.Floors.SelectMany(f => f.Slots).ToList();
-        var availableCount = allSlots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned));
-        var occupiedCount = allSlots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied);
-
-        var floorSummaries = lot.Floors
-            .OrderBy(f => f.FloorNumber)
-            .Select(f => new ParkingFloorSummaryDto
+            .Where(l => l.Id == id && (isAdminOrStaff || l.IsActive))
+            .Select(l => new ParkingLotDetailDto
             {
-                Id = f.Id,
-                FloorNumber = f.FloorNumber,
-                Name = f.Name,
-                TotalSlots = f.TotalSlots,
-                AvailableSlotsCount = f.Slots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)),
-                OccupiedSlotsCount = f.Slots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
-                IsActive = f.IsActive
-            }).ToList();
-
-        var hasConfiguredSlots = allSlots.Any();
-        var usableSlots = allSlots.Where(s => s.IsActive && (s.Floor == null || s.Floor.IsActive) &&
-                                              s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
-                                              s.PhysicalStatus != SlotPhysicalStatuses.Unavailable).ToList();
-        var totalCapacity = usableSlots.Count;
-        var availableSlotsCount = (lot.IsActive && hasConfiguredSlots) ? availableCount : 0;
-
-        return new ParkingLotDetailDto
-        {
-            Id = lot.Id,
-            Name = lot.Name,
-            Address = lot.Address,
-            TotalCapacity = totalCapacity,
-            TotalFloors = lot.Floors.Count,
-            AvailableSlotsCount = availableSlotsCount,
-            OccupiedSlotsCount = occupiedCount,
-            IsActive = lot.IsActive,
-            CreatedAt = lot.CreatedAt,
-            UpdatedAt = lot.UpdatedAt,
-            PhysicalSlotsCount = allSlots.Count,
-            ConfiguredCapacity = lot.TotalCapacity,
-            Floors = floorSummaries
-        };
+                Id = l.Id,
+                Name = l.Name,
+                Address = l.Address,
+                TotalCapacity = l.Floors.Where(f => f.IsActive).SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus != SlotPhysicalStatuses.Maintenance &&
+                        s.PhysicalStatus != SlotPhysicalStatuses.Unavailable),
+                TotalFloors = l.Floors.Count,
+                AvailableSlotsCount = l.IsActive ? l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty &&
+                        !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)) : 0,
+                OccupiedSlotsCount = l.Floors.SelectMany(f => f.Slots)
+                    .Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied),
+                IsActive = l.IsActive,
+                CreatedAt = l.CreatedAt,
+                UpdatedAt = l.UpdatedAt,
+                PhysicalSlotsCount = l.Floors.SelectMany(f => f.Slots).Count(),
+                ConfiguredCapacity = l.TotalCapacity,
+                Floors = l.Floors.OrderBy(f => f.FloorNumber).Select(f => new ParkingFloorSummaryDto
+                {
+                    Id = f.Id,
+                    FloorNumber = f.FloorNumber,
+                    Name = f.Name,
+                    TotalSlots = f.TotalSlots,
+                    AvailableSlotsCount = f.Slots.Count(s => s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty &&
+                        !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned)),
+                    OccupiedSlotsCount = f.Slots.Count(s => s.PhysicalStatus == SlotPhysicalStatuses.Occupied)
+                }).ToList()
+            })
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task<(bool Success, string Message, ParkingLotDto? Lot)> CreateLotAsync(CreateParkingLotRequestDto request, long? actorId, CancellationToken ct = default)
@@ -324,23 +292,50 @@ public class ParkingManagementService : IParkingManagementService
             return (false, "Không tìm thấy bãi đỗ xe để xóa.");
         }
 
-        // Business Rule: Không xóa cứng bãi có dữ liệu liên quan
-        var hasFloors = await _context.ParkingFloors.AnyAsync(f => f.LotId == id, ct);
-        var hasSessions = await _context.ParkingSessions.AnyAsync(s => s.LotId == id, ct);
-
-        if (hasFloors || hasSessions)
-        {
-            return (false, "Không thể xóa bãi đỗ xe đang chứa các tầng hoặc lịch sử gửi xe. Vui lòng vô hiệu hóa trạng thái (chuyển sang Không hoạt động).");
-        }
+        if (await _context.ParkingSessions.AnyAsync(s => s.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử phiên gửi xe. Hãy đóng bãi thay vì xóa để giữ lịch sử.");
+        if (await _context.Bookings.AnyAsync(b => b.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử đặt chỗ. Hãy đóng bãi thay vì xóa để giữ lịch sử.");
+        if (await _context.ParkingSlots.AnyAsync(s => s.Floor.LotId == id &&
+            (s.PhysicalStatus == SlotPhysicalStatuses.Occupied || s.PhysicalStatus == SlotPhysicalStatuses.Reserved), ct))
+            return (false, "Không thể xóa bãi vì vẫn còn ô đang có xe hoặc đang giữ chỗ.");
+        if (await _context.StaffVehicleEntries.AnyAsync(e => e.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử xe do nhân viên ghi nhận.");
+        if (await _context.ParkingDispatches.AnyAsync(d => d.AssignedSlot.Floor.LotId == id ||
+            (d.ActualSlotId != null && d.ActualSlot!.Floor.LotId == id), ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử điều phối ô đỗ.");
+        if (await _context.StaffLotAssignments.AnyAsync(a => a.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử phân công nhân viên. Hãy xử lý phân công trước.");
 
         var oldValues = JsonSerializer.Serialize(new { lot.Name, lot.Address, lot.TotalCapacity });
+        await using var transaction = await _context.BeginTransactionAsync(ct);
+
+        var policies = await _context.ParkingPolicies.Where(p => p.LotId == id).ToListAsync(ct);
+        _context.ParkingPolicies.RemoveRange(policies);
+        await _context.SaveChangesAsync(ct);
+
+        var slots = await _context.ParkingSlots.Where(s => s.Floor.LotId == id).ToListAsync(ct);
+        _context.ParkingSlots.RemoveRange(slots);
+        await _context.SaveChangesAsync(ct);
+
+        var floors = await _context.ParkingFloors.Where(f => f.LotId == id).ToListAsync(ct);
+        foreach (var floor in floors)
+            floor.ZoneId = null;
+        await _context.SaveChangesAsync(ct);
+
+        var zones = await _context.ParkingZones.Where(z => z.LotId == id).ToListAsync(ct);
+        _context.ParkingZones.RemoveRange(zones);
+        await _context.SaveChangesAsync(ct);
+
+        _context.ParkingFloors.RemoveRange(floors);
         _context.ParkingLots.Remove(lot);
         await _context.SaveChangesAsync(ct);
 
         await LogAuditAsync(actorId, "DELETE_PARKING_LOT", "parking_lots", id.ToString(), oldValues, null, null, ct);
+        await transaction.CommitAsync(ct);
         _logger.LogInformation("ParkingLot {LotId} deleted by Actor {ActorId}", id, actorId);
 
-        return (true, "Xóa bãi đỗ xe thành công.");
+        return (true, "Đã xóa bãi cùng các tầng, khu vực, ô đỗ và chính sách cấu hình. Lịch sử vận hành được bảo vệ nên bãi có phiên xe, đặt chỗ, điều phối hoặc phân công sẽ không thể xóa.");
     }
 
 
@@ -377,7 +372,17 @@ public class ParkingManagementService : IParkingManagementService
                 {
                     floor = new ParkingFloor { LotId = lotId, FloorNumber = number, Name = floorName, IsActive = true, CreatedAt = now, UpdatedAt = now };
                     lot.Floors.Add(floor);
+                    await _context.SaveChangesAsync(ct);
                     floorsCreated++;
+                }
+                var transientZone = await _context.ParkingZones.Where(z => z.LotId == lotId && z.FloorId == floor.Id && z.Type == "TRANSIENT")
+                    .OrderBy(z => z.Id).FirstOrDefaultAsync(ct);
+                if (transientZone == null)
+                {
+                    transientZone = new ParkingZone { LotId = lotId, FloorId = floor.Id,
+                        Code = $"AUTO-{number}", Name = $"Khu thường {floor.Name}", Type = "TRANSIENT", Layout = "INSIDE", IsActive = true, UpdatedAt = now };
+                    _context.ParkingZones.Add(transientZone);
+                    await _context.SaveChangesAsync(ct);
                 }
 
                 var existingCodes = floor.Slots.Select(s => s.SlotCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -385,7 +390,7 @@ public class ParkingManagementService : IParkingManagementService
                 {
                     var code = $"{letter}{i:D3}";
                     if (existingCodes.Contains(code)) { slotsExisting++; continue; }
-                    floor.Slots.Add(new ParkingSlot { SlotCode = code, PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true, CreatedAt = now, UpdatedAt = now });
+                    floor.Slots.Add(new ParkingSlot { ZoneId = transientZone.Id, SlotCode = code, PhysicalStatus = SlotPhysicalStatuses.Empty, IsActive = true, CreatedAt = now, UpdatedAt = now });
                     slotsCreated++;
                 }
                 floor.TotalSlots = floor.Slots.Count;
@@ -469,9 +474,9 @@ public class ParkingManagementService : IParkingManagementService
             .AsNoTracking()
             .AsQueryable();
 
-        if (isActiveOnly.HasValue)
+        if (isActiveOnly == true)
         {
-            query = query.Where(f => f.IsActive == isActiveOnly.Value);
+            query = query.Where(f => f.IsActive);
         }
 
         var floors = await query.OrderBy(f => f.FloorNumber).ToListAsync(ct);
@@ -692,6 +697,7 @@ public class ParkingManagementService : IParkingManagementService
         var query = _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .Where(s => s.FloorId == floorId)
             .AsNoTracking()
@@ -722,16 +728,24 @@ public class ParkingManagementService : IParkingManagementService
             .Take(filter.PageSize)
             .ToListAsync(ct);
 
+        var pageSlotIds = slots.Select(s => s.Id).ToArray();
+        var protectedSlotIds = (await _context.ParkingSlots.Where(s => pageSlotIds.Contains(s.Id) &&
+            (_context.ParkingSessions.Any(p => p.CurrentSlotId == s.Id && (p.Status == SessionStatuses.Active || p.Status == SessionStatuses.Paid)) ||
+             _context.ParkingDispatches.Any(d => d.AssignedSlotId == s.Id && d.Status == DispatchStatuses.Assigned)))
+            .Select(s => s.Id).ToListAsync(ct)).ToHashSet();
         var dtos = slots.Select(s => new ParkingSlotDto
         {
             Id = s.Id,
             FloorId = s.FloorId,
             FloorName = s.Floor.Name,
+            ZoneId = s.ZoneId,
+            ZoneName = s.Zone.Name,
             LotId = s.Floor.LotId,
             LotName = s.Floor.Lot.Name,
             SlotCode = s.SlotCode,
             PhysicalStatus = s.PhysicalStatus,
-            IsAvailable = s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !s.AssignedDispatches.Any(d => d.Status == DispatchStatuses.Assigned),
+            IsAvailable = s.IsActive && s.PhysicalStatus == SlotPhysicalStatuses.Empty && !protectedSlotIds.Contains(s.Id),
+            IsProtected = protectedSlotIds.Contains(s.Id),
             PositionX = s.PositionX,
             PositionY = s.PositionY,
             PositionZ = s.PositionZ,
@@ -748,6 +762,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = await _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == id, ct);
@@ -789,6 +804,8 @@ public class ParkingManagementService : IParkingManagementService
             Id = slot.Id,
             FloorId = slot.FloorId,
             FloorName = slot.Floor.Name,
+            ZoneId = slot.ZoneId,
+            ZoneName = slot.Zone.Name,
             LotId = slot.Floor.LotId,
             LotName = slot.Floor.Lot.Name,
             SlotCode = slot.SlotCode,
@@ -816,6 +833,10 @@ public class ParkingManagementService : IParkingManagementService
             return (false, "Tầng chỉ định không tồn tại.", null);
         }
 
+        var zone = await _context.ParkingZones.FirstOrDefaultAsync(z => z.Id == request.ZoneId && z.LotId == floor.LotId && z.FloorId == floorId, ct);
+        if (zone == null)
+            return (false, "Phải chọn khu vực thuộc đúng tầng trước khi thêm ô đỗ.", null);
+
         var trimmedCode = request.SlotCode.Trim().ToUpperInvariant();
         var exists = await _context.ParkingSlots
             .AnyAsync(s => s.FloorId == floorId && s.SlotCode == trimmedCode, ct);
@@ -834,6 +855,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = new ParkingSlot
         {
             FloorId = floorId,
+            ZoneId = zone.Id,
             SlotCode = trimmedCode,
             PhysicalStatus = physicalStatus,
             PositionX = request.PositionX,
@@ -854,6 +876,8 @@ public class ParkingManagementService : IParkingManagementService
         {
             Id = slot.Id,
             FloorId = slot.FloorId,
+            ZoneId = slot.ZoneId,
+            ZoneName = zone.Name,
             FloorName = floor.Name,
             LotId = floor.LotId,
             LotName = floor.Lot.Name,
@@ -877,6 +901,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = await _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
@@ -931,6 +956,8 @@ public class ParkingManagementService : IParkingManagementService
             Id = slot.Id,
             FloorId = slot.FloorId,
             FloorName = slot.Floor.Name,
+            ZoneId = slot.ZoneId,
+            ZoneName = slot.Zone.Name,
             LotId = slot.Floor.LotId,
             LotName = slot.Floor.Lot.Name,
             SlotCode = slot.SlotCode,
@@ -954,6 +981,7 @@ public class ParkingManagementService : IParkingManagementService
         var slot = await _context.ParkingSlots
             .Include(s => s.Floor)
                 .ThenInclude(f => f.Lot)
+            .Include(s => s.Zone)
             .Include(s => s.AssignedDispatches)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
@@ -1017,6 +1045,8 @@ public class ParkingManagementService : IParkingManagementService
             Id = slot.Id,
             FloorId = slot.FloorId,
             FloorName = slot.Floor.Name,
+            ZoneId = slot.ZoneId,
+            ZoneName = slot.Zone.Name,
             LotId = slot.Floor.LotId,
             LotName = slot.Floor.Lot.Name,
             SlotCode = slot.SlotCode,

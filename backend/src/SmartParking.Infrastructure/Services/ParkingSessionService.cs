@@ -1,3 +1,4 @@
+﻿using SmartParking.Persistence.Data;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,6 @@ using SmartParking.Application.Common.Models;
 using SmartParking.Application.DTOs.Sessions;
 using SmartParking.Domain.Constants;
 using SmartParking.Domain.Entities;
-using SmartParking.Infrastructure.Common;
 
 namespace SmartParking.Infrastructure.Services;
 
@@ -17,6 +17,7 @@ public class ParkingSessionService : IParkingSessionService
     private readonly IApplicationDbContext _context;
     private readonly IParkingAuthorizationService _authService;
     private readonly ILogger<ParkingSessionService> _logger;
+    private readonly AiRecognitionDbContext _aiRecognitionDb;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -27,11 +28,66 @@ public class ParkingSessionService : IParkingSessionService
     public ParkingSessionService(
         IApplicationDbContext context,
         IParkingAuthorizationService authService,
-        ILogger<ParkingSessionService> logger)
+        ILogger<ParkingSessionService> logger,
+        AiRecognitionDbContext? aiRecognitionDb = null)
     {
         _context = context;
         _authService = authService;
         _logger = logger;
+        _aiRecognitionDb = aiRecognitionDb!;
+    }
+
+    public async Task<MonthlyTrafficStatsDto> GetMonthlyTrafficStatsAsync(int year, int month, int? lotId, CancellationToken ct = default)
+    {
+        // Dữ liệu lưu UTC, thống kê theo ngày giờ Việt Nam (UTC+7).
+        var offset = TimeSpan.FromHours(7);
+        var startLocal = new DateTime(year, month, 1);
+        var endLocal = startLocal.AddMonths(1);
+        var startUtc = startLocal - offset;
+        var endUtc = endLocal - offset;
+
+        var query = _context.ParkingSessions.AsNoTracking().Where(s => s.Status != "CANCELLED");
+        if (lotId.HasValue) query = query.Where(s => s.LotId == lotId.Value);
+
+        var rows = await query
+            .Where(s => (s.CheckInTime >= startUtc && s.CheckInTime < endUtc)
+                     || (s.CheckOutTime != null && s.CheckOutTime >= startUtc && s.CheckOutTime < endUtc)
+                     || (s.PaidAt != null && s.PaidAt >= startUtc && s.PaidAt < endUtc))
+            .Select(s => new { s.CheckInTime, s.CheckOutTime, s.PaidAt, s.TotalFee })
+            .ToListAsync(ct);
+
+        var daysInMonth = DateTime.DaysInMonth(year, month);
+        var days = Enumerable.Range(1, daysInMonth)
+            .Select(d => new DailyTrafficDto { Date = new DateTime(year, month, d).ToString("yyyy-MM-dd") })
+            .ToList();
+        var byHour = new int[24];
+
+        bool InMonth(DateTime utc) => utc >= startUtc && utc < endUtc;
+        foreach (var r in rows)
+        {
+            if (InMonth(r.CheckInTime))
+            {
+                var local = r.CheckInTime + offset;
+                days[local.Day - 1].CheckIns++;
+                byHour[local.Hour]++;
+            }
+            if (r.CheckOutTime is { } outTime && InMonth(outTime))
+                days[(outTime + offset).Day - 1].CheckOuts++;
+            if (r.PaidAt is { } paid && InMonth(paid))
+                days[(paid + offset).Day - 1].Revenue += r.TotalFee;
+        }
+
+        return new MonthlyTrafficStatsDto
+        {
+            Year = year,
+            Month = month,
+            LotId = lotId,
+            TotalCheckIns = days.Sum(d => d.CheckIns),
+            TotalCheckOuts = days.Sum(d => d.CheckOuts),
+            TotalRevenue = days.Sum(d => d.Revenue),
+            Days = days,
+            CheckInsByHour = byHour
+        };
     }
 
     public async Task<(bool Success, string Message, ParkingSessionDto? Data)> CheckInAsync(
@@ -58,11 +114,13 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Bãi đỗ xe '{lot.Name}' hiện đang đóng hoặc tạm ngừng hoạt động.", null);
         }
 
-        if (!await _authService.CanOperateGateAsync(actorId ?? 0, actorRole, request.LotId, ct))
+        if (!await _authService.CanOperateGateInAsync(actorId ?? 0, actorRole, request.LotId, ct))
         {
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng (GATE) tại bãi đỗ xe này.", null);
         }
 
+        if (await _context.ParkingZones.AnyAsync(z => z.LotId == request.LotId, ct))
+            return (false, "Bãi đã có khu. Tiếp nhận bằng vé/EventId qua API operations/entries.", null);
         // Anti-Passback check: Biển số xe không được phép có phiên ACTIVE hoặc PAID đang mở
         var hasActiveSession = await _context.ParkingSessions
             .AnyAsync(s => s.PlateNumber == normalizedPlate && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
@@ -85,29 +143,22 @@ public class ParkingSessionService : IParkingSessionService
                     await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0});", new object[] { lockKey }, cancellationToken: ct);
                 }
 
-                // Kiểm tra xem phương tiện có lượt đặt chỗ PENDING hợp lệ tại bãi này hay không
-                var booking = await _context.Bookings
-                    .Where(b => b.LotId == lot.Id && b.PlateNumber == normalizedPlate && b.Status == BookingStatuses.Pending)
-                    .OrderBy(b => b.CreatedAt)
-                    .FirstOrDefaultAsync(ct);
-
-                if (booking == null)
+                var pendingBooking = await _context.Bookings.AnyAsync(
+                    b => b.LotId == lot.Id
+                        && b.PlateNumber == normalizedPlate
+                        && b.Status == BookingStatuses.Pending,
+                    ct);
+                if (pendingBooking)
                 {
-                    // Xe vãng lai: Kiểm tra sức chứa khả dụng theo thẩm quyền bãi xe (áp dụng Conservative IoT Guard & slot fallback)
-                    var calc = await ParkingLotCapacityHelper.CalculateAsync(_context, lot.Id, lot, ct);
-
-                    if (calc.AvailableCapacity <= 0)
-                    {
-                        await transaction.RollbackAsync(ct);
-                        return (false, $"Bãi đỗ xe '{lot.Name}' đã hết chỗ khả dụng cho khách vãng lai. Toàn bộ vị trí còn lại đã được đặt trước hoặc đã có xe đỗ.", null);
-                    }
+                    await transaction.RollbackAsync(ct);
+                    return (false, "Xe có booking đang chờ. Hãy xác minh xe tại ô đỗ từ danh sách booking, không check-in tại cổng.", null);
                 }
-                else
+
+                var calc = await ParkingLotCapacityHelper.CalculateAsync(_context, lot.Id, lot, ct);
+                if (calc.AvailableCapacity <= 0)
                 {
-                    // Xe có đặt chỗ: Chuyển đổi trạng thái Booking sang CHECKED_IN atomically mà không cộng dồn công suất kép
-                    booking.Status = BookingStatuses.CheckedIn;
-                    booking.CheckedInAt = DateTime.UtcNow;
-                    booking.UpdatedAt = DateTime.UtcNow;
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Bãi đỗ xe '{lot.Name}' đã hết chỗ khả dụng cho khách vãng lai. Toàn bộ vị trí còn lại đã được đặt trước hoặc đã có xe đỗ.", null);
                 }
 
                 // Tra cứu hoặc tự động tạo phương tiện vãng lai nếu chưa có
@@ -117,7 +168,7 @@ public class ParkingSessionService : IParkingSessionService
                     vehicle = new Vehicle
                     {
                         PlateNumber = normalizedPlate,
-                        UserId = booking?.UserId, // Gắn với người dùng đặt chỗ nếu có
+                        UserId = null,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
@@ -125,12 +176,6 @@ public class ParkingSessionService : IParkingSessionService
                     _context.Vehicles.Add(vehicle);
                     await _context.SaveChangesAsync(ct);
                 }
-                else if (vehicle.UserId == null && booking?.UserId != null)
-                {
-                    vehicle.UserId = booking.UserId;
-                    vehicle.UpdatedAt = DateTime.UtcNow;
-                }
-
                 ParkingSlot? slot = null;
                 if (request.SlotId.HasValue)
                 {
@@ -194,7 +239,7 @@ public class ParkingSessionService : IParkingSessionService
                 {
                     LotId = lot.Id,
                     VehicleId = vehicle.Id,
-                    BookingId = booking?.Id,
+                    PolicyId = (await ParkingPolicyResolver.ResolveAsync(_context, lot.Id, null, DateTime.UtcNow, ct))?.Id,
                     PlateNumber = normalizedPlate,
                     CheckInTime = DateTime.UtcNow,
                     CurrentSlotId = slot?.Id,
@@ -207,6 +252,22 @@ public class ParkingSessionService : IParkingSessionService
 
                 _context.ParkingSessions.Add(session);
                 await _context.SaveChangesAsync(ct);
+                StaffVehicleEntry? entryWorkflow = null;
+                if (request.EntryRecognitionId.HasValue)
+                {
+                    entryWorkflow = await _context.StaffVehicleEntries
+                        .Where(x => x.RecognitionId == request.EntryRecognitionId.Value
+                            && x.LotId == lot.Id && x.StaffUserId == actorId
+                            && x.PlateNumber == normalizedPlate && x.Status == "SEARCHING_FOR_SLOT")
+                        .FirstOrDefaultAsync(ct);
+                    if (entryWorkflow is null)
+                    {
+                        await transaction.RollbackAsync(ct);
+                        return (false, "Không tìm thấy lượt vào đã xác nhận tương ứng với biển số, bãi và nhân viên.", null);
+                    }
+                    entryWorkflow.ParkingSessionId = session.Id;
+                    entryWorkflow.Status = "PARKING";
+                }
 
                 await LogAuditAsync(
                     action: "CHECK_IN_SESSION",
@@ -277,10 +338,30 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Phiên gửi xe này đã kết thúc trước đó với trạng thái: {session.Status}.", null);
         }
 
-        if (!await _authService.CanOperateGateAsync(actorId ?? 0, actorRole, session.LotId, ct))
+        if (!await _authService.CanOperateGateOutAsync(actorId ?? 0, actorRole, session.LotId, ct))
         {
             return (false, "Bạn không có quyền thực hiện nghiệp vụ cổng ra (GATE) tại bãi đỗ xe này.", null);
         }
+        if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, session.LotId, StaffDuties.GateOut,
+            session.CurrentSlot?.FloorId, session.ZoneId ?? session.CurrentSlot?.ZoneId, ct))
+            return (false, "Phiên xe nằm ngoài tầng hoặc khu vực được phân công.", null);
+        if (request.ExitRecognitionId.HasValue)
+        {
+            if (_aiRecognitionDb is null)
+                return (false, "AI recognition database is not configured.", null);
+            var recognition = await _aiRecognitionDb.RecognitionRecords
+                .FirstOrDefaultAsync(x => x.Id == request.ExitRecognitionId.Value, ct);
+            if (recognition is null || recognition.Purpose != "EXIT"
+                || recognition.ParkingLotId != session.LotId
+                || recognition.StaffUserId != actorId
+                || recognition.MatchedParkingSessionId != session.Id
+                || !PlateNumberHelper.IsMatch(recognition.ConfirmedPlateNumber ?? string.Empty, session.PlateNumber)
+                || !recognition.ConfirmedAt.HasValue)
+                return (false, "Kết quả AI tại cổng ra chưa được staff xác nhận cho phiên xe này.", null);
+        }
+        var pendingEntryWorkflow = await _context.StaffVehicleEntries.AnyAsync(x => x.ParkingSessionId == session.Id && x.Status == "PARKING", ct);
+        if (pendingEntryWorkflow)
+            return (false, "Xe chưa được staff xác nhận đã đỗ; chưa thể checkout.", null);
 
         // Kiểm tra nhận diện biển số tại cổng ra nếu có cung cấp (chuẩn hóa đối chiếu theo PlateNumberHelper.IsMatch)
         if (!string.IsNullOrWhiteSpace(request.ConfirmedPlateNumber))
@@ -288,53 +369,6 @@ public class ParkingSessionService : IParkingSessionService
             if (!PlateNumberHelper.IsMatch(request.ConfirmedPlateNumber, session.PlateNumber))
             {
                 return (false, $"Biển số xe xác nhận tại cổng ra ({request.ConfirmedPlateNumber.Trim()}) không khớp với phiên gửi xe #{session.Id} (Biển số: {session.PlateNumber}).", null);
-            }
-        }
-
-        // Financial Clearance Invariant:
-        // 1. Xe đã thanh toán hoàn tất (Status == PAID): Đủ điều kiện tài chính để xác nhận ra bãi.
-        // 2. Nếu phiên có thu phí (TotalFee > 0) mà chưa thanh toán (Status != PAID):
-        //    - Nhân viên cổng (STAFF) tuyệt đối không được phép check-out (BLOCKED).
-        //    - STAFF không được tự ý bypass bằng allowExitWithoutPayment.
-        //    - Chỉ ADMIN hoặc MANAGER mới có quyền phê duyệt miễn trừ thanh toán với lý do cụ thể.
-        // 3. Nếu phiên có TotalFee == 0:
-        //    - ADMIN và MANAGER có thẩm quyền xử lý phiên miễn phí / kiểm thử / quản trị.
-        //    - STAFF không được tự tiện miễn phí nếu phiên chưa được xác nhận thanh toán/miễn phí hợp lệ.
-        if (session.Status != SessionStatuses.Paid)
-        {
-            if (session.TotalFee > 0)
-            {
-                if (request.AllowExitWithoutPayment == true)
-                {
-                    if (actorRole != Roles.Admin && actorRole != Roles.Manager)
-                    {
-                        return (false, "Nhân viên cổng (STAFF) không có thẩm quyền tự miễn phí hoặc cho phép xe chưa thanh toán xuất bãi. Yêu cầu phê duyệt từ Quản lý (MANAGER) hoặc Quản trị viên (ADMIN).", null);
-                    }
-
-                    if (string.IsNullOrWhiteSpace(request.ExemptionReason))
-                    {
-                        return (false, "Yêu cầu cung cấp lý do miễn trừ/phê duyệt xuất bãi hợp lệ khi mở cổng cho xe chưa thanh toán.", null);
-                    }
-                }
-                else
-                {
-                    return (false, $"Phiên gửi xe #{session.Id} chưa được xác nhận thanh toán (Phí: {session.TotalFee:N0} VNĐ, Trạng thái: {session.Status}). Check-out có thu phí đang bị khóa cho tới khi thanh toán hoàn tất hoặc có phê duyệt miễn trừ từ Quản lý.", null);
-                }
-            }
-            else
-            {
-                // TotalFee == 0
-                if (actorRole == Roles.Staff)
-                {
-                    if (request.AllowExitWithoutPayment == true)
-                    {
-                        return (false, "Nhân viên cổng (STAFF) không có thẩm quyền tự miễn phí xuất bãi. Yêu cầu phê duyệt từ Quản lý (MANAGER) hoặc Quản trị viên (ADMIN).", null);
-                    }
-                    else
-                    {
-                        return (false, $"Phiên gửi xe #{session.Id} chưa hoàn tất tính phí và thanh toán (Trạng thái: ACTIVE). Cần thanh toán hoặc có xác nhận miễn phí từ Quản lý trước khi mở cổng.", null);
-                    }
-                }
             }
         }
 
@@ -375,6 +409,20 @@ public class ParkingSessionService : IParkingSessionService
                 }
 
                 var oldStatus = session.Status;
+                // Ticketed admissions cannot exit before slot verification and a valid ticket check.
+                if (session.EntryEventId.HasValue)
+                {
+                    if (session.VerificationStatus != "VERIFIED" || !PlateNumberHelper.IsMatch(request.ConfirmedPlateNumber, session.PlateNumber))
+                        return (false, "Cần xác minh xe tại ô và đối chiếu biển số trước khi ra bãi.", null);
+                    var exitTicket = await _context.ParkingTickets.FirstOrDefaultAsync(t => t.SessionId == session.Id && t.Status == "ISSUED", ct);
+                    if (exitTicket == null || exitTicket.Code != request.TicketCode?.Trim().ToUpperInvariant())
+                        return (false, "Vé thiếu, mất, sai hoặc đã thu hồi. Cần xử lý vé trước khi cho xe ra.", null);
+                    exitTicket.Status = "REVOKED";
+                    exitTicket.ClosedBy = actorId;
+                    exitTicket.ClosedAt = DateTime.UtcNow;
+                    exitTicket.Reason = "Thu hồi sau khi xác nhận xe thực sự ra bãi.";
+                    session.Revision++;
+                }
                 session.CheckOutTime = DateTime.UtcNow;
                 session.Status = SessionStatuses.Completed;
                 if (!string.IsNullOrWhiteSpace(request.CheckOutImageUrl))
@@ -398,11 +446,11 @@ public class ParkingSessionService : IParkingSessionService
                 }
 
                 // Giải phóng đúng ô đỗ mà xe thực sự đỗ nếu trước đó ô đỗ đã được ghi nhận OCCUPIED
-                var slotToRelease = session.CurrentSlot;
-                if (slotToRelease == null && session.CurrentSlotId.HasValue)
-                {
-                    slotToRelease = await _context.ParkingSlots.FirstOrDefaultAsync(s => s.Id == session.CurrentSlotId.Value, ct);
-                }
+                var slotToRelease = session.CurrentSlotId.HasValue
+                    ? await _context.ParkingSlots.FirstOrDefaultAsync(s => s.Id == session.CurrentSlotId.Value, ct)
+                    : null;
+                if (slotToRelease != null && _context is DbContext slotContext)
+                    await slotContext.Entry(slotToRelease).ReloadAsync(ct);
 
                 if (slotToRelease != null && slotToRelease.PhysicalStatus == SlotPhysicalStatuses.Occupied)
                 {
@@ -769,6 +817,250 @@ public class ParkingSessionService : IParkingSessionService
         return slots;
     }
 
+    public async Task<(bool Success, string Message, ParkingSessionDto? Data)> ConfirmBookingParkedAsync(
+        long bookingId,
+        ConfirmBookingParkedRequestDto request,
+        long? actorId,
+        string actorRole,
+        string? ipAddress,
+        CancellationToken ct = default)
+    {
+        var normalizedPlate = PlateNumberHelper.Normalize(request.PlateNumber);
+        if (!PlateNumberHelper.IsValidPlateFormat(normalizedPlate))
+            return (false, "Biển số xe không hợp lệ. Độ dài phải từ 3 đến 20 ký tự.", null);
+        var imageUrl = request.CheckInImageUrl?.Trim() ?? "";
+        var databaseImage = imageUrl.StartsWith("/api/v1/images/content/", StringComparison.Ordinal)
+            && Guid.TryParseExact(imageUrl["/api/v1/images/content/".Length..], "N", out _);
+        var externalImage = Uri.TryCreate(imageUrl, UriKind.Absolute, out var imageUri)
+            && (imageUri.Scheme == Uri.UriSchemeHttps || imageUri.Scheme == Uri.UriSchemeHttp);
+        if (!databaseImage && !externalImage)
+            return (false, "Ảnh biển số xe chưa được lưu hợp lệ.", null);
+        if (databaseImage && !await _context.StoredImages.AnyAsync(
+                image => image.Url == imageUrl && image.Content != null && image.UserId == actorId, ct))
+            return (false, "Ảnh biển số chưa được lưu hoặc không thuộc nhân viên xác nhận.", null);
+
+        var bookingLotId = await _context.Bookings
+            .AsNoTracking()
+            .Where(b => b.Id == bookingId)
+            .Select(b => (int?)b.LotId)
+            .FirstOrDefaultAsync(ct);
+        if (!bookingLotId.HasValue)
+            return (false, $"Không tìm thấy booking với ID: {bookingId}.", null);
+
+        if (!await _authService.CanOperateSlotVerificationAsync(actorId ?? 0, actorRole, bookingLotId.Value, ct))
+            return (false, "Bạn không có quyền xác minh xe và ô đỗ (SLOT_VERIFIER) tại bãi này.", null);
+
+        var lotLock = ParkingLotLockHelper.GetSemaphore(bookingLotId.Value);
+        await lotLock.WaitAsync(ct);
+        try
+        {
+            await using var transaction = await _context.BeginTransactionAsync(ct);
+            try
+            {
+                if (_context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    long lockKey = ParkingLotLockHelper.LotLockBase + bookingLotId.Value;
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "SELECT pg_advisory_xact_lock({0});",
+                        new object[] { lockKey },
+                        cancellationToken: ct);
+                }
+
+                var booking = await _context.Bookings
+                    .Include(b => b.Lot)
+                    .Include(b => b.Policy)
+                    .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+                if (booking == null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Không tìm thấy booking với ID: {bookingId}.", null);
+                }
+                if (booking.Status != BookingStatuses.Pending)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Booking #{booking.Id} không còn chờ xác minh xe (trạng thái: {booking.Status}).", null);
+                }
+                if (!PlateNumberHelper.IsMatch(booking.PlateNumber, normalizedPlate))
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, "Biển số xe thực tế không khớp với booking. Không thể xác nhận xe.", null);
+                }
+                normalizedPlate = PlateNumberHelper.Normalize(booking.PlateNumber);
+                if (!booking.Lot.IsActive)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Bãi đỗ xe '{booking.Lot.Name}' hiện đang đóng.", null);
+                }
+
+                var now = DateTime.UtcNow;
+                var graceMinutes = booking.Policy?.LateArrivalMinutes ?? BookingStatuses.NoShowGracePeriodMinutes;
+                if (booking.StartTime <= now.AddMinutes(-graceMinutes))
+                {
+                    booking.Status = BookingStatuses.Expired;
+                    booking.UpdatedAt = now;
+                    _context.AuditLogs.Add(new AuditLog
+                    {
+                        Action = "EXPIRE_BOOKING_NO_SHOW",
+                        TargetEntity = "bookings",
+                        TargetId = booking.Id.ToString(),
+                        OldValues = JsonSerializer.Serialize(new { Status = BookingStatuses.Pending }, JsonOptions),
+                        NewValues = JsonSerializer.Serialize(new
+                        {
+                            Status = BookingStatuses.Expired,
+                            Reason = $"Không xác nhận xe trong vòng {graceMinutes} phút kể từ giờ bắt đầu.",
+                            ExpiredAt = now
+                        }, JsonOptions),
+                        CreatedAt = now
+                    });
+                    await _context.SaveChangesAsync(ct);
+                    await transaction.CommitAsync(ct);
+                    return (false, $"Booking đã hết hạn vì quá {graceMinutes} phút kể từ giờ bắt đầu.", null);
+                }
+
+                var activePlateSession = await _context.ParkingSessions
+                    .AnyAsync(s => s.PlateNumber == normalizedPlate
+                        && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
+                if (activePlateSession)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Xe '{normalizedPlate}' đã có phiên gửi đang hoạt động.", null);
+                }
+
+                var slot = await _context.ParkingSlots
+                    .Include(s => s.Floor)
+                    .FirstOrDefaultAsync(s => s.Id == request.SlotId, ct);
+                if (slot == null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Không tìm thấy ô đỗ với ID: {request.SlotId}.", null);
+                }
+                if (!slot.IsActive || !slot.Floor.IsActive || slot.Floor.LotId != booking.LotId)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, "Ô đỗ không hoạt động hoặc không thuộc bãi của booking.", null);
+                }
+                if (slot.PhysicalStatus is SlotPhysicalStatuses.Maintenance or SlotPhysicalStatuses.Unavailable or SlotPhysicalStatuses.Reserved)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Ô đỗ '{slot.SlotCode}' đang bảo trì hoặc không khả dụng.", null);
+                }
+
+                if (!await _authService.CanOperateAreaAsync(actorId ?? 0, actorRole, booking.LotId,
+                    StaffDuties.SlotVerifier, slot.FloorId, slot.ZoneId, ct))
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, "Ô nằm ngoài tầng hoặc khu vực được phân công.", null);
+                }
+
+                var slotSession = await _context.ParkingSessions
+                    .FirstOrDefaultAsync(s => s.CurrentSlotId == slot.Id
+                        && (s.Status == SessionStatuses.Active || s.Status == SessionStatuses.Paid), ct);
+                if (slotSession != null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Ô đỗ '{slot.SlotCode}' đang được xe {slotSession.PlateNumber} sử dụng.", null);
+                }
+                var assignedDispatch = await _context.ParkingDispatches
+                    .AnyAsync(d => d.AssignedSlotId == slot.Id
+                        && d.Status == DispatchStatuses.Assigned, ct);
+                if (assignedDispatch)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, $"Ô đỗ '{slot.SlotCode}' đã được phân cho xe khác.", null);
+                }
+
+                var vehicle = await _context.Vehicles
+                    .FirstOrDefaultAsync(v => v.Id == booking.VehicleId, ct);
+                if (vehicle == null)
+                {
+                    await transaction.RollbackAsync(ct);
+                    return (false, "Không tìm thấy phương tiện của booking.", null);
+                }
+
+                var bookingStatusBefore = booking.Status;
+                var physicalStatusBefore = slot.PhysicalStatus;
+                var session = new ParkingSession
+                {
+                    LotId = booking.LotId,
+                    VehicleId = vehicle.Id,
+                    BookingId = booking.Id,
+                    PolicyId = booking.PolicyId,
+                    ZoneId = slot.ZoneId,
+                    VerificationStatus = "VERIFIED",
+                    VerifiedBy = actorId,
+                    VerifiedAt = now,
+                    PlateNumber = normalizedPlate,
+                    CheckInTime = now,
+                    CurrentSlotId = slot.Id,
+                    Status = SessionStatuses.Active,
+                    CheckInImageUrl = databaseImage ? imageUrl : imageUri!.AbsoluteUri,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                booking.Status = BookingStatuses.CheckedIn;
+                booking.CheckedInAt = now;
+                booking.UpdatedAt = now;
+                slot.PhysicalStatus = SlotPhysicalStatuses.Occupied;
+                slot.UpdatedAt = now;
+                _context.ParkingSessions.Add(session);
+                _context.ParkingDispatches.Add(new ParkingDispatch
+                {
+                    Session = session,
+                    AssignedSlotId = slot.Id,
+                    ActualSlotId = slot.Id,
+                    Status = DispatchStatuses.Occupied,
+                    DispatchMode = DispatchModes.Manual,
+                    DispatchedAt = now,
+                    ConfirmedAt = now,
+                    Notes = "Staff xác nhận booking và xe đã đỗ tại ô thực tế.",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+
+                await LogAuditAsync(
+                    action: "CONFIRM_BOOKING_PARKED",
+                    targetEntity: "bookings",
+                    targetId: booking.Id.ToString(),
+                    oldValues: new
+                    {
+                        Status = bookingStatusBefore,
+                        SlotPhysicalStatus = physicalStatusBefore
+                    },
+                    newValues: new
+                    {
+                        BookingId = booking.Id,
+                        session.Id,
+                        session.PlateNumber,
+                        SlotId = slot.Id,
+                        slot.SlotCode,
+                        FloorNumber = slot.Floor.FloorNumber,
+                        BookingStatus = booking.Status,
+                        PhysicalStatus = slot.PhysicalStatus,
+                        session.CheckInImageUrl,
+                        ActorRole = actorRole,
+                        IpAddress = ipAddress
+                    },
+                    actorId: actorId,
+                    ct: ct);
+
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+                var dto = MapToDto(session, booking.Lot.Name, slot.SlotCode, slot.Floor.FloorNumber);
+                return (true, $"Đã xác nhận xe '{session.PlateNumber}' đỗ tại ô '{slot.SlotCode}'.", dto);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(ct);
+                _logger.LogError(ex, "Lỗi xác nhận booking {BookingId} đã đỗ tại ô {SlotId}", bookingId, request.SlotId);
+                throw;
+            }
+        }
+        finally
+        {
+            lotLock.Release();
+        }
+    }
+
     public async Task<(bool Success, string Message, ParkingSessionDto? Data)> VerifySessionSlotAsync(
         long sessionId,
         VerifySessionSlotRequestDto request,
@@ -788,6 +1080,8 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Không tìm thấy phiên gửi xe với ID: {sessionId}.", null);
         }
 
+        if (session.EntryEventId.HasValue)
+            return (false, "Lượt có vé phải dùng API operations để xác minh xe, nhiên liệu và ô thực tế.", null);
         if (session.Status != SessionStatuses.Active)
         {
             return (false, $"Chỉ có thể xác minh ô đỗ cho phiên gửi xe đang hoạt động (ACTIVE). Trạng thái hiện tại: {session.Status}.", null);
@@ -849,12 +1143,11 @@ public class ParkingSessionService : IParkingSessionService
                 }
 
                 var oldSlotId = session.CurrentSlotId;
+                var previousSensorStatus = slot.PhysicalStatus;
+                slot.PhysicalStatus = SlotPhysicalStatuses.Occupied;
+                slot.UpdatedAt = DateTime.UtcNow;
                 session.CurrentSlotId = slot.Id;
                 session.UpdatedAt = DateTime.UtcNow;
-
-                // Sensor Integrity Invariant: Nhân viên xác minh liên kết Session-Slot KHÔNG ghi đè trạng thái cảm biến vật lý.
-                // Trạng thái vật lý được giữ nguyên; nếu có bất đồng, ghi nhận DiscrepancyWithSensor vào AuditLog.
-                var previousSensorStatus = slot.PhysicalStatus;
 
                 var dispatch = await _context.ParkingDispatches
                     .Where(d => d.SessionId == session.Id && (d.Status == DispatchStatuses.Pending || d.Status == DispatchStatuses.Assigned))
@@ -906,6 +1199,7 @@ public class ParkingSessionService : IParkingSessionService
                         slot.SlotCode,
                         FloorNumber = slot.Floor?.FloorNumber,
                         SensorStatusBeforeVerification = previousSensorStatus,
+                        PhysicalStatusAfterVerification = slot.PhysicalStatus,
                         DiscrepancyWithSensor = previousSensorStatus != SlotPhysicalStatuses.Occupied,
                         ActorRole = actorRole,
                         IpAddress = ipAddress,
@@ -916,8 +1210,17 @@ public class ParkingSessionService : IParkingSessionService
                 );
 
                 await _context.SaveChangesAsync(ct);
+                var entryWorkflow = await _context.StaffVehicleEntries
+                    .Where(x => x.ParkingSessionId == session.Id && x.Status == "PARKING")
+                    .OrderByDescending(x => x.StartedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (entryWorkflow is not null)
+                {
+                    entryWorkflow.Status = "CLOSED_PARKED";
+                    entryWorkflow.ParkedAt = DateTime.UtcNow;
+                }
+                await _context.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
-
                 var dto = MapToDto(session, session.Lot?.Name ?? string.Empty, slot.SlotCode, slot.Floor?.FloorNumber);
                 return (true, $"Xác nhận liên kết xe '{session.PlateNumber}' vào ô đỗ '{slot.SlotCode}' thành công.", dto);
             }
@@ -953,6 +1256,8 @@ public class ParkingSessionService : IParkingSessionService
             return (false, $"Không tìm thấy phiên gửi xe với ID: {sessionId}.", null);
         }
 
+        if (session.EntryEventId.HasValue)
+            return (false, "Lượt có vé phải dùng API operations để xác minh xe, nhiên liệu và ô thực tế.", null);
         if (session.Status != SessionStatuses.Active)
         {
             return (false, $"Chỉ có thể báo sai ô đỗ cho phiên gửi xe đang hoạt động (ACTIVE). Trạng thái hiện tại: {session.Status}.", null);
@@ -1013,6 +1318,10 @@ public class ParkingSessionService : IParkingSessionService
                     return (false, $"Ô đỗ thực tế '{actualSlot.SlotCode}' đang được liên kết với phiên #{conflictingSession.Id} (Biển số: {conflictingSession.PlateNumber}). Vui lòng xử lý xung đột của phiên này trước.", null);
                 }
 
+                var previousActualSlotStatus = actualSlot.PhysicalStatus;
+                actualSlot.PhysicalStatus = SlotPhysicalStatuses.Occupied;
+                actualSlot.UpdatedAt = DateTime.UtcNow;
+
                 var oldSlotId = session.CurrentSlotId;
                 ParkingSlot? oldSlot = null;
                 string? conflictNote = null;
@@ -1030,9 +1339,6 @@ public class ParkingSessionService : IParkingSessionService
 
                 session.CurrentSlotId = actualSlot.Id;
                 session.UpdatedAt = DateTime.UtcNow;
-
-                // Sensor Integrity Invariant: Nhân viên báo sai ô và cập nhật Session-Slot KHÔNG ghi đè trạng thái cảm biến vật lý của actualSlot.
-                // Trạng thái vật lý của actualSlot được giữ nguyên từ nguồn telemetry cảm biến.
 
                 var dispatch = await _context.ParkingDispatches
                     .Where(d => d.SessionId == session.Id && (d.Status == DispatchStatuses.Pending || d.Status == DispatchStatuses.Assigned || d.Status == DispatchStatuses.Occupied))
@@ -1076,6 +1382,7 @@ public class ParkingSessionService : IParkingSessionService
                         session.Id,
                         PreviousSlotId = oldSlotId,
                         PreviousSlotCode = oldSlot?.SlotCode,
+                        PreviousActualSlotPhysicalStatus = previousActualSlotStatus,
                         PreviousSlotPhysicalStatus = oldSlot?.PhysicalStatus
                     },
                     newValues: new
@@ -1083,6 +1390,9 @@ public class ParkingSessionService : IParkingSessionService
                         session.Id,
                         ActualSlotId = actualSlot.Id,
                         actualSlot.SlotCode,
+                        SensorStatusBeforeVerification = previousActualSlotStatus,
+                        PhysicalStatusAfterVerification = actualSlot.PhysicalStatus,
+                        DiscrepancyWithSensor = previousActualSlotStatus != SlotPhysicalStatuses.Occupied,
                         Reason = request.Reason,
                         ConflictNote = conflictNote,
                         ActorRole = actorRole,
@@ -1124,6 +1434,10 @@ public class ParkingSessionService : IParkingSessionService
             VehicleId = session.VehicleId,
             BookingId = session.BookingId,
             PlateNumber = session.PlateNumber,
+            VerificationStatus = session.VerificationStatus,
+            ZoneId = session.ZoneId,
+            PolicyId = session.PolicyId,
+            Revision = session.Revision,
             CheckInTime = session.CheckInTime,
             CheckOutTime = session.CheckOutTime,
             CurrentSlotId = session.CurrentSlotId,

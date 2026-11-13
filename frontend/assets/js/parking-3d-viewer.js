@@ -46,6 +46,7 @@
   var STATUS_COLORS = {
     EMPTY:       { hex: 0x10b981, css: '#10b981', label: 'Trống', code: 'free' },
     OCCUPIED:    { hex: 0xef4444, css: '#ef4444', label: 'Có xe', code: 'occ' },
+    RESERVED:    { hex: 0x3b82f6, css: '#3b82f6', label: 'Đang giữ chỗ', code: 'reserved' },
     MAINTENANCE: { hex: 0xf59e0b, css: '#f59e0b', label: 'Bảo trì', code: 'blk' },
     UNAVAILABLE: { hex: 0x6b7280, css: '#6b7280', label: 'Tạm khóa', code: 'off' }
   };
@@ -1315,13 +1316,26 @@
       });
     }
 
-    resolvedUrl.then(function (resolvedEndpoint) {
-      return fetch(resolvedEndpoint);
+    resolvedUrl.then(async function (resolvedEndpoint) {
+      var pageUrl = new URL(resolvedEndpoint, location.origin);
+      pageUrl.searchParams.set('pageNumber', '1');
+      pageUrl.searchParams.set('pageSize', '100');
+      var response = await fetch(pageUrl.pathname + pageUrl.search);
+      if (!response.ok) throw new Error('API Error: ' + response.status);
+      var payload = await response.json();
+      if (payload.data && Array.isArray(payload.data.items)) {
+        var pages = Number(payload.data.totalPages || 1);
+        for (var page = 2; page <= pages; page++) {
+          pageUrl.searchParams.set('pageNumber', String(page));
+          var next = await fetch(pageUrl.pathname + pageUrl.search);
+          if (!next.ok) throw new Error('API Error: ' + next.status);
+          var nextPayload = await next.json();
+          if (!nextPayload.data || !Array.isArray(nextPayload.data.items)) throw new Error('Payload slot không hợp lệ.');
+          payload.data.items.push.apply(payload.data.items, nextPayload.data.items);
+        }
+      }
+      return payload;
     })
-      .then(function (res) {
-        if (!res.ok) throw new Error('API Error: ' + res.status);
-        return res.json();
-      })
       .then(function (data) {
         var slotsList = data.slots || (data.data && data.data.items) || data.data || (Array.isArray(data) ? data : []);
         if (!Array.isArray(slotsList)) throw new Error('Payload slot không hợp lệ.');

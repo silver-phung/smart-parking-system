@@ -152,21 +152,13 @@ function ProfileContent() {
 
   return (
     <section className="customer-page container">
-      <div className="customer-page__heading">
-        <div>
-          <span className="tag">Tài khoản khách hàng</span>
-          <h1>Hồ sơ của tôi</h1>
-          <p className="muted">Quản lý thông tin cá nhân và phương tiện.</p>
-        </div>
-        <Link to="/customer" className="btn btn--outline">Xem bãi đỗ</Link>
-      </div>
-
       <div className="customer-card">
         <div className="customer-card__heading">
           <div>
             <h2>Thông tin cá nhân</h2>
             <p className="muted">Tên đăng nhập và email được hệ thống quản lý, không thể sửa ở đây.</p>
           </div>
+          <Link to="/customer" className="btn btn--outline">Xem bãi đỗ</Link>
         </div>
         {profileLoading ? (
           <p className="customer-message">Đang tải hồ sơ...</p>
