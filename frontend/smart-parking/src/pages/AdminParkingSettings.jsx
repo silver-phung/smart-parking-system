@@ -489,6 +489,10 @@ function Content() {
 
   const handleDeleteLot = async () => {
     if (!lot) return;
+    const confirmed = window.confirm(
+      `Xóa bãi "${lot.name}" cùng tầng, khu vực, ô đỗ và chính sách cấu hình? Bãi có lịch sử phiên xe, đặt chỗ, điều phối hoặc phân công sẽ được giữ lại.`,
+    );
+    if (!confirmed) return;
     setLotModalError("");
     setLotActionMessage("");
     setLotModalBusy(true);
@@ -498,7 +502,7 @@ function Content() {
       await lots.reload();
       setLotActionMessage(`Đã xóa bãi đỗ "${lot.name}".`);
     } catch (err) {
-      setLotModalError(err.message || "Không thể xóa bãi đỗ đang có tầng hoặc lịch sử phiên gửi xe.");
+      setLotModalError(err.message || "Không thể xóa bãi. Hãy kiểm tra lịch sử phiên xe, đặt chỗ, điều phối hoặc phân công nhân viên.");
     } finally {
       setLotModalBusy(false);
     }

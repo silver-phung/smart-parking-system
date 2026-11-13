@@ -227,12 +227,12 @@ public class ParkingLotsController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa bãi đỗ xe (Chỉ dành cho ADMIN; Từ chối nếu bãi đang có tầng hoặc lịch sử gửi xe).
+    /// Xóa bãi cùng cấu trúc cấu hình (Chỉ dành cho ADMIN; từ chối nếu bãi có dữ liệu vận hành cần bảo toàn).
     /// </summary>
     [HttpDelete("{id:int}")]
     [Authorize(Roles = Roles.Admin)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -247,7 +247,7 @@ public class ParkingLotsController : ControllerBase
             {
                 return NotFound(new { message });
             }
-            return BadRequest(new { message });
+            return Conflict(new { message });
         }
 
         return Ok(new { message });

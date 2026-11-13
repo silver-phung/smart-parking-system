@@ -292,23 +292,50 @@ public class ParkingManagementService : IParkingManagementService
             return (false, "Không tìm thấy bãi đỗ xe để xóa.");
         }
 
-        // Business Rule: Không xóa cứng bãi có dữ liệu liên quan
-        var hasFloors = await _context.ParkingFloors.AnyAsync(f => f.LotId == id, ct);
-        var hasSessions = await _context.ParkingSessions.AnyAsync(s => s.LotId == id, ct);
-
-        if (hasFloors || hasSessions)
-        {
-            return (false, "Không thể xóa bãi đỗ xe đang chứa các tầng hoặc lịch sử gửi xe. Vui lòng vô hiệu hóa trạng thái (chuyển sang Không hoạt động).");
-        }
+        if (await _context.ParkingSessions.AnyAsync(s => s.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử phiên gửi xe. Hãy đóng bãi thay vì xóa để giữ lịch sử.");
+        if (await _context.Bookings.AnyAsync(b => b.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử đặt chỗ. Hãy đóng bãi thay vì xóa để giữ lịch sử.");
+        if (await _context.ParkingSlots.AnyAsync(s => s.Floor.LotId == id &&
+            (s.PhysicalStatus == SlotPhysicalStatuses.Occupied || s.PhysicalStatus == SlotPhysicalStatuses.Reserved), ct))
+            return (false, "Không thể xóa bãi vì vẫn còn ô đang có xe hoặc đang giữ chỗ.");
+        if (await _context.StaffVehicleEntries.AnyAsync(e => e.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử xe do nhân viên ghi nhận.");
+        if (await _context.ParkingDispatches.AnyAsync(d => d.AssignedSlot.Floor.LotId == id ||
+            (d.ActualSlotId != null && d.ActualSlot!.Floor.LotId == id), ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử điều phối ô đỗ.");
+        if (await _context.StaffLotAssignments.AnyAsync(a => a.LotId == id, ct))
+            return (false, "Không thể xóa bãi vì còn lịch sử phân công nhân viên. Hãy xử lý phân công trước.");
 
         var oldValues = JsonSerializer.Serialize(new { lot.Name, lot.Address, lot.TotalCapacity });
+        await using var transaction = await _context.BeginTransactionAsync(ct);
+
+        var policies = await _context.ParkingPolicies.Where(p => p.LotId == id).ToListAsync(ct);
+        _context.ParkingPolicies.RemoveRange(policies);
+        await _context.SaveChangesAsync(ct);
+
+        var slots = await _context.ParkingSlots.Where(s => s.Floor.LotId == id).ToListAsync(ct);
+        _context.ParkingSlots.RemoveRange(slots);
+        await _context.SaveChangesAsync(ct);
+
+        var floors = await _context.ParkingFloors.Where(f => f.LotId == id).ToListAsync(ct);
+        foreach (var floor in floors)
+            floor.ZoneId = null;
+        await _context.SaveChangesAsync(ct);
+
+        var zones = await _context.ParkingZones.Where(z => z.LotId == id).ToListAsync(ct);
+        _context.ParkingZones.RemoveRange(zones);
+        await _context.SaveChangesAsync(ct);
+
+        _context.ParkingFloors.RemoveRange(floors);
         _context.ParkingLots.Remove(lot);
         await _context.SaveChangesAsync(ct);
 
         await LogAuditAsync(actorId, "DELETE_PARKING_LOT", "parking_lots", id.ToString(), oldValues, null, null, ct);
+        await transaction.CommitAsync(ct);
         _logger.LogInformation("ParkingLot {LotId} deleted by Actor {ActorId}", id, actorId);
 
-        return (true, "Xóa bãi đỗ xe thành công.");
+        return (true, "Đã xóa bãi cùng các tầng, khu vực, ô đỗ và chính sách cấu hình. Lịch sử vận hành được bảo vệ nên bãi có phiên xe, đặt chỗ, điều phối hoặc phân công sẽ không thể xóa.");
     }
 
 
