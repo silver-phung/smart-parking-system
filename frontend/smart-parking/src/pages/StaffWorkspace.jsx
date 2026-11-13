@@ -95,16 +95,6 @@ function StaffContent() {
 
   return (
     <div className="staff-workspace container">
-      <header className="staff-workspace-heading">
-        <div>
-          <span className="staff-eyebrow">SMART PARKING / NHÂN VIÊN</span>
-          <h1>Trạm vận hành</h1>
-          <p>Tiếp nhận tại cổng. Xác minh tại ô. Theo dõi cùng một lượt xe.</p>
-        </div>
-        <span className="staff-shift-label">
-          <i /> Vận hành tại bãi
-        </span>
-      </header>
       <StaffError error={lots.error} />
       {lots.error && (
         <button
