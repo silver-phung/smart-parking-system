@@ -54,7 +54,7 @@ public sealed class CashHandoversController(ICashHandoverService handoverService
         }
         catch (HttpRequestException ex)
         {
-            logger.LogWarning(ex, "Core authorization check failed while creating a handover for lot {LotId}", request.LotId);
+            logger.LogWarning(ex, "Core authorization check failed while creating a handover from shift {ShiftId}", request.OutgoingShiftId);
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Không xác minh được quyền hoặc phân công với Core. Hãy thử lại sau." });
         }
     }

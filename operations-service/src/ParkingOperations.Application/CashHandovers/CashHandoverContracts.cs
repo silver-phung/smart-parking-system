@@ -5,24 +5,49 @@ namespace ParkingOperations.Application.CashHandovers;
 
 public sealed class CreateCashHandoverRequest : IValidatableObject
 {
-    [Range(1, int.MaxValue)] public int LotId { get; init; }
-    public DateOnly BusinessDate { get; init; }
-    [Required, MaxLength(20)] public string FromShiftCode { get; init; } = string.Empty;
-    [Required, MaxLength(20)] public string ToShiftCode { get; init; } = string.Empty;
+    public Guid OutgoingShiftId { get; init; }
+    public Guid IncomingShiftId { get; init; }
     [Range(1, long.MaxValue)] public long OutgoingStaffId { get; init; }
     [Range(1, long.MaxValue)] public long IncomingStaffId { get; init; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (BusinessDate == default)
-            yield return new ValidationResult("businessDate phải có giá trị.", [nameof(BusinessDate)]);
-        if (!ParkingShiftCodes.IsValid(FromShiftCode) || !ParkingShiftCodes.IsValid(ToShiftCode) ||
-            !ParkingShiftCodes.IsNext(FromShiftCode, ToShiftCode))
-            yield return new ValidationResult("Chọn đúng hai ca liền kề theo thứ tự MORNING → AFTERNOON → NIGHT → MORNING.", [nameof(FromShiftCode), nameof(ToShiftCode)]);
+        if (OutgoingShiftId == Guid.Empty || IncomingShiftId == Guid.Empty || OutgoingShiftId == IncomingShiftId)
+            yield return new ValidationResult("Chọn hai ca khác nhau để bàn giao.", [nameof(OutgoingShiftId), nameof(IncomingShiftId)]);
         if (OutgoingStaffId == IncomingStaffId)
             yield return new ValidationResult("Nhân viên giao và nhận ca phải là hai người khác nhau.", [nameof(IncomingStaffId)]);
     }
 }
+
+public sealed class CreateShiftRequest : IValidatableObject
+{
+    [Range(1, int.MaxValue)] public int LotId { get; init; }
+    public DateOnly BusinessDate { get; init; }
+    [Required, MaxLength(20)] public string ShiftCode { get; init; } = string.Empty;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (BusinessDate == default)
+            yield return new ValidationResult("businessDate phải có giá trị.", [nameof(BusinessDate)]);
+        if (!ParkingShiftCodes.IsValid(ShiftCode))
+            yield return new ValidationResult("shiftCode phải là MORNING, AFTERNOON hoặc NIGHT.", [nameof(ShiftCode)]);
+    }
+}
+
+public sealed class AssignStaffToShiftRequest
+{
+    [Range(1, long.MaxValue)] public long StaffId { get; init; }
+    [Required, MaxLength(32)] public string DutyCode { get; init; } = string.Empty;
+}
+
+public sealed record ShiftAssignmentDto(Guid Id, long StaffId, string DutyCode, long AssignedByManagerId, DateTime AssignedAtUtc);
+
+public sealed record ParkingShiftDto(
+    Guid Id, int LotId, DateOnly BusinessDate, string Code, DateTime StartsAtUtc, DateTime EndsAtUtc,
+    string Status, long CreatedByManagerId, DateTime CreatedAtUtc, DateTime? StartedAtUtc,
+    DateTime? CompletedAtUtc, int Version, IReadOnlyList<ShiftAssignmentDto> Assignments);
+
+public sealed record ShiftOperationResult(bool Success, int StatusCode, string Message, ParkingShiftDto? Data = null);
 
 public sealed class ConfirmCashHandoverRequest
 {
@@ -42,6 +67,8 @@ public sealed record CashHandoverDto(
     DateOnly BusinessDate,
     string FromShiftCode,
     string ToShiftCode,
+    Guid? OutgoingShiftId,
+    Guid? IncomingShiftId,
     long OutgoingStaffId,
     long IncomingStaffId,
     long CreatedByManagerId,
@@ -57,6 +84,7 @@ public sealed record CashHandoverDto(
 {
     public static CashHandoverDto From(CashHandover entity) => new(
         entity.Id, entity.LotId, entity.BusinessDate, entity.FromShiftCode, entity.ToShiftCode,
+        entity.OutgoingShiftId, entity.IncomingShiftId,
         entity.OutgoingStaffId, entity.IncomingStaffId, entity.CreatedByManagerId, entity.CreatedAtUtc,
         entity.OutgoingCountedAmount, entity.OutgoingConfirmedAtUtc, entity.IncomingCountedAmount,
         entity.IncomingConfirmedAtUtc,
@@ -71,6 +99,7 @@ public sealed record CashHandoverOperationResult(bool Success, int StatusCode, s
 public interface ICoreStaffAccessClient
 {
     Task<bool> IsCallerAssignedToLotAsync(string bearerToken, int lotId, CancellationToken ct);
+    Task<bool> IsActiveStaffAtLotAsync(string bearerToken, int lotId, long staffId, CancellationToken ct);
     Task<bool> AreActiveStaffAtLotAsync(string bearerToken, int lotId, long firstStaffId, long secondStaffId, CancellationToken ct);
 }
 
@@ -80,4 +109,13 @@ public interface ICashHandoverService
     Task<(IReadOnlyList<CashHandoverDto> Items, int TotalCount)> ListAsync(int lotId, DateOnly? businessDate, int page, int pageSize, string token, long actorId, string role, CancellationToken ct);
     Task<CashHandoverOperationResult> ConfirmAsync(Guid id, decimal countedAmount, long actorId, string role, string token, CancellationToken ct);
     Task<CashHandoverOperationResult> DisputeAsync(Guid id, string reason, long actorId, string role, string token, CancellationToken ct);
+}
+
+public interface IParkingShiftService
+{
+    Task<(IReadOnlyList<ParkingShiftDto> Items, int TotalCount)> ListAsync(int lotId, DateOnly? businessDate, int page, int pageSize, long actorId, string role, string token, CancellationToken ct);
+    Task<ShiftOperationResult> CreateAsync(CreateShiftRequest request, long managerId, string token, CancellationToken ct);
+    Task<ShiftOperationResult> AssignAsync(Guid shiftId, AssignStaffToShiftRequest request, long managerId, string token, CancellationToken ct);
+    Task<ShiftOperationResult> StartAsync(Guid shiftId, long managerId, string token, CancellationToken ct);
+    Task<ShiftOperationResult> CompleteAsync(Guid shiftId, long managerId, string token, CancellationToken ct);
 }

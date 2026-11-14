@@ -17,9 +17,12 @@ const statusLabels = {
   DISPUTED: "Lệch tiền · cần xử lý",
   REJECTED: "Bị từ chối",
 };
-const localDate = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+const nextShift = (shift, all) => {
+  if (!shift) return null;
+  const nextCode = { MORNING: "AFTERNOON", AFTERNOON: "NIGHT", NIGHT: "MORNING" }[shift.code];
+  const [year, month, day] = shift.businessDate.split("-").map(Number);
+  const expectedDate = new Date(Date.UTC(year, month - 1, day + (shift.code === "NIGHT" ? 1 : 0))).toISOString().slice(0, 10);
+  return all.find((item) => item.lotId === shift.lotId && item.code === nextCode && item.businessDate === expectedDate) || null;
 };
 const money = (value) => value == null
   ? "Chưa kiểm đếm"
@@ -89,10 +92,9 @@ export default function CashHandovers() {
   const currentId = actorId();
   const [lots, setLots] = useState([]);
   const [lotId, setLotId] = useState("");
-  const [staff, setStaff] = useState([]);
+  const [shiftRecords, setShiftRecords] = useState([]);
   const [items, setItems] = useState([]);
-  const [businessDate, setBusinessDate] = useState(localDate());
-  const [fromShiftCode, setFromShiftCode] = useState("MORNING");
+  const [outgoingShiftId, setOutgoingShiftId] = useState("");
   const [outgoingStaffId, setOutgoingStaffId] = useState("");
   const [incomingStaffId, setIncomingStaffId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -101,7 +103,10 @@ export default function CashHandovers() {
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
 
-  const toShiftCode = useMemo(() => ({ MORNING: "AFTERNOON", AFTERNOON: "NIGHT", NIGHT: "MORNING" })[fromShiftCode], [fromShiftCode]);
+  const outgoingShift = shiftRecords.find((item) => item.id === outgoingShiftId);
+  const incomingShift = useMemo(() => nextShift(outgoingShift, shiftRecords), [outgoingShift, shiftRecords]);
+  const outgoingStaffChoices = outgoingShift?.assignments || [];
+  const incomingStaffChoices = incomingShift?.assignments || [];
 
   useEffect(() => {
     let active = true;
@@ -120,16 +125,15 @@ export default function CashHandovers() {
     setError("");
     const jobs = [
       operationsRequest(`/handovers?lotId=${lotId}&page=1&pageSize=50`),
+      operationsRequest(`/shifts?lotId=${lotId}&page=1&pageSize=100`),
     ];
-    if (manager)
-      jobs.push(apiRequest(`/v1/staff-assignments?LotId=${lotId}&IsActive=true&Page=1&PageSize=100`));
-    Promise.all(jobs).then(([handoverResult, staffResult]) => {
+    Promise.all(jobs).then(([handoverResult, shiftResult]) => {
       if (!active) return;
       setItems(itemsOf(handoverResult?.data?.items));
-      const candidates = itemsOf(staffResult?.data?.items).filter((person) => person.userRole === "STAFF");
-      setStaff(candidates);
-      if (!outgoingStaffId && candidates.length) setOutgoingStaffId(String(candidates[0].userId));
-      if (!incomingStaffId && candidates.length > 1) setIncomingStaffId(String(candidates[1].userId));
+      const shiftValues = itemsOf(shiftResult?.data?.items);
+      setShiftRecords(shiftValues);
+      const eligibleOutgoing = shiftValues.find((item) => item.status === "IN_PROGRESS" && nextShift(item, shiftValues)?.status === "PLANNED");
+      setOutgoingShiftId((current) => shiftValues.some((item) => item.id === current) ? current : eligibleOutgoing?.id || "");
     }).catch((e) => { if (active) setError(e.message); });
     return () => { active = false; };
   }, [lotId, manager, revision]);
@@ -166,17 +170,16 @@ export default function CashHandovers() {
             e.preventDefault();
             run(async () => {
               await operationsRequest("/handovers", { method: "POST", body: JSON.stringify({
-                lotId: Number(lotId), businessDate, fromShiftCode, toShiftCode,
+                outgoingShiftId, incomingShiftId: incomingShift?.id,
                 outgoingStaffId: Number(outgoingStaffId), incomingStaffId: Number(incomingStaffId),
               }) });
             }, "Đã tạo handover; chờ người giao và nhận xác nhận.");
           }}>
-            <label>Ngày nghiệp vụ<input type="date" required value={businessDate} onChange={(e) => setBusinessDate(e.target.value)} /></label>
-            <label>Ca giao<select value={fromShiftCode} onChange={(e) => setFromShiftCode(e.target.value)}>{shifts.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-            <label>Ca nhận<input readOnly value={shiftLabels[toShiftCode]} /></label>
-            <label>Nhân viên giao<select required value={outgoingStaffId} onChange={(e) => setOutgoingStaffId(e.target.value)}><option value="">Chọn nhân viên</option>{staff.map((person) => <option key={person.userId} value={person.userId}>{person.userFullName} · #{person.userId}</option>)}</select></label>
-            <label>Nhân viên nhận<select required value={incomingStaffId} onChange={(e) => setIncomingStaffId(e.target.value)}><option value="">Chọn nhân viên</option>{staff.map((person) => <option key={person.userId} value={person.userId} disabled={String(person.userId) === outgoingStaffId}>{person.userFullName} · #{person.userId}</option>)}</select></label>
-            <button className="btn btn--primary" disabled={busy || !staff.length || !outgoingStaffId || !incomingStaffId || outgoingStaffId === incomingStaffId}>Tạo bàn giao</button>
+            <label>Ca giao<select required value={outgoingShiftId} onChange={(e) => { setOutgoingShiftId(e.target.value); setOutgoingStaffId(""); setIncomingStaffId(""); }}><option value="">Chọn ca đang diễn ra</option>{shiftRecords.filter((item) => item.status === "IN_PROGRESS" && nextShift(item, shiftRecords)?.status === "PLANNED").map((item) => <option key={item.id} value={item.id}>{shiftLabels[item.code]} · {item.businessDate}</option>)}</select></label>
+            <label>Ca nhận<select required value={incomingShift?.id || ""} disabled><option value="">{incomingShift ? `${shiftLabels[incomingShift.code]} · ${incomingShift.businessDate}` : "Chưa có ca kế tiếp đã lên lịch"}</option></select></label>
+            <label>Nhân viên giao<select required value={outgoingStaffId} onChange={(e) => setOutgoingStaffId(e.target.value)}><option value="">Chọn người trong roster ca giao</option>{outgoingStaffChoices.map((person) => <option key={person.staffId} value={person.staffId}>Nhân viên #{person.staffId}</option>)}</select></label>
+            <label>Nhân viên nhận<select required value={incomingStaffId} onChange={(e) => setIncomingStaffId(e.target.value)}><option value="">Chọn người trong roster ca nhận</option>{incomingStaffChoices.map((person) => <option key={person.staffId} value={person.staffId} disabled={String(person.staffId) === outgoingStaffId}>Nhân viên #{person.staffId}</option>)}</select></label>
+            <button className="btn btn--primary" disabled={busy || !outgoingShift || !incomingShift || !outgoingStaffId || !incomingStaffId || outgoingStaffId === incomingStaffId}>Tạo bàn giao</button>
           </form>
         </section>
       )}

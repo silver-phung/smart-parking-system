@@ -31,6 +31,7 @@ if (!Uri.TryCreate(coreBaseUrl, UriKind.Absolute, out var coreUri) ||
 
 builder.Services.AddDbContext<OperationsDbContext>(options => options.UseNpgsql(operationsConnection));
 builder.Services.AddScoped<ICashHandoverService, CashHandoverService>();
+builder.Services.AddScoped<IParkingShiftService, ParkingShiftService>();
 builder.Services.AddHttpClient<ICoreStaffAccessClient, CoreStaffAccessClient>(client =>
 {
     client.BaseAddress = new Uri(coreUri.ToString().TrimEnd('/') + "/");

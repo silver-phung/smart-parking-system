@@ -22,6 +22,7 @@ import AdminPeople from "./pages/AdminPeople.jsx";
 import CustomerSessions from "./pages/CustomerSessions.jsx";
 import ProjectInformation from "./pages/ProjectInformation.jsx";
 import CashHandovers from "./pages/CashHandovers.jsx";
+import ShiftManagement from "./pages/ShiftManagement.jsx";
 
 export default function App() {
   const { pathname, hash } = useLocation();
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/admin/people" element={<AdminPeople />} />
           <Route path="/manager" element={<ManagerWorkspace />} />
           <Route path="/handovers" element={<RequireRole role={["MANAGER", "STAFF"]}><CashHandovers /></RequireRole>} />
+          <Route path="/manager/shifts" element={<RequireRole role="MANAGER"><ShiftManagement /></RequireRole>} />
           <Route path="/manager/assignments" element={<ManagerStaffAssignments />} />
           <Route path="/staff" element={<StaffWorkspace />} />
           <Route

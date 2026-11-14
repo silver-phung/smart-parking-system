@@ -72,6 +72,10 @@ namespace ParkingOperations.Persistence.Migrations
                         .HasColumnType("numeric(14,2)")
                         .HasColumnName("incoming_counted_amount");
 
+                    b.Property<Guid?>("IncomingShiftId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("incoming_shift_id");
+
                     b.Property<long>("IncomingStaffId")
                         .HasColumnType("bigint")
                         .HasColumnName("incoming_staff_id");
@@ -92,6 +96,10 @@ namespace ParkingOperations.Persistence.Migrations
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)")
                         .HasColumnName("outgoing_counted_amount");
+
+                    b.Property<Guid?>("OutgoingShiftId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("outgoing_shift_id");
 
                     b.Property<long>("OutgoingStaffId")
                         .HasColumnType("bigint")
@@ -116,14 +124,148 @@ namespace ParkingOperations.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("LotId", "BusinessDate", "FromShiftCode")
+                    b.HasIndex("IncomingShiftId");
+
+                    b.HasIndex("OutgoingShiftId");
+
+                    b.HasIndex("LotId", "BusinessDate", "OutgoingShiftId")
                         .IsUnique()
-                        .HasDatabaseName("ux_cash_handovers_lot_date_from_shift");
+                        .HasDatabaseName("ux_cash_handovers_lot_date_outgoing_shift");
 
                     b.HasIndex("LotId", "BusinessDate", "Status")
                         .HasDatabaseName("ix_cash_handovers_lot_date_status");
 
                     b.ToTable("cash_handovers", (string)null);
+                });
+
+            modelBuilder.Entity("ParkingOperations.Domain.Entities.ParkingShift", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date")
+                        .HasColumnName("business_date");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<long>("CreatedByManagerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by_manager_id");
+
+                    b.Property<DateTime>("EndsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at_utc");
+
+                    b.Property<int>("LotId")
+                        .HasColumnType("integer")
+                        .HasColumnName("lot_id");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at_utc");
+
+                    b.Property<DateTime>("StartsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LotId", "BusinessDate", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_shifts_lot_business_date_code");
+
+                    b.ToTable("shifts", (string)null);
+                });
+
+            modelBuilder.Entity("ParkingOperations.Domain.Entities.ShiftAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AssignedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at_utc");
+
+                    b.Property<long>("AssignedByManagerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("assigned_by_manager_id");
+
+                    b.Property<string>("DutyCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("duty_code");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shift_id");
+
+                    b.Property<long>("StaffId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("staff_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShiftId", "StaffId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_shift_assignments_shift_staff");
+
+                    b.ToTable("shift_assignments", (string)null);
+                });
+
+            modelBuilder.Entity("ParkingOperations.Domain.Entities.CashHandover", b =>
+                {
+                    b.HasOne("ParkingOperations.Domain.Entities.ParkingShift", null)
+                        .WithMany()
+                        .HasForeignKey("IncomingShiftId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ParkingOperations.Domain.Entities.ParkingShift", null)
+                        .WithMany()
+                        .HasForeignKey("OutgoingShiftId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("ParkingOperations.Domain.Entities.ShiftAssignment", b =>
+                {
+                    b.HasOne("ParkingOperations.Domain.Entities.ParkingShift", "Shift")
+                        .WithMany("Assignments")
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Shift");
+                });
+
+            modelBuilder.Entity("ParkingOperations.Domain.Entities.ParkingShift", b =>
+                {
+                    b.Navigation("Assignments");
                 });
 #pragma warning restore 612, 618
         }

@@ -21,6 +21,7 @@ export const roleNavigation = {
     ["/parking/slots", "Quản lý ô đỗ"],
     ["/manager?view=sessions", "Xe đang gửi"],
     ["/manager/assignments", "Phân công"],
+    ["/manager/shifts", "Quản lý ca"],
     ["/handovers", "Bàn giao ca"],
   ],
   STAFF: [

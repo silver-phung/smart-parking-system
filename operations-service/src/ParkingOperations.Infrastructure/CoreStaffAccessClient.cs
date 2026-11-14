@@ -30,7 +30,7 @@ public sealed class CoreStaffAccessClient(HttpClient httpClient) : ICoreStaffAcc
         return assignments.All(x => x);
     }
 
-    private async Task<bool> IsActiveStaffAtLotAsync(string bearerToken, int lotId, long staffId, CancellationToken ct)
+    public async Task<bool> IsActiveStaffAtLotAsync(string bearerToken, int lotId, long staffId, CancellationToken ct)
     {
         using var request = CreateRequest(
             HttpMethod.Get,

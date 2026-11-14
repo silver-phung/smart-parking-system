@@ -9,19 +9,36 @@ public sealed class CashHandoverService(OperationsDbContext db, ICoreStaffAccess
 {
     public async Task<CashHandoverOperationResult> CreateAsync(CreateCashHandoverRequest request, long managerId, string token, CancellationToken ct)
     {
-        if (!await coreAccess.IsCallerAssignedToLotAsync(token, request.LotId, ct))
+        var outgoing = await db.ParkingShifts.Include(x => x.Assignments)
+            .FirstOrDefaultAsync(x => x.Id == request.OutgoingShiftId, ct);
+        var incoming = await db.ParkingShifts.Include(x => x.Assignments)
+            .FirstOrDefaultAsync(x => x.Id == request.IncomingShiftId, ct);
+        if (outgoing is null || incoming is null)
+            return Fail(404, "Không tìm thấy ca giao hoặc ca nhận.");
+        if (outgoing.LotId != incoming.LotId || !ParkingShiftCodes.IsNext(outgoing.Code, incoming.Code) ||
+            incoming.BusinessDate != (outgoing.Code == ParkingShiftCodes.Night ? outgoing.BusinessDate.AddDays(1) : outgoing.BusinessDate))
+            return Fail(400, "Hai ca phải liền kề, cùng bãi và đúng ngày nghiệp vụ.");
+        if (outgoing.Status != ParkingShiftStatuses.InProgress || incoming.Status != ParkingShiftStatuses.Planned)
+            return Fail(409, "Ca giao phải đang diễn ra và ca nhận phải ở trạng thái đã lên lịch.");
+
+        if (!await coreAccess.IsCallerAssignedToLotAsync(token, outgoing.LotId, ct))
             return Fail(403, "Bạn không được phân công quản lý bãi này.");
 
-        if (!await coreAccess.AreActiveStaffAtLotAsync(token, request.LotId, request.OutgoingStaffId, request.IncomingStaffId, ct))
+        var outgoingAssigned = outgoing.Assignments.Any(x => x.StaffId == request.OutgoingStaffId);
+        var incomingAssigned = incoming.Assignments.Any(x => x.StaffId == request.IncomingStaffId);
+        if (!outgoingAssigned || !incomingAssigned ||
+            !await coreAccess.AreActiveStaffAtLotAsync(token, outgoing.LotId, request.OutgoingStaffId, request.IncomingStaffId, ct))
             return Fail(400, "Nhân viên giao và nhận phải đang được phân công tại bãi này.");
 
         var handover = new CashHandover
         {
             Id = Guid.NewGuid(),
-            LotId = request.LotId,
-            BusinessDate = request.BusinessDate,
-            FromShiftCode = request.FromShiftCode,
-            ToShiftCode = request.ToShiftCode,
+            LotId = outgoing.LotId,
+            BusinessDate = outgoing.BusinessDate,
+            FromShiftCode = outgoing.Code,
+            ToShiftCode = incoming.Code,
+            OutgoingShiftId = outgoing.Id,
+            IncomingShiftId = incoming.Id,
             OutgoingStaffId = request.OutgoingStaffId,
             IncomingStaffId = request.IncomingStaffId,
             CreatedByManagerId = managerId,

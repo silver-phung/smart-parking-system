@@ -5,16 +5,50 @@ Accept: application/json
 
 ###
 
-# Create a handover (use a MANAGER token and active staff IDs assigned to this lot).
-POST {{ParkingOperations_HostAddress}}/api/v1/operations/handovers
+# Create a planned shift (MANAGER token; business date is the local Vietnam start date).
+POST {{ParkingOperations_HostAddress}}/api/v1/operations/shifts
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
   "lotId": 1,
   "businessDate": "2026-11-16",
-  "fromShiftCode": "MORNING",
-  "toShiftCode": "AFTERNOON",
+  "shiftCode": "MORNING"
+}
+
+###
+
+# Add an active Core-assigned STAFF member to the shift.
+POST {{ParkingOperations_HostAddress}}/api/v1/operations/shifts/{{shiftId}}/assignments
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "staffId": 101,
+  "dutyCode": "GATE"
+}
+
+###
+
+# Start, then complete the shift after its work and handover are settled.
+POST {{ParkingOperations_HostAddress}}/api/v1/operations/shifts/{{shiftId}}/start
+Authorization: Bearer {{accessToken}}
+
+###
+
+POST {{ParkingOperations_HostAddress}}/api/v1/operations/shifts/{{shiftId}}/complete
+Authorization: Bearer {{accessToken}}
+
+###
+
+# Create a handover (use a MANAGER token and active staff IDs assigned to this lot).
+POST {{ParkingOperations_HostAddress}}/api/v1/operations/handovers
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "outgoingShiftId": "00000000-0000-0000-0000-000000000001",
+  "incomingShiftId": "00000000-0000-0000-0000-000000000002",
   "outgoingStaffId": 101,
   "incomingStaffId": 102
 }

@@ -2,9 +2,11 @@
 
 ## Mục tiêu và trạng thái
 
-Service này sở hữu bounded context **Parking Operations**. Vertical slice đầu tiên là bàn giao ca tiền mặt:
+Service này sở hữu bounded context **Parking Operations**. Các vertical slice hiện có là quản lý ca và bàn giao ca tiền mặt:
 
-- Manager tạo handover cho hai ca liền kề và hai nhân viên đang được phân công tại bãi.
+- Manager lập ca 05–13, 13–21, 21–05 theo ngày nghiệp vụ, phân công Staff, bắt đầu và chốt ca.
+- Nhân viên chỉ được xếp ca nếu đang có assignment STAFF hiệu lực tại bãi trong Core.
+- Manager tạo handover cho hai ca liền kề và hai nhân viên thuộc roster tương ứng.
 - Nhân viên giao và nhận tự xác nhận số tiền kiểm đếm bằng tài khoản riêng.
 - Hai số tiền khớp thì handover hoàn tất; nếu lệch, record chuyển `DISPUTED` để Manager xử lý.
 
@@ -106,7 +108,23 @@ Chỉ chuyển route sau khi slice đạt đủ điều kiện:
 Chuyển từng slice, không chuyển toàn bộ service trong một lần. Monolith vẫn là
 fallback cho đến khi Operations chạy ổn định qua một chu kỳ nghiệm thu đầy đủ.
 
-## API handover
+## Shift Management API
+
+Base path: `/api/v1/operations/shifts`. Tất cả endpoint yêu cầu JWT Core và
+Manager phải đang được phân công vào bãi tương ứng.
+
+| Method | Route | Tác dụng |
+|---|---|---|
+| `POST` | `/api/v1/operations/shifts` | Manager tạo ca đã lên lịch |
+| `GET` | `/api/v1/operations/shifts?lotId=…&businessDate=…` | Manager xem roster bãi; Staff chỉ xem ca mình được xếp |
+| `POST` | `/api/v1/operations/shifts/{id}/assignments` | Manager xếp nhân viên Core-assigned vào ca |
+| `POST` | `/api/v1/operations/shifts/{id}/start` | Bắt đầu ca đã có roster |
+| `POST` | `/api/v1/operations/shifts/{id}/complete` | Chốt ca đang diễn ra |
+
+Trạng thái ca: `PLANNED → IN_PROGRESS → COMPLETED`. Roster chỉ chỉnh được khi
+`PLANNED`. Payroll và tính lương không thuộc phạm vi Operations hiện tại.
+
+## Cash Handover API
 
 Base path: `/api/v1/operations/handovers`. Tất cả endpoint nghiệp vụ yêu cầu JWT
 từ Core; tạo/list cần `MANAGER`, xác nhận/từ chối cần `STAFF` hoặc `MANAGER` là
@@ -114,15 +132,19 @@ từ Core; tạo/list cần `MANAGER`, xác nhận/từ chối cần `STAFF` ho�
 
 | Method | Route | Tác dụng |
 |---|---|---|
-| `POST` | `/api/v1/operations/handovers` | Manager tạo handover cho ca liền kề |
+| `POST` | `/api/v1/operations/handovers` | Manager tạo handover giữa hai shift ID liền kề |
 | `GET` | `/api/v1/operations/handovers?lotId=…&businessDate=…` | Manager xem cả bãi; Staff chỉ xem handover mình tham gia |
 | `POST` | `/api/v1/operations/handovers/{id}/confirm` | Mỗi bên ghi số tiền mặt tự kiểm đếm |
 | `POST` | `/api/v1/operations/handovers/{id}/dispute` | Người giao/nhận từ chối và nêu lý do |
 
 Shift codes: `MORNING` (05–13), `AFTERNOON` (13–21), `NIGHT` (21–05).
-Ngày nghiệp vụ là ngày bắt đầu ca giao; handover `NIGHT → MORNING` chuyển sang ca
-ngày tiếp theo. Mỗi bãi/ngày/ca giao chỉ có một handover.
+Ngày nghiệp vụ là ngày bắt đầu ca; thời điểm lưu UTC với giờ vận hành Việt Nam
+(UTC+7). Ca `NIGHT` kết thúc 05:00 ngày tiếp theo. Handover liên kết hai shift ID;
+chỉ cho phép chuyển ca liền kề và đúng ngày (handover `NIGHT → MORNING` sang sáng
+ngày hôm sau). Mỗi bãi/ngày/ca chỉ có một record.
 
+| Method | Route | Tác dụng |
+|---|---|---|
 ### Cấu hình và migration
 
 Operations cần một PostgreSQL database riêng. Tạo database cho service trên Neon

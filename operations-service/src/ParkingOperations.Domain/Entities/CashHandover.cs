@@ -20,6 +20,50 @@ public static class CashHandoverStatuses
     public const string Rejected = "REJECTED";
 }
 
+public static class ParkingShiftStatuses
+{
+    public const string Planned = "PLANNED";
+    public const string InProgress = "IN_PROGRESS";
+    public const string Completed = "COMPLETED";
+}
+
+public static class ParkingShiftDuties
+{
+    public const string Gate = "GATE";
+    public const string SlotVerifier = "SLOT_VERIFIER";
+    public const string Both = "BOTH";
+
+    public static bool IsValid(string? value) => value is Gate or SlotVerifier or Both;
+}
+
+public sealed class ParkingShift
+{
+    public Guid Id { get; set; }
+    public int LotId { get; set; }
+    public DateOnly BusinessDate { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public DateTime StartsAtUtc { get; set; }
+    public DateTime EndsAtUtc { get; set; }
+    public string Status { get; set; } = ParkingShiftStatuses.Planned;
+    public long CreatedByManagerId { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime? StartedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public int Version { get; set; }
+    public ICollection<ShiftAssignment> Assignments { get; set; } = new List<ShiftAssignment>();
+}
+
+public sealed class ShiftAssignment
+{
+    public Guid Id { get; set; }
+    public Guid ShiftId { get; set; }
+    public ParkingShift Shift { get; set; } = null!;
+    public long StaffId { get; set; }
+    public string DutyCode { get; set; } = ParkingShiftDuties.Gate;
+    public long AssignedByManagerId { get; set; }
+    public DateTime AssignedAtUtc { get; set; }
+}
+
 public sealed class CashHandover
 {
     public Guid Id { get; set; }
@@ -27,6 +71,8 @@ public sealed class CashHandover
     public DateOnly BusinessDate { get; set; }
     public string FromShiftCode { get; set; } = string.Empty;
     public string ToShiftCode { get; set; } = string.Empty;
+    public Guid? OutgoingShiftId { get; set; }
+    public Guid? IncomingShiftId { get; set; }
     public long OutgoingStaffId { get; set; }
     public long IncomingStaffId { get; set; }
     public long CreatedByManagerId { get; set; }
