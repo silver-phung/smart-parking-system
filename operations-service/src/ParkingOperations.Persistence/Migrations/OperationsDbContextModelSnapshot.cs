@@ -138,6 +138,110 @@ namespace ParkingOperations.Persistence.Migrations
                     b.ToTable("cash_handovers", (string)null);
                 });
 
+            modelBuilder.Entity("ParkingOperations.Domain.Entities.CashReconciliation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApprovalNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("approval_note");
+
+                    b.Property<DateTime?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at_utc");
+
+                    b.Property<long?>("ApprovedByManagerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("approved_by_manager_id");
+
+                    b.Property<decimal>("CashDisbursements")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("cash_disbursements");
+
+                    b.Property<decimal>("CashReceipts")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("cash_receipts");
+
+                    b.Property<decimal>("CashRefunds")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("cash_refunds");
+
+                    b.Property<decimal>("CountedClosingCash")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("counted_closing_cash");
+
+                    b.Property<decimal>("ExpectedClosingCash")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("expected_closing_cash");
+
+                    b.Property<decimal>("OpeningCash")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("opening_cash");
+
+                    b.Property<DateTime>("PaymentSummaryCapturedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("payment_summary_captured_at_utc");
+
+                    b.Property<string>("PaymentSummaryReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("payment_summary_reference");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shift_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at_utc");
+
+                    b.Property<long>("SubmittedByManagerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("submitted_by_manager_id");
+
+                    b.Property<decimal>("Variance")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("variance");
+
+                    b.Property<string>("VarianceReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("variance_reason");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShiftId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_cash_reconciliations_shift");
+
+                    b.HasIndex("Status", "SubmittedAtUtc")
+                        .HasDatabaseName("ix_cash_reconciliations_status_submitted_at");
+
+                    b.ToTable("cash_reconciliations", (string)null);
+                });
+
             modelBuilder.Entity("ParkingOperations.Domain.Entities.ParkingShift", b =>
                 {
                     b.Property<Guid>("Id")
@@ -250,6 +354,17 @@ namespace ParkingOperations.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("OutgoingShiftId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("ParkingOperations.Domain.Entities.CashReconciliation", b =>
+                {
+                    b.HasOne("ParkingOperations.Domain.Entities.ParkingShift", "Shift")
+                        .WithOne()
+                        .HasForeignKey("ParkingOperations.Domain.Entities.CashReconciliation", "ShiftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Shift");
                 });
 
             modelBuilder.Entity("ParkingOperations.Domain.Entities.ShiftAssignment", b =>

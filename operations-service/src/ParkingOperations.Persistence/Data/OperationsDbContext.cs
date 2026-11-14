@@ -8,6 +8,7 @@ public sealed class OperationsDbContext(DbContextOptions<OperationsDbContext> op
     public DbSet<CashHandover> CashHandovers => Set<CashHandover>();
     public DbSet<ParkingShift> ParkingShifts => Set<ParkingShift>();
     public DbSet<ShiftAssignment> ShiftAssignments => Set<ShiftAssignment>();
+    public DbSet<CashReconciliation> CashReconciliations => Set<CashReconciliation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -71,5 +72,31 @@ public sealed class OperationsDbContext(DbContextOptions<OperationsDbContext> op
         assignment.Property(x => x.AssignedByManagerId).HasColumnName("assigned_by_manager_id").IsRequired();
         assignment.Property(x => x.AssignedAtUtc).HasColumnName("assigned_at_utc").HasColumnType("timestamp with time zone").IsRequired();
         assignment.HasIndex(x => new { x.ShiftId, x.StaffId }).IsUnique().HasDatabaseName("ux_shift_assignments_shift_staff");
+
+        var reconciliation = modelBuilder.Entity<CashReconciliation>();
+        reconciliation.ToTable("cash_reconciliations");
+        reconciliation.HasKey(x => x.Id);
+        reconciliation.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+        reconciliation.Property(x => x.ShiftId).HasColumnName("shift_id").IsRequired();
+        reconciliation.Property(x => x.OpeningCash).HasColumnName("opening_cash").HasPrecision(14, 2);
+        reconciliation.Property(x => x.CashReceipts).HasColumnName("cash_receipts").HasPrecision(14, 2);
+        reconciliation.Property(x => x.CashRefunds).HasColumnName("cash_refunds").HasPrecision(14, 2);
+        reconciliation.Property(x => x.CashDisbursements).HasColumnName("cash_disbursements").HasPrecision(14, 2);
+        reconciliation.Property(x => x.ExpectedClosingCash).HasColumnName("expected_closing_cash").HasPrecision(14, 2);
+        reconciliation.Property(x => x.CountedClosingCash).HasColumnName("counted_closing_cash").HasPrecision(14, 2);
+        reconciliation.Property(x => x.Variance).HasColumnName("variance").HasPrecision(14, 2);
+        reconciliation.Property(x => x.PaymentSummaryReference).HasColumnName("payment_summary_reference").HasMaxLength(200).IsRequired();
+        reconciliation.Property(x => x.PaymentSummaryCapturedAtUtc).HasColumnName("payment_summary_captured_at_utc").HasColumnType("timestamp with time zone").IsRequired();
+        reconciliation.Property(x => x.VarianceReason).HasColumnName("variance_reason").HasMaxLength(500);
+        reconciliation.Property(x => x.Status).HasColumnName("status").HasMaxLength(32).IsRequired();
+        reconciliation.Property(x => x.SubmittedByManagerId).HasColumnName("submitted_by_manager_id").IsRequired();
+        reconciliation.Property(x => x.SubmittedAtUtc).HasColumnName("submitted_at_utc").HasColumnType("timestamp with time zone").IsRequired();
+        reconciliation.Property(x => x.ApprovedByManagerId).HasColumnName("approved_by_manager_id");
+        reconciliation.Property(x => x.ApprovedAtUtc).HasColumnName("approved_at_utc").HasColumnType("timestamp with time zone");
+        reconciliation.Property(x => x.ApprovalNote).HasColumnName("approval_note").HasMaxLength(500);
+        reconciliation.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+        reconciliation.HasOne(x => x.Shift).WithOne().HasForeignKey<CashReconciliation>(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
+        reconciliation.HasIndex(x => x.ShiftId).IsUnique().HasDatabaseName("ux_cash_reconciliations_shift");
+        reconciliation.HasIndex(x => new { x.Status, x.SubmittedAtUtc }).HasDatabaseName("ix_cash_reconciliations_status_submitted_at");
     }
 }
