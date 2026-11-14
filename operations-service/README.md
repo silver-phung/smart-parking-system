@@ -2,19 +2,21 @@
 
 ## Mục tiêu và trạng thái
 
-Service này là scaffold cho bounded context **Parking Operations**, bao gồm cả:
+Service này sở hữu bounded context **Parking Operations**. Vertical slice đầu tiên là bàn giao ca tiền mặt:
 
-- `STAFF`: vận hành cổng (`GATE`) và xác minh ô (`SLOT_VERIFIER`/`BOTH`).
-- `MANAGER`: điều hành bãi, quản lý trạng thái bãi/ô và giám sát vận hành.
+- Manager tạo handover cho hai ca liền kề và hai nhân viên đang được phân công tại bãi.
+- Nhân viên giao và nhận tự xác nhận số tiền kiểm đếm bằng tài khoản riêng.
+- Hai số tiền khớp thì handover hoàn tất; nếu lệch, record chuyển `DISPUTED` để Manager xử lý.
 
-Đây **chưa phải** bản nhân bản của Staff từ monolith. Chưa triển khai nghiệp vụ
-độc lập, chưa có database riêng và chưa được dùng trong demo chính.
+Operations lưu handover trong database riêng qua `ConnectionStrings:OperationsConnection`.
+Không dùng database `smartparking` hoặc `BILLING_SERVICE_DB` cho dữ liệu handover.
 
-Trong giai đoạn hiện tại, backend monolith vẫn là source of truth cho identity,
-role, assignment, parking master data, session, payment, audit và các API vận hành.
-Không để service này truy cập trực tiếp database của monolith.
+Core vẫn là source of truth cho identity, role, assignment và parking master data;
+Payment là source of truth cho transaction. Operations gọi Core API bằng JWT đang
+đăng nhập để kiểm tra quyền bãi/nhân viên và chỉ lưu mã tham chiếu, không truy cập
+trực tiếp database Core/Payment.
 
-Demo vẫn chạy bằng Core monolith:
+Các luồng parking khác vẫn chạy bằng Core monolith:
 
 ```powershell
 dotnet run --project ..\backend\src\SmartParking.Api\SmartParking.Api.csproj --launch-profile http
@@ -103,6 +105,51 @@ Chỉ chuyển route sau khi slice đạt đủ điều kiện:
 
 Chuyển từng slice, không chuyển toàn bộ service trong một lần. Monolith vẫn là
 fallback cho đến khi Operations chạy ổn định qua một chu kỳ nghiệm thu đầy đủ.
+
+## API handover
+
+Base path: `/api/v1/operations/handovers`. Tất cả endpoint nghiệp vụ yêu cầu JWT
+từ Core; tạo/list cần `MANAGER`, xác nhận/từ chối cần `STAFF` hoặc `MANAGER` là
+đúng một trong hai nhân viên của handover và đang được phân công tại bãi.
+
+| Method | Route | Tác dụng |
+|---|---|---|
+| `POST` | `/api/v1/operations/handovers` | Manager tạo handover cho ca liền kề |
+| `GET` | `/api/v1/operations/handovers?lotId=…&businessDate=…` | Manager xem cả bãi; Staff chỉ xem handover mình tham gia |
+| `POST` | `/api/v1/operations/handovers/{id}/confirm` | Mỗi bên ghi số tiền mặt tự kiểm đếm |
+| `POST` | `/api/v1/operations/handovers/{id}/dispute` | Người giao/nhận từ chối và nêu lý do |
+
+Shift codes: `MORNING` (05–13), `AFTERNOON` (13–21), `NIGHT` (21–05).
+Ngày nghiệp vụ là ngày bắt đầu ca giao; handover `NIGHT → MORNING` chuyển sang ca
+ngày tiếp theo. Mỗi bãi/ngày/ca giao chỉ có một handover.
+
+### Cấu hình và migration
+
+Operations cần một PostgreSQL database riêng. Tạo database cho service trên Neon
+trước khi cấu hình, rồi đặt connection string qua User Secrets hoặc môi trường:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:OperationsConnection" "<operations-db-connection-string>" --project src\ParkingOperations.WebAPI
+dotnet user-secrets set "Jwt:SecretKey" "<same-secret-used-by-core-at-least-32-bytes>" --project ..\backend\src\SmartParking.Api
+```
+
+`ParkingOperations.WebAPI` dùng cùng `UserSecretsId` với Core để kiểm tra access
+token Core. Không dùng secret minh họa làm secret thật. Cấu hình `CoreApi:BaseUrl`
+cho địa chỉ Core khi chạy ngoài máy local; Production yêu cầu HTTPS.
+
+Áp EF migration lên **database Operations riêng**:
+
+```powershell
+dotnet ef database update --project src\ParkingOperations.Persistence --startup-project src\ParkingOperations.WebAPI
+```
+
+SQL idempotent được xuất tại `neon/sql/operations-handover-v1.sql` ở workspace
+root. Chỉ chạy file này khi Neon đang chọn database Operations mới; không chạy vào
+`smartparking` hay `BILLING_SERVICE_DB`.
+
+Khi phục vụ UI từ origin khác, cấu hình `Cors:AllowedOrigins` trong Operations và
+đặt `VITE_OPERATIONS_API_BASE_URL` lúc build frontend. Development mặc định gọi
+`http://localhost:5174`.
 
 ## Điều kiện chưa được phép làm
 

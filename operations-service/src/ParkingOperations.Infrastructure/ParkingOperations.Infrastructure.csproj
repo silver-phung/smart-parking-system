@@ -11,4 +11,9 @@
     <ProjectReference Include="..\ParkingOperations.Persistence\ParkingOperations.Persistence.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
+  </ItemGroup>
+
 </Project>

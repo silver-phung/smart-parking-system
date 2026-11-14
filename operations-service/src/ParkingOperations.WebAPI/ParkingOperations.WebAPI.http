@@ -4,3 +4,28 @@ GET {{ParkingOperations_HostAddress}}/health
 Accept: application/json
 
 ###
+
+# Create a handover (use a MANAGER token and active staff IDs assigned to this lot).
+POST {{ParkingOperations_HostAddress}}/api/v1/operations/handovers
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "lotId": 1,
+  "businessDate": "2026-11-16",
+  "fromShiftCode": "MORNING",
+  "toShiftCode": "AFTERNOON",
+  "outgoingStaffId": 101,
+  "incomingStaffId": 102
+}
+
+###
+
+# Each staff member confirms their independently counted cash amount.
+POST {{ParkingOperations_HostAddress}}/api/v1/operations/handovers/{{handoverId}}/confirm
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "countedAmount": 1250000
+}

@@ -21,6 +21,7 @@ import StaffWorkspace from "./pages/StaffWorkspace.jsx";
 import AdminPeople from "./pages/AdminPeople.jsx";
 import CustomerSessions from "./pages/CustomerSessions.jsx";
 import ProjectInformation from "./pages/ProjectInformation.jsx";
+import CashHandovers from "./pages/CashHandovers.jsx";
 
 export default function App() {
   const { pathname, hash } = useLocation();
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/admin/policies" element={<AdminPolicies />} />
           <Route path="/admin/people" element={<AdminPeople />} />
           <Route path="/manager" element={<ManagerWorkspace />} />
+          <Route path="/handovers" element={<RequireRole role={["MANAGER", "STAFF"]}><CashHandovers /></RequireRole>} />
           <Route path="/manager/assignments" element={<ManagerStaffAssignments />} />
           <Route path="/staff" element={<StaffWorkspace />} />
           <Route

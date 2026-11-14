@@ -1,4 +1,35 @@
 .operations-fields { border: 0; padding: 0; margin: 16px 0; min-width: 0; display: grid; gap: 14px; }
+.handover-page-heading { align-items: end; margin-bottom: 16px; gap: 18px; }
+.handover-page-heading > label { min-width: min(100%, 280px); }
+.handover-page-heading h1 { margin-bottom: 6px; }
+.handover-page-heading p, .handover-card__header p { margin: 0; color: #617186; font-size: 13px; }
+.handover-create-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; }
+.handover-create-form .btn { min-height: 42px; }
+.handover-list-heading, .handover-card__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.handover-list-heading { margin: 28px 0 12px; }
+.handover-list-heading h2, .handover-card__header h3 { margin: 0 0 5px; }
+.handover-list { display: grid; gap: 12px; }
+.handover-card { display: grid; gap: 14px; }
+.handover-status { flex: none; border-radius: 999px; padding: 6px 10px; color: #46566a; background: #eef2f7; font-size: 12px; font-weight: 700; }
+.handover-status--completed { color: #166534; background: #dcfce7; }
+.handover-status--disputed, .handover-status--rejected { color: #991b1b; background: #fee2e2; }
+.handover-amounts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.handover-amounts > div { min-width: 0; padding: 12px; border-radius: 9px; background: #f8fafc; }
+.handover-amounts dt { color: #617186; font-size: 12px; }
+.handover-amounts dd { margin: 6px 0 0; color: #19324d; font-weight: 700; }
+.handover-response { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+.handover-response > label, .handover-response input { max-width: 380px; }
+.handover-response .workspace-actions { align-items: end; }
+.handover-dispute { margin: 0; padding: 10px 12px; color: #991b1b; background: #fef2f2; border-radius: 8px; }
+@media (max-width: 760px) {
+  .handover-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .handover-amounts { grid-template-columns: 1fr; }
+  .handover-card__header { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 480px) {
+  .handover-create-form { grid-template-columns: 1fr; }
+  .handover-response .workspace-actions { align-items: stretch; flex-direction: column; }
+}
 .operations-form-grid, .operations-slot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .operations-session-list { display: grid; gap: 10px; margin: 16px 0; max-height: 480px; overflow-y: auto; }
 .operations-session { text-align: left; display: grid; gap: 5px; padding: 14px; border: 1px solid #dbe3ed; border-radius: 10px; background: #fff; color: #243449; cursor: pointer; overflow-wrap: anywhere; }
